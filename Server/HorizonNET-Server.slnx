@@ -1,6 +1,6 @@
 <Solution>
   <Folder Name="/Shared/">
-    <Project Path="HorizonNET.Shared.Transfer/HorizonNET.Shared.Transfer.csproj" />
+    <Project Path="../Shared/HorizonNET.Shared.Transfer/HorizonNET.Shared.Transfer.csproj" />
   </Folder>
   <Project Path="HorizonNET.Api/HorizonNET.Api.csproj" />
   <Project Path="HorizonNET.Data/HorizonNET.Data.csproj" />
