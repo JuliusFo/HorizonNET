@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="Client/HorizonNET-Client.slnx" />
+    <File Path="Server/HorizonNET-Server.slnx" />
+  </Folder>
+</Solution>
