@@ -9,6 +9,14 @@ var builder = WebApplication.CreateBuilder(args);
 // Controller und Validierung
 builder.Services.AddControllers();
 
+// CORS: Blazor-Client darf Anfragen an diese API stellen
+builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
+    policy.WithOrigins(
+            builder.Configuration["Cors:AllowedOrigin"]
+                ?? throw new InvalidOperationException("Cors:AllowedOrigin ist nicht konfiguriert."))
+          .AllowAnyHeader()
+          .AllowAnyMethod()));
+
 // Eingebaute .NET 10 OpenAPI-Unterstützung
 builder.Services.AddOpenApi();
 
@@ -29,6 +37,7 @@ app.MapScalarApiReference(options =>
     options.Title = "HorizonNET API";
 });
 
+app.UseCors();
 app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();

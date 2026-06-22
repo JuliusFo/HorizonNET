@@ -1,0 +1,53 @@
+@page "/projects/{Id:int}"
+@inject HorizonNET.App.Services.ApiService Api
+
+<PageTitle>Projekt – HorizonNET</PageTitle>
+
+@if (project is null)
+{
+    <p>Wird geladen…</p>
+}
+else
+{
+    <h1>@project.Name</h1>
+    <p class="text-muted">@project.Description</p>
+
+    <h2>Tasks</h2>
+
+    @if (tasks is null)
+    {
+        <p>Wird geladen…</p>
+    }
+    else if (!tasks.Any())
+    {
+        <p>Keine Tasks vorhanden.</p>
+    }
+    else
+    {
+        <ul>
+            @foreach (var task in tasks)
+            {
+                <li>
+                    <strong>@task.Title</strong> – @task.Priority
+                    @if (task.IsCompleted)
+                    {
+                        <span> ✓</span>
+                    }
+                </li>
+            }
+        </ul>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private ProjectResponseDto? project;
+    private List<TaskResponseDto>? tasks;
+
+    protected override async Task OnInitializedAsync()
+    {
+        project = await Api.GetProjectAsync(Id);
+        tasks   = await Api.GetTasksByProjectAsync(Id);
+    }
+}

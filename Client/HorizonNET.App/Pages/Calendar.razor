@@ -1,0 +1,36 @@
+@page "/calendar"
+@inject HorizonNET.App.Services.ApiService Api
+
+<PageTitle>Kalender – HorizonNET</PageTitle>
+
+<h1>Kalender</h1>
+
+@if (tasks is null)
+{
+    <p>Wird geladen…</p>
+}
+else if (!tasks.Any())
+{
+    <p>Keine Tasks mit Fälligkeitsdatum vorhanden.</p>
+}
+else
+{
+    <ul>
+        @foreach (var task in tasks.OrderBy(t => t.DueDate))
+        {
+            <li>
+                <strong>@task.DueDate.ToString("dd.MM.yyyy")</strong>
+                – @task.Title (@task.ProjectName)
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    private List<TaskResponseDto>? tasks;
+
+    protected override async Task OnInitializedAsync()
+    {
+        tasks = await Api.GetTasksAsync();
+    }
+}
