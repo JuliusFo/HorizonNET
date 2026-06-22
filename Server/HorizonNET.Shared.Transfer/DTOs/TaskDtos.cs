@@ -1,6 +1,6 @@
-using HorizonNET.Transfer.Enums;
+using HorizonNET.Shared.Transfer.Enums;
 
-namespace HorizonNET.Transfer.DTOs;
+namespace HorizonNET.Shared.Transfer.DTOs;
 
 public record TaskCreateDto(
     string Title,

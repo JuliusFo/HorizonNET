@@ -1,4 +1,4 @@
-using HorizonNET.Transfer.Enums;
+using HorizonNET.Shared.Transfer.Enums;
 
 namespace HorizonNET.Domain.Entities;
 

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\HorizonNET.Transfer\HorizonNET.Transfer.csproj" />
+    <ProjectReference Include="..\HorizonNET.Shared.Transfer\HorizonNET.Shared.Transfer.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

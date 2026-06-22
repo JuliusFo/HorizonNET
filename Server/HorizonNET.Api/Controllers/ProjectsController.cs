@@ -1,6 +1,6 @@
 using HorizonNET.Domain.Entities;
 using HorizonNET.Domain.Interfaces;
-using HorizonNET.Transfer.DTOs;
+using HorizonNET.Shared.Transfer.DTOs;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HorizonNET.Api.Controllers;

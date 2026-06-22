@@ -1,9 +1,8 @@
 <Solution>
-  <Folder Name="/Solution Items/">
-    <File Path="Client/HorizonNET-Client.slnx" />
+  <Folder Name="/Shared/">
+    <Project Path="HorizonNET.Shared.Transfer/HorizonNET.Shared.Transfer.csproj" />
   </Folder>
   <Project Path="HorizonNET.Api/HorizonNET.Api.csproj" />
   <Project Path="HorizonNET.Data/HorizonNET.Data.csproj" />
   <Project Path="HorizonNET.Domain/HorizonNET.Domain.csproj" />
-  <Project Path="HorizonNET.Transfer/HorizonNET.Transfer.csproj" />
 </Solution>

@@ -18,7 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\HorizonNET.Domain\HorizonNET.Domain.csproj" />
     <ProjectReference Include="..\HorizonNET.Data\HorizonNET.Data.csproj" />
-    <ProjectReference Include="..\HorizonNET.Transfer\HorizonNET.Transfer.csproj" />
+    <ProjectReference Include="..\HorizonNET.Shared.Transfer\HorizonNET.Shared.Transfer.csproj" />
   </ItemGroup>
 
 </Project>

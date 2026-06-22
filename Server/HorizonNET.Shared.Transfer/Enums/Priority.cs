@@ -1,4 +1,4 @@
-namespace HorizonNET.Transfer.Enums;
+namespace HorizonNET.Shared.Transfer.Enums;
 
 public enum Priority
 {
