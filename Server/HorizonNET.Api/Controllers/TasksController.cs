@@ -11,7 +11,7 @@ public class TasksController(ITaskRepository repo) : ControllerBase
 {
     private static TaskResponseDto ToDto(TaskItem t) =>
         new(t.Id, t.Title, t.Description, t.DueDate, t.StartTime, t.EndTime,
-            t.IsCompleted, t.Priority.ToString(), t.ProjectId, t.Project?.Name ?? string.Empty,
+            t.Status, t.Priority.ToString(), t.ProjectId, t.Project?.Name ?? string.Empty,
             t.ParentTaskId,
             t.SubTasks.Count > 0 ? t.SubTasks.Select(s => ToDto(s)).ToList() : null);
 
@@ -49,7 +49,8 @@ public class TasksController(ITaskRepository repo) : ControllerBase
             EndTime = dto.EndTime,
             Priority = dto.Priority,
             ProjectId = dto.ProjectId,
-            ParentTaskId = dto.ParentTaskId
+            ParentTaskId = dto.ParentTaskId,
+            Status = dto.Status
         };
         var created = await repo.CreateAsync(task);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, ToDto(created));
@@ -65,7 +66,7 @@ public class TasksController(ITaskRepository repo) : ControllerBase
             DueDate = dto.DueDate,
             StartTime = dto.StartTime,
             EndTime = dto.EndTime,
-            IsCompleted = dto.IsCompleted,
+            Status = dto.Status,
             Priority = dto.Priority,
             ProjectId = dto.ProjectId
         });

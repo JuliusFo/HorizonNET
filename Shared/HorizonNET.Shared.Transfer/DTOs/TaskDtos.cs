@@ -10,7 +10,8 @@ public record TaskCreateDto(
     DateTime? EndTime,
     Priority Priority,
     int ProjectId,
-    int? ParentTaskId = null
+    int? ParentTaskId = null,
+    WorkStatus Status = WorkStatus.Planned
 );
 
 public record TaskUpdateDto(
@@ -19,7 +20,7 @@ public record TaskUpdateDto(
     DateTime? DueDate,
     DateTime? StartTime,
     DateTime? EndTime,
-    bool IsCompleted,
+    WorkStatus Status,
     Priority Priority,
     int ProjectId
 );
@@ -31,10 +32,13 @@ public record TaskResponseDto(
     DateTime? DueDate,
     DateTime? StartTime,
     DateTime? EndTime,
-    bool IsCompleted,
+    WorkStatus Status,
     string Priority,
     int ProjectId,
     string ProjectName,
     int? ParentTaskId = null,
     List<TaskResponseDto>? SubTasks = null
-);
+)
+{
+    public bool IsCompleted => Status == WorkStatus.Done || Status == WorkStatus.Abandoned;
+}

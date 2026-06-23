@@ -40,7 +40,7 @@ else
                         @foreach (var project in sectionProjects)
                         {
                             <div class="col">
-                                <div class="card h-100" style="@(project.Color is not null ? $"background-color: {project.Color}1A;" : "")">
+                                <div class="card h-100" style="@(project.Color is not null ? $"background-color: {project.Color}1A; border-color: {project.Color};" : "")">
                                     @if (editingProjectId == project.Id)
                                     {
                                         <div class="card-body">
@@ -98,9 +98,12 @@ else
                                     else
                                     {
                                         <div class="card-header d-flex justify-content-between align-items-center" style="background-color: transparent; border-color: rgba(0,0,0,0.1);">
-                                            <a href="/projects/@project.Id" class="text-decoration-none fw-bold text-dark">
-                                                @project.Name
-                                            </a>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <a href="/projects/@project.Id" class="text-decoration-none fw-bold text-dark">
+                                                    @project.Name
+                                                </a>
+                                                <span class="badge bg-primary">@EnumL[$"Priority_{project.Priority}"]</span>
+                                            </div>
                                             <div class="d-flex gap-1">
                                                 <button class="btn btn-sm btn-outline-primary btn-icon" @onclick="() => StartEdit(project)" title="@L["Button_Edit_Title"]">✎</button>
                                                 <button class="btn btn-sm btn-outline-danger btn-icon" @onclick="() => DeleteProjectAsync(project)" title="@L["Button_Delete_Title"]">🗑</button>
@@ -112,9 +115,6 @@ else
                                             {
                                                 <p class="card-text text-muted small">@project.Description</p>
                                             }
-                                            <div class="d-flex gap-1 mt-2">
-                                                <span class="badge bg-primary">@EnumL[$"Priority_{project.Priority}"]</span>
-                                            </div>
                                         </div>
 
                                         <div class="card-footer text-muted small">

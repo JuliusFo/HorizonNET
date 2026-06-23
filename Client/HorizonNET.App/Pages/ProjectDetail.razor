@@ -190,11 +190,14 @@ else
     {
         <div class="d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center gap-3">
-                <input type="checkbox"
-                       class="form-check-input fs-5"
-                       checked="@task.IsCompleted"
-                       @onchange="() => ToggleCompletedAsync(task)"
-                       title="@(task.IsCompleted ? L["Task_MarkOpen"] : L["Task_MarkDone"])" />
+                <select class="form-select form-select-sm w-auto"
+                        value="@task.Status"
+                        @onchange="e => ChangeStatusAsync(task, Enum.Parse<WorkStatus>(e.Value!.ToString()!))">
+                    @foreach (var s in Enum.GetValues<WorkStatus>())
+                    {
+                        <option value="@s">@EnumL[$"WorkStatus_{s}"]</option>
+                    }
+                </select>
                 <div>
                     <strong class="@(task.IsCompleted ? "text-decoration-line-through text-muted" : "")">
                         @task.Title
@@ -261,6 +264,15 @@ else
                     }
                 </InputSelect>
             </div>
+            <div class="col-md-4">
+                <label class="form-label small">@L["Field_WorkStatus"]</label>
+                <InputSelect class="form-select" @bind-Value="editTask.Status">
+                    @foreach (var s in Enum.GetValues<WorkStatus>())
+                    {
+                        <option value="@s">@EnumL[$"WorkStatus_{s}"]</option>
+                    }
+                </InputSelect>
+            </div>
             @if (editErrorMessage is not null)
             {
                 <div class="col-12"><div class="alert alert-danger py-1">@editErrorMessage</div></div>
@@ -276,11 +288,11 @@ else
 
     // ── Abschließen / Zurücksetzen ───────────────────────────────────────────
 
-    private async Task ToggleCompletedAsync(TaskResponseDto task)
+    private async Task ChangeStatusAsync(TaskResponseDto task, WorkStatus newStatus)
     {
         var dto = new TaskUpdateDto(
             task.Title, task.Description, task.DueDate,
-            task.StartTime, task.EndTime, !task.IsCompleted,
+            task.StartTime, task.EndTime, newStatus,
             Enum.Parse<Priority>(task.Priority), task.ProjectId);
 
         var updated = await Api.UpdateTaskAsync(task.Id, dto);
@@ -312,7 +324,8 @@ else
             DueDate     = task.DueDate,
             StartTime   = task.StartTime,
             EndTime     = task.EndTime,
-            Priority    = Enum.Parse<Priority>(task.Priority)
+            Priority    = Enum.Parse<Priority>(task.Priority),
+            Status      = task.Status
         };
     }
 
@@ -338,7 +351,7 @@ else
             editTask.Title,
             string.IsNullOrWhiteSpace(editTask.Description) ? null : editTask.Description,
             editTask.DueDate, editTask.StartTime, editTask.EndTime,
-            original.IsCompleted, editTask.Priority, original.ProjectId);
+            editTask.Status, editTask.Priority, original.ProjectId);
 
         var updated = await Api.UpdateTaskAsync(editingTaskId.Value, dto);
         if (updated is not null)
@@ -480,6 +493,7 @@ else
         public DateTime? StartTime { get; set; }
         public DateTime? EndTime { get; set; }
         public Priority Priority { get; set; } = Priority.Medium;
+        public WorkStatus Status { get; set; } = WorkStatus.Planned;
     }
 
     private class TaskEditFormModel
@@ -492,5 +506,6 @@ else
         public DateTime? StartTime { get; set; }
         public DateTime? EndTime { get; set; }
         public Priority Priority { get; set; } = Priority.Medium;
+        public WorkStatus Status { get; set; } = WorkStatus.Planned;
     }
 }

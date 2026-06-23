@@ -41,6 +41,29 @@
     <value>Archiviert</value>
   </data>
 
+  <!-- WorkStatus -->
+  <data name="WorkStatus_Planned" xml:space="preserve">
+    <value>Geplant</value>
+  </data>
+  <data name="WorkStatus_PlannedPriority" xml:space="preserve">
+    <value>Geplant Prio</value>
+  </data>
+  <data name="WorkStatus_PlannedToday" xml:space="preserve">
+    <value>Geplant Heute</value>
+  </data>
+  <data name="WorkStatus_InProgress" xml:space="preserve">
+    <value>In Arbeit</value>
+  </data>
+  <data name="WorkStatus_Paused" xml:space="preserve">
+    <value>Pausiert</value>
+  </data>
+  <data name="WorkStatus_Done" xml:space="preserve">
+    <value>Fertig</value>
+  </data>
+  <data name="WorkStatus_Abandoned" xml:space="preserve">
+    <value>Abgebrochen</value>
+  </data>
+
   <!-- Priority -->
   <data name="Priority_Low" xml:space="preserve">
     <value>Niedrig</value>

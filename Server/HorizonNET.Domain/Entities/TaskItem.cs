@@ -16,7 +16,9 @@ public class TaskItem
 
     public DateTime? EndTime { get; set; }
 
-    public bool IsCompleted { get; set; }
+    public WorkStatus Status { get; set; } = WorkStatus.Planned;
+
+    public bool IsCompleted => Status == WorkStatus.Done || Status == WorkStatus.Abandoned;
 
     public Priority Priority { get; set; } = Priority.Medium;
 

@@ -42,7 +42,7 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         existing.DueDate = updated.DueDate;
         existing.StartTime = updated.StartTime;
         existing.EndTime = updated.EndTime;
-        existing.IsCompleted = updated.IsCompleted;
+        existing.Status = updated.Status;
         existing.Priority = updated.Priority;
         existing.ProjectId = updated.ProjectId;
         await context.SaveChangesAsync();
