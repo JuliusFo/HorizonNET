@@ -7,13 +7,23 @@ namespace HorizonNET.Data.Repositories;
 public class TaskRepository(AppDbContext context) : ITaskRepository
 {
     public async Task<IEnumerable<TaskItem>> GetAllAsync() =>
-        await context.Tasks.Include(t => t.Project).ToListAsync();
+        await context.Tasks
+            .Include(t => t.Project)
+            .Where(t => t.ParentTaskId == null)
+            .Include(t => t.SubTasks)
+            .ToListAsync();
 
     public async Task<IEnumerable<TaskItem>> GetByProjectIdAsync(int projectId) =>
-        await context.Tasks.Where(t => t.ProjectId == projectId).ToListAsync();
+        await context.Tasks
+            .Where(t => t.ProjectId == projectId && t.ParentTaskId == null)
+            .Include(t => t.SubTasks)
+            .ToListAsync();
 
     public async Task<TaskItem?> GetByIdAsync(int id) =>
-        await context.Tasks.Include(t => t.Project).FirstOrDefaultAsync(t => t.Id == id);
+        await context.Tasks
+            .Include(t => t.Project)
+            .Include(t => t.SubTasks)
+            .FirstOrDefaultAsync(t => t.Id == id);
 
     public async Task<TaskItem> CreateAsync(TaskItem task)
     {
@@ -41,9 +51,14 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
 
     public async Task<bool> DeleteAsync(int id)
     {
-        var existing = await context.Tasks.FindAsync(id);
+        var existing = await context.Tasks
+            .Include(t => t.SubTasks)
+            .FirstOrDefaultAsync(t => t.Id == id);
         if (existing is null) return false;
 
+        // Sub-Tasks manuell entfernen, da SQLite keine Cascade-Deletes auf
+        // selbstreferenzierende Tabellen unterstützt
+        context.Tasks.RemoveRange(existing.SubTasks);
         context.Tasks.Remove(existing);
         await context.SaveChangesAsync();
         return true;

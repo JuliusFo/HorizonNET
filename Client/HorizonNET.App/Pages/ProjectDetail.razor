@@ -1,5 +1,5 @@
 @page "/projects/{Id:int}"
-@inject HorizonNET.App.Services.ApiService Api
+@inject ApiService Api
 
 <PageTitle>Projekt – HorizonNET</PageTitle>
 
@@ -10,7 +10,15 @@
 else
 {
     <h1>@project.Name</h1>
-    <p class="text-muted">@project.Description</p>
+
+    <div class="mb-3">
+        @if (project.Description is not null)
+        {
+            <p class="text-muted">@project.Description</p>
+        }
+        <span class="badge bg-secondary me-1">@project.Status</span>
+        <span class="badge bg-primary">@project.Priority</span>
+    </div>
 
     <h2>Tasks</h2>
 
@@ -24,18 +32,126 @@ else
     }
     else
     {
-        <ul>
+        <ul class="list-group mb-4">
             @foreach (var task in tasks)
             {
-                <li>
-                    <strong>@task.Title</strong> – @task.Priority
-                    @if (task.IsCompleted)
+                <!-- Parent-Task -->
+                <li class="list-group-item @(task.IsCompleted ? "task-completed" : "")">
+                    @if (editingTaskId == task.Id)
                     {
-                        <span> ✓</span>
+                        @TaskEditForm(task)
+                    }
+                    else
+                    {
+                        @TaskRow(task, isSubTask: false)
                     }
                 </li>
+
+                <!-- Sub-Tasks eingerückt darunter -->
+                @if (task.SubTasks is { Count: > 0 })
+                {
+                    @foreach (var sub in task.SubTasks)
+                    {
+                        <li class="list-group-item ps-5 @(sub.IsCompleted ? "task-completed" : "") subtask-item">
+                            @if (editingTaskId == sub.Id)
+                            {
+                                @TaskEditForm(sub)
+                            }
+                            else
+                            {
+                                @TaskRow(sub, isSubTask: true)
+                            }
+                        </li>
+                    }
+                }
+
+                <!-- Sub-Task-Erstellformular -->
+                @if (addingSubTaskForId == task.Id)
+                {
+                    <li class="list-group-item ps-5 subtask-item">
+                        <EditForm Model="newSubTask" OnValidSubmit="() => CreateSubTaskAsync(task.Id)" class="row g-2">
+                            <DataAnnotationsValidator />
+                            <div class="col-12">
+                                <InputText class="form-control form-control-sm" @bind-Value="newSubTask.Title" placeholder="Sub-Task Titel *" />
+                                <ValidationMessage For="() => newSubTask.Title" />
+                            </div>
+                            <div class="col-md-6">
+                                <InputDate class="form-control form-control-sm" @bind-Value="newSubTask.DueDate" />
+                            </div>
+                            <div class="col-md-6">
+                                <InputSelect class="form-select form-select-sm" @bind-Value="newSubTask.Priority">
+                                    @foreach (var p in Enum.GetValues<Priority>())
+                                    {
+                                        <option value="@p">@p</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                            @if (subTaskErrorMessage is not null)
+                            {
+                                <div class="col-12"><div class="alert alert-danger py-1">@subTaskErrorMessage</div></div>
+                            }
+                            <div class="col-12 d-flex gap-2">
+                                <button type="submit" class="btn btn-sm btn-primary" disabled="@isSaving">Speichern</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelSubTask">Abbrechen</button>
+                            </div>
+                        </EditForm>
+                    </li>
+                }
             }
         </ul>
+    }
+
+    <!-- Formular zum Anlegen eines neuen Tasks -->
+    <button class="btn btn-outline-primary mb-3" @onclick="ToggleForm">
+        @(showForm ? "Abbrechen" : "+ Neuer Task")
+    </button>
+
+    @if (showForm)
+    {
+        <EditForm Model="newTask" OnValidSubmit="CreateTaskAsync" class="card p-3 mb-4">
+            <DataAnnotationsValidator />
+
+            <div class="mb-3">
+                <label class="form-label">Titel *</label>
+                <InputText class="form-control" @bind-Value="newTask.Title" />
+                <ValidationMessage For="() => newTask.Title" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Beschreibung</label>
+                <InputTextArea class="form-control" rows="2" @bind-Value="newTask.Description" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Fälligkeitsdatum *</label>
+                <InputDate class="form-control" @bind-Value="newTask.DueDate" />
+                <ValidationMessage For="() => newTask.DueDate" />
+            </div>
+            <div class="row mb-3">
+                <div class="col">
+                    <label class="form-label">Von (optional)</label>
+                    <InputDate class="form-control" Type="InputDateType.Time" @bind-Value="newTask.StartTime" />
+                </div>
+                <div class="col">
+                    <label class="form-label">Bis (optional)</label>
+                    <InputDate class="form-control" Type="InputDateType.Time" @bind-Value="newTask.EndTime" />
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Priorität</label>
+                <InputSelect class="form-select" @bind-Value="newTask.Priority">
+                    @foreach (var priority in Enum.GetValues<Priority>())
+                    {
+                        <option value="@priority">@priority</option>
+                    }
+                </InputSelect>
+            </div>
+            @if (errorMessage is not null)
+            {
+                <div class="alert alert-danger">@errorMessage</div>
+            }
+            <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                @(isSaving ? "Wird gespeichert…" : "Speichern")
+            </button>
+        </EditForm>
     }
 }
 
@@ -45,9 +161,337 @@ else
     private ProjectResponseDto? project;
     private List<TaskResponseDto>? tasks;
 
+    // Neuer Task
+    private TaskCreateFormModel newTask = new();
+    private bool showForm;
+    private bool isSaving;
+    private string? errorMessage;
+
+    // Bearbeitung
+    private int? editingTaskId;
+    private TaskEditFormModel editTask = new();
+    private string? editErrorMessage;
+
+    // Neuer Sub-Task
+    private int? addingSubTaskForId;
+    private TaskCreateFormModel newSubTask = new();
+    private string? subTaskErrorMessage;
+
     protected override async Task OnInitializedAsync()
     {
         project = await Api.GetProjectAsync(Id);
         tasks   = await Api.GetTasksByProjectAsync(Id);
+    }
+
+    // ── Render-Helfer ────────────────────────────────────────────────────────
+
+    private RenderFragment TaskRow(TaskResponseDto task, bool isSubTask) => __builder =>
+    {
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-3">
+                <input type="checkbox"
+                       class="form-check-input fs-5"
+                       checked="@task.IsCompleted"
+                       @onchange="() => ToggleCompletedAsync(task)"
+                       title="@(task.IsCompleted ? "Als offen markieren" : "Als erledigt markieren")" />
+                <div>
+                    <strong class="@(task.IsCompleted ? "text-decoration-line-through text-muted" : "")">
+                        @task.Title
+                    </strong>
+                    @if (task.Description is not null)
+                    {
+                        <span class="text-muted ms-2">@task.Description</span>
+                    }
+                    <div class="small text-muted">
+                        Fällig: @task.DueDate.ToString("dd.MM.yyyy")
+                        @if (task.StartTime is not null && task.EndTime is not null)
+                        {
+                            <span> · @task.StartTime.Value.ToString("HH:mm") – @task.EndTime.Value.ToString("HH:mm")</span>
+                        }
+                    </div>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-primary">@task.Priority</span>
+                @if (!isSubTask)
+                {
+                    <button class="btn btn-sm btn-outline-secondary"
+                            @onclick="() => StartAddSubTask(task.Id)"
+                            title="Sub-Task hinzufügen">＋</button>
+                }
+                <button class="btn btn-sm btn-outline-primary" @onclick="() => StartEdit(task)" title="Bearbeiten">✎</button>
+                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteTaskAsync(task, isSubTask)" title="Löschen">🗑</button>
+            </div>
+        </div>
+    };
+
+    private RenderFragment TaskEditForm(TaskResponseDto task) => __builder =>
+    {
+        <EditForm Model="editTask" OnValidSubmit="SaveEditAsync" class="row g-2">
+            <DataAnnotationsValidator />
+            <div class="col-12">
+                <InputText class="form-control" @bind-Value="editTask.Title" placeholder="Titel *" />
+                <ValidationMessage For="() => editTask.Title" />
+            </div>
+            <div class="col-12">
+                <InputTextArea class="form-control" rows="2" @bind-Value="editTask.Description" placeholder="Beschreibung" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small">Fällig *</label>
+                <InputDate class="form-control" @bind-Value="editTask.DueDate" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small">Von</label>
+                <InputDate class="form-control" Type="InputDateType.Time" @bind-Value="editTask.StartTime" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small">Bis</label>
+                <InputDate class="form-control" Type="InputDateType.Time" @bind-Value="editTask.EndTime" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small">Priorität</label>
+                <InputSelect class="form-select" @bind-Value="editTask.Priority">
+                    @foreach (var p in Enum.GetValues<Priority>())
+                    {
+                        <option value="@p">@p</option>
+                    }
+                </InputSelect>
+            </div>
+            @if (editErrorMessage is not null)
+            {
+                <div class="col-12"><div class="alert alert-danger py-1">@editErrorMessage</div></div>
+            }
+            <div class="col-12 d-flex gap-2">
+                <button type="submit" class="btn btn-sm btn-primary" disabled="@isSaving">
+                    @(isSaving ? "Wird gespeichert…" : "Speichern")
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelEdit">Abbrechen</button>
+            </div>
+        </EditForm>
+    };
+
+    // ── Abschließen / Zurücksetzen ───────────────────────────────────────────
+
+    private async Task ToggleCompletedAsync(TaskResponseDto task)
+    {
+        var dto = new TaskUpdateDto(
+            task.Title, task.Description, task.DueDate,
+            task.StartTime, task.EndTime, !task.IsCompleted,
+            Enum.Parse<Priority>(task.Priority), task.ProjectId);
+
+        var updated = await Api.UpdateTaskAsync(task.Id, dto);
+        if (updated is null || tasks is null) return;
+
+        // Parent-Task oder Sub-Task aktualisieren
+        var parent = tasks.FirstOrDefault(t => t.Id == task.Id);
+        if (parent is not null)
+        {
+            tasks[tasks.IndexOf(parent)] = updated;
+        }
+        else
+        {
+            var parentTask = tasks.FirstOrDefault(t => t.SubTasks?.Any(s => s.Id == task.Id) == true);
+            if (parentTask?.SubTasks is not null)
+                parentTask.SubTasks[parentTask.SubTasks.IndexOf(parentTask.SubTasks.First(s => s.Id == task.Id))] = updated;
+        }
+    }
+
+    // ── Bearbeiten ───────────────────────────────────────────────────────────
+
+    private void StartEdit(TaskResponseDto task)
+    {
+        editingTaskId    = task.Id;
+        editErrorMessage = null;
+        editTask = new TaskEditFormModel
+        {
+            Title       = task.Title,
+            Description = task.Description,
+            DueDate     = task.DueDate,
+            StartTime   = task.StartTime,
+            EndTime     = task.EndTime,
+            Priority    = Enum.Parse<Priority>(task.Priority)
+        };
+    }
+
+    private void CancelEdit()
+    {
+        editingTaskId    = null;
+        editErrorMessage = null;
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (editingTaskId is null || tasks is null) return;
+
+        isSaving         = true;
+        editErrorMessage = null;
+
+        // Task in Parent- oder Sub-Task-Liste suchen
+        var original = tasks.FirstOrDefault(t => t.Id == editingTaskId)
+            ?? tasks.SelectMany(t => t.SubTasks ?? []).FirstOrDefault(s => s.Id == editingTaskId);
+
+        if (original is null) { isSaving = false; return; }
+
+        var dto = new TaskUpdateDto(
+            editTask.Title,
+            string.IsNullOrWhiteSpace(editTask.Description) ? null : editTask.Description,
+            editTask.DueDate, editTask.StartTime, editTask.EndTime,
+            original.IsCompleted, editTask.Priority, original.ProjectId);
+
+        var updated = await Api.UpdateTaskAsync(editingTaskId.Value, dto);
+        if (updated is not null)
+        {
+            var parentIdx = tasks.FindIndex(t => t.Id == editingTaskId);
+            if (parentIdx >= 0)
+            {
+                tasks[parentIdx] = updated;
+            }
+            else
+            {
+                var parentTask = tasks.FirstOrDefault(t => t.SubTasks?.Any(s => s.Id == editingTaskId) == true);
+                if (parentTask?.SubTasks is not null)
+                {
+                    var subIdx = parentTask.SubTasks.FindIndex(s => s.Id == editingTaskId);
+                    if (subIdx >= 0) parentTask.SubTasks[subIdx] = updated;
+                }
+            }
+            editingTaskId = null;
+        }
+        else
+        {
+            editErrorMessage = "Task konnte nicht gespeichert werden.";
+        }
+
+        isSaving = false;
+    }
+
+    // ── Löschen ──────────────────────────────────────────────────────────────
+
+    private async Task DeleteTaskAsync(TaskResponseDto task, bool isSubTask)
+    {
+        var success = await Api.DeleteTaskAsync(task.Id);
+        if (!success || tasks is null) return;
+
+        if (!isSubTask)
+        {
+            tasks.Remove(task);
+        }
+        else
+        {
+            var parentTask = tasks.FirstOrDefault(t => t.SubTasks?.Any(s => s.Id == task.Id) == true);
+            parentTask?.SubTasks?.Remove(task);
+        }
+    }
+
+    // ── Sub-Task anlegen ─────────────────────────────────────────────────────
+
+    private void StartAddSubTask(int parentId)
+    {
+        addingSubTaskForId  = parentId;
+        subTaskErrorMessage = null;
+        newSubTask          = new();
+    }
+
+    private void CancelSubTask()
+    {
+        addingSubTaskForId  = null;
+        subTaskErrorMessage = null;
+    }
+
+    private async Task CreateSubTaskAsync(int parentId)
+    {
+        isSaving            = true;
+        subTaskErrorMessage = null;
+
+        var dto = new TaskCreateDto(
+            newSubTask.Title,
+            string.IsNullOrWhiteSpace(newSubTask.Description) ? null : newSubTask.Description,
+            newSubTask.DueDate, null, null,
+            newSubTask.Priority, Id,
+            ParentTaskId: parentId);
+
+        var created = await Api.CreateTaskAsync(dto);
+        if (created is not null && tasks is not null)
+        {
+            var parentTask = tasks.FirstOrDefault(t => t.Id == parentId);
+            if (parentTask is not null)
+            {
+                // SubTasks-Liste ist ein record – neues Objekt mit aktualisierter Liste erstellen
+                var updatedSubTasks = (parentTask.SubTasks ?? []).Append(created).ToList();
+                tasks[tasks.IndexOf(parentTask)] = parentTask with { SubTasks = updatedSubTasks };
+            }
+            addingSubTaskForId = null;
+            newSubTask         = new();
+        }
+        else
+        {
+            subTaskErrorMessage = "Sub-Task konnte nicht gespeichert werden.";
+        }
+
+        isSaving = false;
+    }
+
+    // ── Erstellen ────────────────────────────────────────────────────────────
+
+    private void ToggleForm()
+    {
+        showForm     = !showForm;
+        errorMessage = null;
+        newTask      = new();
+    }
+
+    private async Task CreateTaskAsync()
+    {
+        isSaving     = true;
+        errorMessage = null;
+
+        var dto = new TaskCreateDto(
+            newTask.Title,
+            string.IsNullOrWhiteSpace(newTask.Description) ? null : newTask.Description,
+            newTask.DueDate, newTask.StartTime, newTask.EndTime,
+            newTask.Priority, Id);
+
+        var created = await Api.CreateTaskAsync(dto);
+        if (created is not null)
+        {
+            tasks ??= [];
+            tasks.Add(created);
+            showForm = false;
+            newTask  = new();
+        }
+        else
+        {
+            errorMessage = "Task konnte nicht gespeichert werden.";
+        }
+
+        isSaving = false;
+    }
+
+    // ── Formularmodelle ──────────────────────────────────────────────────────
+
+    private class TaskCreateFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Titel ist erforderlich.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(300)]
+        public string Title { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Fälligkeitsdatum ist erforderlich.")]
+        public DateTime DueDate { get; set; } = DateTime.Today;
+        public DateTime? StartTime { get; set; }
+        public DateTime? EndTime { get; set; }
+        public Priority Priority { get; set; } = Priority.Medium;
+    }
+
+    private class TaskEditFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Titel ist erforderlich.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(300)]
+        public string Title { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Fälligkeitsdatum ist erforderlich.")]
+        public DateTime DueDate { get; set; } = DateTime.Today;
+        public DateTime? StartTime { get; set; }
+        public DateTime? EndTime { get; set; }
+        public Priority Priority { get; set; } = Priority.Medium;
     }
 }

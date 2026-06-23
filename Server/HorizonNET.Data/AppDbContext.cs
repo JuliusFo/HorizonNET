@@ -29,6 +29,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany(p => p.Tasks)
                 .HasForeignKey(t => t.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Sub-Tasks werden beim Löschen des Parent-Tasks mitgelöscht
+            e.HasOne(t => t.ParentTask)
+                .WithMany(t => t.SubTasks)
+                .HasForeignKey(t => t.ParentTaskId)
+                .OnDelete(DeleteBehavior.NoAction);
         });
     }
 

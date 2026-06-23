@@ -11,7 +11,9 @@ public class TasksController(ITaskRepository repo) : ControllerBase
 {
     private static TaskResponseDto ToDto(TaskItem t) =>
         new(t.Id, t.Title, t.Description, t.DueDate, t.StartTime, t.EndTime,
-            t.IsCompleted, t.Priority.ToString(), t.ProjectId, t.Project?.Name ?? string.Empty);
+            t.IsCompleted, t.Priority.ToString(), t.ProjectId, t.Project?.Name ?? string.Empty,
+            t.ParentTaskId,
+            t.SubTasks.Count > 0 ? t.SubTasks.Select(s => ToDto(s)).ToList() : null);
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
@@ -46,7 +48,8 @@ public class TasksController(ITaskRepository repo) : ControllerBase
             StartTime = dto.StartTime,
             EndTime = dto.EndTime,
             Priority = dto.Priority,
-            ProjectId = dto.ProjectId
+            ProjectId = dto.ProjectId,
+            ParentTaskId = dto.ParentTaskId
         };
         var created = await repo.CreateAsync(task);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, ToDto(created));

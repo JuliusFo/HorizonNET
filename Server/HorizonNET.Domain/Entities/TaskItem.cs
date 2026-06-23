@@ -21,6 +21,10 @@ public class TaskItem
     public Priority Priority { get; set; } = Priority.Medium;
 
     public int ProjectId { get; set; }
-
     public Project Project { get; set; } = null!;
+
+    // Selbstreferenz: null = Top-Level-Task, gesetzt = Sub-Task
+    public int? ParentTaskId { get; set; }
+    public TaskItem? ParentTask { get; set; }
+    public ICollection<TaskItem> SubTasks { get; set; } = [];
 }

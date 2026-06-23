@@ -9,7 +9,8 @@ public record TaskCreateDto(
     DateTime? StartTime,
     DateTime? EndTime,
     Priority Priority,
-    int ProjectId
+    int ProjectId,
+    int? ParentTaskId = null
 );
 
 public record TaskUpdateDto(
@@ -33,5 +34,7 @@ public record TaskResponseDto(
     bool IsCompleted,
     string Priority,
     int ProjectId,
-    string ProjectName
+    string ProjectName,
+    int? ParentTaskId = null,
+    List<TaskResponseDto>? SubTasks = null
 );
