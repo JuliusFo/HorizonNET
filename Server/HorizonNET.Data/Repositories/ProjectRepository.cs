@@ -28,6 +28,7 @@ public class ProjectRepository(AppDbContext context) : IProjectRepository
         existing.Description = updated.Description;
         existing.Status = updated.Status;
         existing.Priority = updated.Priority;
+        existing.Color = updated.Color;
         await context.SaveChangesAsync();
         return existing;
     }

@@ -6,14 +6,16 @@ public record ProjectCreateDto(
     string Name,
     string? Description,
     ProjectStatus Status,
-    Priority Priority
+    Priority Priority,
+    string? Color = null
 );
 
 public record ProjectUpdateDto(
     string Name,
     string? Description,
     ProjectStatus Status,
-    Priority Priority
+    Priority Priority,
+    string? Color = null
 );
 
 public record ProjectResponseDto(
@@ -23,5 +25,7 @@ public record ProjectResponseDto(
     string Status,
     string Priority,
     DateTime CreatedAt,
-    int TaskCount
+    int TaskCount,
+    int DoneTaskCount,
+    string? Color = null
 );

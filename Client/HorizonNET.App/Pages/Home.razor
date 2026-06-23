@@ -15,74 +15,124 @@ else if (!projects.Any())
 }
 else
 {
-    <ul class="list-group mb-4">
+    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3 mb-4">
         @foreach (var project in projects)
         {
-            <li class="list-group-item">
-                @if (editingProjectId == project.Id)
-                {
-                    <!-- Inline-Bearbeitungsformular -->
-                    <EditForm Model="editProject" OnValidSubmit="SaveEditAsync" class="row g-2">
-                        <DataAnnotationsValidator />
-                        <div class="col-12">
-                            <InputText class="form-control" @bind-Value="editProject.Name" placeholder="Name *" />
-                            <ValidationMessage For="() => editProject.Name" />
-                        </div>
-                        <div class="col-12">
-                            <InputTextArea class="form-control" rows="2" @bind-Value="editProject.Description" placeholder="Beschreibung" />
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label small">Status</label>
-                            <InputSelect class="form-select" @bind-Value="editProject.Status">
-                                @foreach (var s in Enum.GetValues<ProjectStatus>())
+            <div class="col">
+                <div class="card h-100" style="@(project.Color is not null ? $"background-color: {project.Color}1A;" : "")">
+                    @if (editingProjectId == project.Id)
+                    {
+                        <!-- Inline-Bearbeitungsformular -->
+                        <div class="card-body">
+                            <EditForm Model="editProject" OnValidSubmit="SaveEditAsync" class="row g-2">
+                                <DataAnnotationsValidator />
+                                <div class="col-12">
+                                    <InputText class="form-control" @bind-Value="editProject.Name" placeholder="Name *" />
+                                    <ValidationMessage For="() => editProject.Name" />
+                                </div>
+                                <div class="col-12">
+                                    <InputTextArea class="form-control" rows="2" @bind-Value="editProject.Description" placeholder="Beschreibung" />
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small">Status</label>
+                                    <InputSelect class="form-select form-select-sm" @bind-Value="editProject.Status">
+                                        @foreach (var s in Enum.GetValues<ProjectStatus>())
+                                        {
+                                            <option value="@s">@s</option>
+                                        }
+                                    </InputSelect>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small">Priorität</label>
+                                    <InputSelect class="form-select form-select-sm" @bind-Value="editProject.Priority">
+                                        @foreach (var p in Enum.GetValues<Priority>())
+                                        {
+                                            <option value="@p">@p</option>
+                                        }
+                                    </InputSelect>
+                                </div>
+                                <div class="col-12 d-flex align-items-center gap-2">
+                                    <label class="form-label small mb-0">Farbe</label>
+                                    <input type="color" class="form-control form-control-color"
+                                           value="@(editProject.Color ?? "#6c757d")"
+                                           @oninput="e => editProject.Color = e.Value?.ToString()" />
+                                    @if (editProject.Color is not null)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                @onclick="() => editProject.Color = null">Zurücksetzen</button>
+                                    }
+                                </div>
+                                @if (editErrorMessage is not null)
                                 {
-                                    <option value="@s">@s</option>
+                                    <div class="col-12"><div class="alert alert-danger py-1">@editErrorMessage</div></div>
                                 }
-                            </InputSelect>
+                                <div class="col-12 d-flex gap-2">
+                                    <button type="submit" class="btn btn-sm btn-primary" disabled="@isSaving">
+                                        @(isSaving ? "Speichert…" : "Speichern")
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelEdit">Abbrechen</button>
+                                </div>
+                            </EditForm>
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label small">Priorität</label>
-                            <InputSelect class="form-select" @bind-Value="editProject.Priority">
-                                @foreach (var p in Enum.GetValues<Priority>())
-                                {
-                                    <option value="@p">@p</option>
-                                }
-                            </InputSelect>
+                    }
+                    else
+                    {
+                        <!-- Karten-Kopf mit Name und Aktions-Buttons -->
+                        <div class="card-header d-flex justify-content-between align-items-center" style="background-color: transparent; border-color: rgba(0,0,0,0.1);">
+                            <a href="/projects/@project.Id" class="text-decoration-none fw-bold text-dark">
+                                @project.Name
+                            </a>
+                            <div class="d-flex gap-1">
+                                <button class="btn btn-sm btn-outline-primary btn-icon" @onclick="() => StartEdit(project)" title="Bearbeiten">✎</button>
+                                <button class="btn btn-sm btn-outline-danger btn-icon" @onclick="() => DeleteProjectAsync(project)" title="Löschen">🗑</button>
+                            </div>
                         </div>
-                        @if (editErrorMessage is not null)
-                        {
-                            <div class="col-12"><div class="alert alert-danger py-1">@editErrorMessage</div></div>
-                        }
-                        <div class="col-12 d-flex gap-2">
-                            <button type="submit" class="btn btn-sm btn-primary" disabled="@isSaving">
-                                @(isSaving ? "Wird gespeichert…" : "Speichern")
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelEdit">Abbrechen</button>
-                        </div>
-                    </EditForm>
-                }
-                else
-                {
-                    <!-- Normale Darstellung -->
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <a href="/projects/@project.Id"><strong>@project.Name</strong></a>
+
+                        <!-- Karten-Inhalt -->
+                        <div class="card-body">
                             @if (project.Description is not null)
                             {
-                                <span class="text-muted ms-2">@project.Description</span>
+                                <p class="card-text text-muted small">@project.Description</p>
+                            }
+                            <div class="d-flex gap-1 mt-2">
+                                <span class="badge bg-secondary">@project.Status</span>
+                                <span class="badge bg-primary">@project.Priority</span>
+                            </div>
+                        </div>
+
+                        <!-- Karten-Fuß mit Metadaten -->
+                        <div class="card-footer text-muted small">
+                            @{
+                                var openTasks = project.TaskCount - project.DoneTaskCount;
+                                var pct = project.TaskCount > 0
+                                    ? (int)Math.Round(project.DoneTaskCount * 100.0 / project.TaskCount)
+                                    : 0;
+                            }
+                            @if (project.TaskCount > 0)
+                            {
+                                <div class="progress mb-1" style="height: 5px;">
+                                    <div class="progress-bar" role="progressbar"
+                                         style="width: @pct%;"
+                                         aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span>@pct% erledigt · @openTasks offen</span>
+                                    <span>Erstellt: @project.CreatedAt.ToString("dd.MM.yyyy")</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="d-flex justify-content-between">
+                                    <span>Keine Tasks</span>
+                                    <span>Erstellt: @project.CreatedAt.ToString("dd.MM.yyyy")</span>
+                                </div>
                             }
                         </div>
-                        <div class="d-flex align-items-center gap-2">
-                            <span class="badge bg-secondary">@project.Status</span>
-                            <span class="badge bg-primary">@project.Priority</span>
-                            <button class="btn btn-sm btn-outline-primary" @onclick="() => StartEdit(project)" title="Bearbeiten">✎</button>
-                            <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteProjectAsync(project)" title="Löschen">🗑</button>
-                        </div>
-                    </div>
-                }
-            </li>
+                    }
+                </div>
+            </div>
         }
-    </ul>
+    </div>
 }
 
 <!-- Formular zum Anlegen eines neuen Projekts -->
@@ -120,6 +170,17 @@ else
                     <option value="@priority">@priority</option>
                 }
             </InputSelect>
+        </div>
+        <div class="mb-3 d-flex align-items-center gap-2">
+            <label class="form-label mb-0">Farbe</label>
+            <input type="color" class="form-control form-control-color"
+                   value="@(newProject.Color ?? "#6c757d")"
+                   @oninput="e => newProject.Color = e.Value?.ToString()" />
+            @if (newProject.Color is not null)
+            {
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        @onclick="() => newProject.Color = null">Zurücksetzen</button>
+            }
         </div>
         @if (errorMessage is not null)
         {
@@ -161,7 +222,8 @@ else
             Name        = project.Name,
             Description = project.Description,
             Status      = Enum.Parse<ProjectStatus>(project.Status),
-            Priority    = Enum.Parse<Priority>(project.Priority)
+            Priority    = Enum.Parse<Priority>(project.Priority),
+            Color       = project.Color
         };
     }
 
@@ -182,7 +244,8 @@ else
             editProject.Name,
             string.IsNullOrWhiteSpace(editProject.Description) ? null : editProject.Description,
             editProject.Status,
-            editProject.Priority);
+            editProject.Priority,
+            editProject.Color);
 
         var updated = await Api.UpdateProjectAsync(editingProjectId.Value, dto);
         if (updated is not null)
@@ -226,7 +289,8 @@ else
             newProject.Name,
             string.IsNullOrWhiteSpace(newProject.Description) ? null : newProject.Description,
             newProject.Status,
-            newProject.Priority);
+            newProject.Priority,
+            newProject.Color);
 
         var created = await Api.CreateProjectAsync(dto);
         if (created is not null)
@@ -254,6 +318,7 @@ else
         public string? Description { get; set; }
         public ProjectStatus Status { get; set; } = ProjectStatus.Active;
         public Priority Priority { get; set; } = Priority.Medium;
+        public string? Color { get; set; }
     }
 
     private class ProjectEditFormModel
@@ -264,5 +329,6 @@ else
         public string? Description { get; set; }
         public ProjectStatus Status { get; set; } = ProjectStatus.Active;
         public Priority Priority { get; set; } = Priority.Medium;
+        public string? Color { get; set; }
     }
 }
