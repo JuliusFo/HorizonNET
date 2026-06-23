@@ -1,11 +1,13 @@
 @page "/projects/{Id:int}"
 @inject ApiService Api
+@inject IStringLocalizer<ProjectDetail> L
+@inject IStringLocalizer<Enums> EnumL
 
 <PageTitle>Projekt – HorizonNET</PageTitle>
 
 @if (project is null)
 {
-    <p>Wird geladen…</p>
+    <p>@L["Loading"]</p>
 }
 else
 {
@@ -16,19 +18,19 @@ else
         {
             <p class="text-muted">@project.Description</p>
         }
-        <span class="badge bg-secondary me-1">@project.Status</span>
-        <span class="badge bg-primary">@project.Priority</span>
+        <span class="badge bg-secondary me-1">@EnumL[$"ProjectStatus_{project.Status}"]</span>
+        <span class="badge bg-primary">@EnumL[$"Priority_{project.Priority}"]</span>
     </div>
 
     <h2>Tasks</h2>
 
     @if (tasks is null)
     {
-        <p>Wird geladen…</p>
+        <p>@L["Loading"]</p>
     }
     else if (!tasks.Any())
     {
-        <p>Keine Tasks vorhanden.</p>
+        <p>@L["NoTasks"]</p>
     }
     else
     {
@@ -72,7 +74,7 @@ else
                         <EditForm Model="newSubTask" OnValidSubmit="() => CreateSubTaskAsync(task.Id)" class="row g-2">
                             <DataAnnotationsValidator />
                             <div class="col-12">
-                                <InputText class="form-control form-control-sm" @bind-Value="newSubTask.Title" placeholder="Sub-Task Titel *" />
+                                <InputText class="form-control form-control-sm" @bind-Value="newSubTask.Title" placeholder="@L["SubTask_Placeholder"]" />
                                 <ValidationMessage For="() => newSubTask.Title" />
                             </div>
                             <div class="col-md-6">
@@ -82,7 +84,7 @@ else
                                 <InputSelect class="form-select form-select-sm" @bind-Value="newSubTask.Priority">
                                     @foreach (var p in Enum.GetValues<Priority>())
                                     {
-                                        <option value="@p">@p</option>
+                                        <option value="@p">@EnumL[$"Priority_{p}"]</option>
                                     }
                                 </InputSelect>
                             </div>
@@ -91,8 +93,8 @@ else
                                 <div class="col-12"><div class="alert alert-danger py-1">@subTaskErrorMessage</div></div>
                             }
                             <div class="col-12 d-flex gap-2">
-                                <button type="submit" class="btn btn-sm btn-primary" disabled="@isSaving">Speichern</button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelSubTask">Abbrechen</button>
+                                <button type="submit" class="btn btn-sm btn-primary" disabled="@isSaving">@L["Task_EditSave"]</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelSubTask">@L["Task_EditCancel"]</button>
                             </div>
                         </EditForm>
                     </li>
@@ -103,7 +105,7 @@ else
 
     <!-- Formular zum Anlegen eines neuen Tasks -->
     <button class="btn btn-outline-primary mb-3" @onclick="ToggleForm">
-        @(showForm ? "Abbrechen" : "+ Neuer Task")
+        @(showForm ? L["NewTask_Cancel"] : L["NewTask_Button"])
     </button>
 
     @if (showForm)
@@ -112,34 +114,34 @@ else
             <DataAnnotationsValidator />
 
             <div class="mb-3">
-                <label class="form-label">Titel *</label>
+                <label class="form-label">@L["Field_Title"]</label>
                 <InputText class="form-control" @bind-Value="newTask.Title" />
                 <ValidationMessage For="() => newTask.Title" />
             </div>
             <div class="mb-3">
-                <label class="form-label">Beschreibung</label>
+                <label class="form-label">@L["Field_Description"]</label>
                 <InputTextArea class="form-control" rows="2" @bind-Value="newTask.Description" />
             </div>
             <div class="mb-3">
-                <label class="form-label">Fälligkeitsdatum (optional)</label>
+                <label class="form-label">@L["Field_DueDate"]</label>
                 <InputDate class="form-control" @bind-Value="newTask.DueDate" />
             </div>
             <div class="row mb-3">
                 <div class="col">
-                    <label class="form-label">Von (optional)</label>
+                    <label class="form-label">@L["Field_StartTime"]</label>
                     <InputDate class="form-control" Type="InputDateType.Time" @bind-Value="newTask.StartTime" />
                 </div>
                 <div class="col">
-                    <label class="form-label">Bis (optional)</label>
+                    <label class="form-label">@L["Field_EndTime"]</label>
                     <InputDate class="form-control" Type="InputDateType.Time" @bind-Value="newTask.EndTime" />
                 </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Priorität</label>
+                <label class="form-label">@L["Field_Priority"]</label>
                 <InputSelect class="form-select" @bind-Value="newTask.Priority">
                     @foreach (var priority in Enum.GetValues<Priority>())
                     {
-                        <option value="@priority">@priority</option>
+                        <option value="@priority">@EnumL[$"Priority_{priority}"]</option>
                     }
                 </InputSelect>
             </div>
@@ -148,7 +150,7 @@ else
                 <div class="alert alert-danger">@errorMessage</div>
             }
             <button type="submit" class="btn btn-primary" disabled="@isSaving">
-                @(isSaving ? "Wird gespeichert…" : "Speichern")
+                @(isSaving ? L["NewTask_Saving"] : L["NewTask_Save"])
             </button>
         </EditForm>
     }
@@ -192,7 +194,7 @@ else
                        class="form-check-input fs-5"
                        checked="@task.IsCompleted"
                        @onchange="() => ToggleCompletedAsync(task)"
-                       title="@(task.IsCompleted ? "Als offen markieren" : "Als erledigt markieren")" />
+                       title="@(task.IsCompleted ? L["Task_MarkOpen"] : L["Task_MarkDone"])" />
                 <div>
                     <strong class="@(task.IsCompleted ? "text-decoration-line-through text-muted" : "")">
                         @task.Title
@@ -201,25 +203,28 @@ else
                     {
                         <span class="text-muted ms-2">@task.Description</span>
                     }
-                    <div class="small text-muted">
-                        Fällig: @task.DueDate?.ToString("dd.MM.yyyy")
-                        @if (task.StartTime is not null && task.EndTime is not null)
-                        {
-                            <span> · @task.StartTime.Value.ToString("HH:mm") – @task.EndTime.Value.ToString("HH:mm")</span>
-                        }
-                    </div>
+                    @if (task.DueDate is not null)
+                    {
+                        <div class="small text-muted">
+                            @string.Format(L["Task_DueDate"], task.DueDate.Value.ToString("dd.MM.yyyy"))
+                            @if (task.StartTime is not null && task.EndTime is not null)
+                            {
+                                <span> · @task.StartTime.Value.ToString("HH:mm") – @task.EndTime.Value.ToString("HH:mm")</span>
+                            }
+                        </div>
+                    }
                 </div>
             </div>
             <div class="d-flex align-items-center gap-2">
-                <span class="badge bg-primary">@task.Priority</span>
+                <span class="badge bg-primary">@EnumL[$"Priority_{task.Priority}"]</span>
                 @if (!isSubTask)
                 {
                     <button class="btn btn-sm btn-outline-secondary"
                             @onclick="() => StartAddSubTask(task.Id)"
-                            title="Sub-Task hinzufügen">＋</button>
+                            title="@L["Button_AddSubTask_Title"]">＋</button>
                 }
-                <button class="btn btn-sm btn-outline-primary" @onclick="() => StartEdit(task)" title="Bearbeiten">✎</button>
-                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteTaskAsync(task, isSubTask)" title="Löschen">🗑</button>
+                <button class="btn btn-sm btn-outline-primary" @onclick="() => StartEdit(task)" title="@L["Button_Edit_Title"]">✎</button>
+                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteTaskAsync(task, isSubTask)" title="@L["Button_Delete_Title"]">🗑</button>
             </div>
         </div>
     };
@@ -229,30 +234,30 @@ else
         <EditForm Model="editTask" OnValidSubmit="SaveEditAsync" class="row g-2">
             <DataAnnotationsValidator />
             <div class="col-12">
-                <InputText class="form-control" @bind-Value="editTask.Title" placeholder="Titel *" />
+                <InputText class="form-control" @bind-Value="editTask.Title" placeholder="@L["Field_Title"]" />
                 <ValidationMessage For="() => editTask.Title" />
             </div>
             <div class="col-12">
-                <InputTextArea class="form-control" rows="2" @bind-Value="editTask.Description" placeholder="Beschreibung" />
+                <InputTextArea class="form-control" rows="2" @bind-Value="editTask.Description" placeholder="@L["Field_Description"]" />
             </div>
             <div class="col-md-4">
-                <label class="form-label small">Fällig (optional)</label>
+                <label class="form-label small">@L["Field_DueDate"]</label>
                 <InputDate class="form-control" @bind-Value="editTask.DueDate" />
             </div>
             <div class="col-md-4">
-                <label class="form-label small">Von</label>
+                <label class="form-label small">@L["Field_StartTime"]</label>
                 <InputDate class="form-control" Type="InputDateType.Time" @bind-Value="editTask.StartTime" />
             </div>
             <div class="col-md-4">
-                <label class="form-label small">Bis</label>
+                <label class="form-label small">@L["Field_EndTime"]</label>
                 <InputDate class="form-control" Type="InputDateType.Time" @bind-Value="editTask.EndTime" />
             </div>
             <div class="col-md-4">
-                <label class="form-label small">Priorität</label>
+                <label class="form-label small">@L["Field_Priority"]</label>
                 <InputSelect class="form-select" @bind-Value="editTask.Priority">
                     @foreach (var p in Enum.GetValues<Priority>())
                     {
-                        <option value="@p">@p</option>
+                        <option value="@p">@EnumL[$"Priority_{p}"]</option>
                     }
                 </InputSelect>
             </div>
@@ -262,9 +267,9 @@ else
             }
             <div class="col-12 d-flex gap-2">
                 <button type="submit" class="btn btn-sm btn-primary" disabled="@isSaving">
-                    @(isSaving ? "Wird gespeichert…" : "Speichern")
+                    @(isSaving ? L["Task_EditSaving"] : L["Task_EditSave"])
                 </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelEdit">Abbrechen</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelEdit">@L["Task_EditCancel"]</button>
             </div>
         </EditForm>
     };
@@ -281,7 +286,6 @@ else
         var updated = await Api.UpdateTaskAsync(task.Id, dto);
         if (updated is null || tasks is null) return;
 
-        // Parent-Task oder Sub-Task aktualisieren
         var parent = tasks.FirstOrDefault(t => t.Id == task.Id);
         if (parent is not null)
         {
@@ -325,7 +329,6 @@ else
         isSaving         = true;
         editErrorMessage = null;
 
-        // Task in Parent- oder Sub-Task-Liste suchen
         var original = tasks.FirstOrDefault(t => t.Id == editingTaskId)
             ?? tasks.SelectMany(t => t.SubTasks ?? []).FirstOrDefault(s => s.Id == editingTaskId);
 
@@ -358,7 +361,7 @@ else
         }
         else
         {
-            editErrorMessage = "Task konnte nicht gespeichert werden.";
+            editErrorMessage = L["Task_EditError"];
         }
 
         isSaving = false;
@@ -415,7 +418,6 @@ else
             var parentTask = tasks.FirstOrDefault(t => t.Id == parentId);
             if (parentTask is not null)
             {
-                // SubTasks-Liste ist ein record – neues Objekt mit aktualisierter Liste erstellen
                 var updatedSubTasks = (parentTask.SubTasks ?? []).Append(created).ToList();
                 tasks[tasks.IndexOf(parentTask)] = parentTask with { SubTasks = updatedSubTasks };
             }
@@ -424,7 +426,7 @@ else
         }
         else
         {
-            subTaskErrorMessage = "Sub-Task konnte nicht gespeichert werden.";
+            subTaskErrorMessage = L["SubTask_Error"];
         }
 
         isSaving = false;
@@ -460,7 +462,7 @@ else
         }
         else
         {
-            errorMessage = "Task konnte nicht gespeichert werden.";
+            errorMessage = L["NewTask_Error"];
         }
 
         isSaving = false;

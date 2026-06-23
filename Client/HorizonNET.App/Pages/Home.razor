@@ -1,13 +1,15 @@
 @page "/"
 @inject ApiService Api
+@inject IStringLocalizer<Home> L
+@inject IStringLocalizer<Enums> EnumL
 
-<PageTitle>Projekte – HorizonNET</PageTitle>
+<PageTitle>@L["PageTitle"]</PageTitle>
 
-<h1>Projekte</h1>
+<h1>@L["Heading"]</h1>
 
 @if (projects is null)
 {
-    <p>Wird geladen…</p>
+    <p>@L["Loading"]</p>
 }
 else
 {
@@ -21,7 +23,7 @@ else
                     @onclick="() => ToggleSection(section.StatusLabel)">
                 <span class="fw-semibold">
                     <span class="badge @section.BadgeClass me-2">@sectionProjects.Count</span>
-                    @section.Title
+                    @L[section.TitleKey]
                 </span>
                 <span>@(isExpanded ? "▲" : "▼")</span>
             </button>
@@ -30,7 +32,7 @@ else
             {
                 @if (!sectionProjects.Any())
                 {
-                    <p class="text-muted small mt-2 ms-1">Keine @section.Title.ToLower().</p>
+                    <p class="text-muted small mt-2 ms-1">@L["Section_Empty"]</p>
                 }
                 else
                 {
@@ -45,39 +47,39 @@ else
                                             <EditForm Model="editProject" OnValidSubmit="SaveEditAsync" class="row g-2">
                                                 <DataAnnotationsValidator />
                                                 <div class="col-12">
-                                                    <InputText class="form-control" @bind-Value="editProject.Name" placeholder="Name *" />
+                                                    <InputText class="form-control" @bind-Value="editProject.Name" placeholder="@L["Field_Name"]" />
                                                     <ValidationMessage For="() => editProject.Name" />
                                                 </div>
                                                 <div class="col-12">
-                                                    <InputTextArea class="form-control" rows="2" @bind-Value="editProject.Description" placeholder="Beschreibung" />
+                                                    <InputTextArea class="form-control" rows="2" @bind-Value="editProject.Description" placeholder="@L["Field_Description"]" />
                                                 </div>
                                                 <div class="col-6">
-                                                    <label class="form-label small">Status</label>
+                                                    <label class="form-label small">@L["Field_Status"]</label>
                                                     <InputSelect class="form-select form-select-sm" @bind-Value="editProject.Status">
                                                         @foreach (var s in Enum.GetValues<ProjectStatus>())
                                                         {
-                                                            <option value="@s">@s</option>
+                                                            <option value="@s">@EnumL[$"ProjectStatus_{s}"]</option>
                                                         }
                                                     </InputSelect>
                                                 </div>
                                                 <div class="col-6">
-                                                    <label class="form-label small">Priorität</label>
+                                                    <label class="form-label small">@L["Field_Priority"]</label>
                                                     <InputSelect class="form-select form-select-sm" @bind-Value="editProject.Priority">
                                                         @foreach (var p in Enum.GetValues<Priority>())
                                                         {
-                                                            <option value="@p">@p</option>
+                                                            <option value="@p">@EnumL[$"Priority_{p}"]</option>
                                                         }
                                                     </InputSelect>
                                                 </div>
                                                 <div class="col-12 d-flex align-items-center gap-2">
-                                                    <label class="form-label small mb-0">Farbe</label>
+                                                    <label class="form-label small mb-0">@L["Field_Color"]</label>
                                                     <input type="color" class="form-control form-control-color"
                                                            value="@(editProject.Color ?? "#6c757d")"
                                                            @oninput="e => editProject.Color = e.Value?.ToString()" />
                                                     @if (editProject.Color is not null)
                                                     {
                                                         <button type="button" class="btn btn-sm btn-outline-secondary"
-                                                                @onclick="() => editProject.Color = null">Zurücksetzen</button>
+                                                                @onclick="() => editProject.Color = null">@L["Button_ColorReset"]</button>
                                                     }
                                                 </div>
                                                 @if (editErrorMessage is not null)
@@ -86,9 +88,9 @@ else
                                                 }
                                                 <div class="col-12 d-flex gap-2">
                                                     <button type="submit" class="btn btn-sm btn-primary" disabled="@isSaving">
-                                                        @(isSaving ? "Speichert…" : "Speichern")
+                                                        @(isSaving ? L["Button_Saving"] : L["Button_Save"])
                                                     </button>
-                                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelEdit">Abbrechen</button>
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelEdit">@L["Button_Cancel"]</button>
                                                 </div>
                                             </EditForm>
                                         </div>
@@ -100,8 +102,8 @@ else
                                                 @project.Name
                                             </a>
                                             <div class="d-flex gap-1">
-                                                <button class="btn btn-sm btn-outline-primary btn-icon" @onclick="() => StartEdit(project)" title="Bearbeiten">✎</button>
-                                                <button class="btn btn-sm btn-outline-danger btn-icon" @onclick="() => DeleteProjectAsync(project)" title="Löschen">🗑</button>
+                                                <button class="btn btn-sm btn-outline-primary btn-icon" @onclick="() => StartEdit(project)" title="@L["Button_Edit_Title"]">✎</button>
+                                                <button class="btn btn-sm btn-outline-danger btn-icon" @onclick="() => DeleteProjectAsync(project)" title="@L["Button_Delete_Title"]">🗑</button>
                                             </div>
                                         </div>
 
@@ -111,7 +113,7 @@ else
                                                 <p class="card-text text-muted small">@project.Description</p>
                                             }
                                             <div class="d-flex gap-1 mt-2">
-                                                <span class="badge bg-primary">@project.Priority</span>
+                                                <span class="badge bg-primary">@EnumL[$"Priority_{project.Priority}"]</span>
                                             </div>
                                         </div>
 
@@ -130,15 +132,15 @@ else
                                                          aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
                                                 </div>
                                                 <div class="d-flex justify-content-between">
-                                                    <span>@pct% erledigt · @openTasks offen</span>
-                                                    <span>Erstellt: @project.CreatedAt.ToString("dd.MM.yyyy")</span>
+                                                    <span>@string.Format(L["Card_Progress"], pct, openTasks)</span>
+                                                    <span>@string.Format(L["Card_CreatedAt"], project.CreatedAt.ToString("dd.MM.yyyy"))</span>
                                                 </div>
                                             }
                                             else
                                             {
                                                 <div class="d-flex justify-content-between">
-                                                    <span>Keine Tasks</span>
-                                                    <span>Erstellt: @project.CreatedAt.ToString("dd.MM.yyyy")</span>
+                                                    <span>@L["Card_NoTasks"]</span>
+                                                    <span>@string.Format(L["Card_CreatedAt"], project.CreatedAt.ToString("dd.MM.yyyy"))</span>
                                                 </div>
                                             }
                                         </div>
@@ -155,7 +157,7 @@ else
 
 <!-- Formular zum Anlegen eines neuen Projekts -->
 <button class="btn btn-outline-primary mb-3" @onclick="ToggleForm">
-    @(showForm ? "Abbrechen" : "+ Neues Projekt")
+    @(showForm ? L["NewProject_Cancel"] : L["NewProject_Button"])
 </button>
 
 @if (showForm)
@@ -163,41 +165,41 @@ else
     <EditForm Model="newProject" OnValidSubmit="CreateProjectAsync" class="card p-3 mb-4">
         <DataAnnotationsValidator />
         <div class="mb-3">
-            <label class="form-label">Name *</label>
+            <label class="form-label">@L["Field_Name"]</label>
             <InputText class="form-control" @bind-Value="newProject.Name" />
             <ValidationMessage For="() => newProject.Name" />
         </div>
         <div class="mb-3">
-            <label class="form-label">Beschreibung</label>
+            <label class="form-label">@L["Field_Description"]</label>
             <InputTextArea class="form-control" rows="2" @bind-Value="newProject.Description" />
         </div>
         <div class="mb-3">
-            <label class="form-label">Status</label>
+            <label class="form-label">@L["Field_Status"]</label>
             <InputSelect class="form-select" @bind-Value="newProject.Status">
                 @foreach (var status in Enum.GetValues<ProjectStatus>())
                 {
-                    <option value="@status">@status</option>
+                    <option value="@status">@EnumL[$"ProjectStatus_{status}"]</option>
                 }
             </InputSelect>
         </div>
         <div class="mb-3">
-            <label class="form-label">Priorität</label>
+            <label class="form-label">@L["Field_Priority"]</label>
             <InputSelect class="form-select" @bind-Value="newProject.Priority">
                 @foreach (var priority in Enum.GetValues<Priority>())
                 {
-                    <option value="@priority">@priority</option>
+                    <option value="@priority">@EnumL[$"Priority_{priority}"]</option>
                 }
             </InputSelect>
         </div>
         <div class="mb-3 d-flex align-items-center gap-2">
-            <label class="form-label mb-0">Farbe</label>
+            <label class="form-label mb-0">@L["Field_Color"]</label>
             <input type="color" class="form-control form-control-color"
                    value="@(newProject.Color ?? "#6c757d")"
                    @oninput="e => newProject.Color = e.Value?.ToString()" />
             @if (newProject.Color is not null)
             {
                 <button type="button" class="btn btn-sm btn-outline-secondary"
-                        @onclick="() => newProject.Color = null">Zurücksetzen</button>
+                        @onclick="() => newProject.Color = null">@L["Button_ColorReset"]</button>
             }
         </div>
         @if (errorMessage is not null)
@@ -205,7 +207,7 @@ else
             <div class="alert alert-danger">@errorMessage</div>
         }
         <button type="submit" class="btn btn-primary" disabled="@isSaving">
-            @(isSaving ? "Wird gespeichert…" : "Speichern")
+            @(isSaving ? L["NewProject_Saving"] : L["NewProject_Save"])
         </button>
     </EditForm>
 }
@@ -214,12 +216,12 @@ else
     private List<ProjectResponseDto>? projects;
 
     // Sektionen
-    private record SectionDef(string StatusLabel, string Title, string BadgeClass);
+    private record SectionDef(string StatusLabel, string TitleKey, string BadgeClass);
     private static readonly SectionDef[] Sections =
     [
-        new("Active",   "Aktive Projekte",    "bg-success"),
-        new("Paused",   "Pausierte Projekte", "bg-warning text-dark"),
-        new("Archived", "Archivierte Projekte","bg-secondary"),
+        new("Active",   "Section_Active",   "bg-success"),
+        new("Paused",   "Section_Paused",   "bg-warning text-dark"),
+        new("Archived", "Section_Archived", "bg-secondary"),
     ];
     private Dictionary<string, bool> expandedSections = new()
     {
@@ -290,7 +292,7 @@ else
         }
         else
         {
-            editErrorMessage = "Projekt konnte nicht gespeichert werden.";
+            editErrorMessage = L["NewProject_Error"];
         }
 
         isSaving = false;
@@ -336,7 +338,7 @@ else
         }
         else
         {
-            errorMessage = "Projekt konnte nicht gespeichert werden.";
+            errorMessage = L["NewProject_Error"];
         }
 
         isSaving = false;

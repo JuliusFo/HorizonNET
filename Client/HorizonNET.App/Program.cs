@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using Microsoft.Extensions.Localization;
 using HorizonNET.App;
 using HorizonNET.App.Services;
 
@@ -16,5 +17,8 @@ builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(apiBaseUr
 
 // ApiService für Dependency Injection registrieren
 builder.Services.AddScoped<ApiService>();
+
+// Lokalisierung registrieren
+builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
 
 await builder.Build().RunAsync();
