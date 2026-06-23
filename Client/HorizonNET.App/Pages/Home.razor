@@ -14,8 +14,8 @@
 else
 {
     var inboxExpanded = expandedSections["Inbox"];
-    <div class="mb-3">
-        <button class="btn btn-light w-100 d-flex justify-content-between align-items-center border"
+    <div class="card mb-3 overflow-hidden">
+        <button class="btn btn-light w-100 d-flex justify-content-between align-items-center border-0 rounded-0 @(inboxExpanded ? "border-bottom" : "")"
                 @onclick='() => ToggleSection("Inbox")'>
             <span class="fw-semibold">
                 <span class="badge bg-info me-2">@(inboxTasks?.Count ?? 0)</span>
@@ -26,7 +26,7 @@ else
 
         @if (inboxExpanded)
         {
-            <div class="card card-body mt-1 mb-2">
+            <div class="card-body">
                 <!-- Schnell-Erfassung -->
                 <EditForm Model="newInboxTask" OnValidSubmit="CreateInboxTaskAsync" class="d-flex gap-2 mb-3">
                     <DataAnnotationsValidator />
@@ -79,8 +79,8 @@ else
         var sectionProjects = projects.Where(p => p.Status == section.StatusLabel).ToList();
         var isExpanded = expandedSections[section.StatusLabel];
 
-        <div class="mb-3">
-            <button class="btn btn-light w-100 d-flex justify-content-between align-items-center border"
+        <div class="card mb-3 overflow-hidden">
+            <button class="btn btn-light w-100 d-flex justify-content-between align-items-center border-0 rounded-0 @(isExpanded ? "border-bottom" : "")"
                     @onclick="() => ToggleSection(section.StatusLabel)">
                 <span class="fw-semibold">
                     <span class="badge @section.BadgeClass me-2">@sectionProjects.Count</span>
@@ -91,13 +91,14 @@ else
 
             @if (isExpanded)
             {
+                <div class="card-body">
                 @if (!sectionProjects.Any())
                 {
-                    <p class="text-muted small mt-2 ms-1">@L["Section_Empty"]</p>
+                    <p class="text-muted small mb-0">@L["Section_Empty"]</p>
                 }
                 else
                 {
-                    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3 mt-1 mb-2">
+                    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
                         @foreach (var project in sectionProjects)
                         {
                             <div class="col">
@@ -215,6 +216,7 @@ else
                         }
                     </div>
                 }
+                </div>
             }
         </div>
     }
