@@ -5,7 +5,7 @@ namespace HorizonNET.Shared.Transfer.DTOs;
 public record TaskCreateDto(
     string Title,
     string? Description,
-    DateTime DueDate,
+    DateTime? DueDate,
     DateTime? StartTime,
     DateTime? EndTime,
     Priority Priority,
@@ -16,7 +16,7 @@ public record TaskCreateDto(
 public record TaskUpdateDto(
     string Title,
     string? Description,
-    DateTime DueDate,
+    DateTime? DueDate,
     DateTime? StartTime,
     DateTime? EndTime,
     bool IsCompleted,
@@ -28,7 +28,7 @@ public record TaskResponseDto(
     int Id,
     string Title,
     string? Description,
-    DateTime DueDate,
+    DateTime? DueDate,
     DateTime? StartTime,
     DateTime? EndTime,
     bool IsCompleted,

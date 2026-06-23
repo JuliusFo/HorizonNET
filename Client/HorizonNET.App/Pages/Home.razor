@@ -9,130 +9,148 @@
 {
     <p>Wird geladen…</p>
 }
-else if (!projects.Any())
-{
-    <p>Keine Projekte vorhanden.</p>
-}
 else
 {
-    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3 mb-4">
-        @foreach (var project in projects)
-        {
-            <div class="col">
-                <div class="card h-100" style="@(project.Color is not null ? $"background-color: {project.Color}1A;" : "")">
-                    @if (editingProjectId == project.Id)
-                    {
-                        <!-- Inline-Bearbeitungsformular -->
-                        <div class="card-body">
-                            <EditForm Model="editProject" OnValidSubmit="SaveEditAsync" class="row g-2">
-                                <DataAnnotationsValidator />
-                                <div class="col-12">
-                                    <InputText class="form-control" @bind-Value="editProject.Name" placeholder="Name *" />
-                                    <ValidationMessage For="() => editProject.Name" />
-                                </div>
-                                <div class="col-12">
-                                    <InputTextArea class="form-control" rows="2" @bind-Value="editProject.Description" placeholder="Beschreibung" />
-                                </div>
-                                <div class="col-6">
-                                    <label class="form-label small">Status</label>
-                                    <InputSelect class="form-select form-select-sm" @bind-Value="editProject.Status">
-                                        @foreach (var s in Enum.GetValues<ProjectStatus>())
-                                        {
-                                            <option value="@s">@s</option>
-                                        }
-                                    </InputSelect>
-                                </div>
-                                <div class="col-6">
-                                    <label class="form-label small">Priorität</label>
-                                    <InputSelect class="form-select form-select-sm" @bind-Value="editProject.Priority">
-                                        @foreach (var p in Enum.GetValues<Priority>())
-                                        {
-                                            <option value="@p">@p</option>
-                                        }
-                                    </InputSelect>
-                                </div>
-                                <div class="col-12 d-flex align-items-center gap-2">
-                                    <label class="form-label small mb-0">Farbe</label>
-                                    <input type="color" class="form-control form-control-color"
-                                           value="@(editProject.Color ?? "#6c757d")"
-                                           @oninput="e => editProject.Color = e.Value?.ToString()" />
-                                    @if (editProject.Color is not null)
+    @foreach (var section in Sections)
+    {
+        var sectionProjects = projects.Where(p => p.Status == section.StatusLabel).ToList();
+        var isExpanded = expandedSections[section.StatusLabel];
+
+        <div class="mb-3">
+            <button class="btn btn-light w-100 d-flex justify-content-between align-items-center border"
+                    @onclick="() => ToggleSection(section.StatusLabel)">
+                <span class="fw-semibold">
+                    <span class="badge @section.BadgeClass me-2">@sectionProjects.Count</span>
+                    @section.Title
+                </span>
+                <span>@(isExpanded ? "▲" : "▼")</span>
+            </button>
+
+            @if (isExpanded)
+            {
+                @if (!sectionProjects.Any())
+                {
+                    <p class="text-muted small mt-2 ms-1">Keine @section.Title.ToLower().</p>
+                }
+                else
+                {
+                    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3 mt-1 mb-2">
+                        @foreach (var project in sectionProjects)
+                        {
+                            <div class="col">
+                                <div class="card h-100" style="@(project.Color is not null ? $"background-color: {project.Color}1A;" : "")">
+                                    @if (editingProjectId == project.Id)
                                     {
-                                        <button type="button" class="btn btn-sm btn-outline-secondary"
-                                                @onclick="() => editProject.Color = null">Zurücksetzen</button>
+                                        <div class="card-body">
+                                            <EditForm Model="editProject" OnValidSubmit="SaveEditAsync" class="row g-2">
+                                                <DataAnnotationsValidator />
+                                                <div class="col-12">
+                                                    <InputText class="form-control" @bind-Value="editProject.Name" placeholder="Name *" />
+                                                    <ValidationMessage For="() => editProject.Name" />
+                                                </div>
+                                                <div class="col-12">
+                                                    <InputTextArea class="form-control" rows="2" @bind-Value="editProject.Description" placeholder="Beschreibung" />
+                                                </div>
+                                                <div class="col-6">
+                                                    <label class="form-label small">Status</label>
+                                                    <InputSelect class="form-select form-select-sm" @bind-Value="editProject.Status">
+                                                        @foreach (var s in Enum.GetValues<ProjectStatus>())
+                                                        {
+                                                            <option value="@s">@s</option>
+                                                        }
+                                                    </InputSelect>
+                                                </div>
+                                                <div class="col-6">
+                                                    <label class="form-label small">Priorität</label>
+                                                    <InputSelect class="form-select form-select-sm" @bind-Value="editProject.Priority">
+                                                        @foreach (var p in Enum.GetValues<Priority>())
+                                                        {
+                                                            <option value="@p">@p</option>
+                                                        }
+                                                    </InputSelect>
+                                                </div>
+                                                <div class="col-12 d-flex align-items-center gap-2">
+                                                    <label class="form-label small mb-0">Farbe</label>
+                                                    <input type="color" class="form-control form-control-color"
+                                                           value="@(editProject.Color ?? "#6c757d")"
+                                                           @oninput="e => editProject.Color = e.Value?.ToString()" />
+                                                    @if (editProject.Color is not null)
+                                                    {
+                                                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                                @onclick="() => editProject.Color = null">Zurücksetzen</button>
+                                                    }
+                                                </div>
+                                                @if (editErrorMessage is not null)
+                                                {
+                                                    <div class="col-12"><div class="alert alert-danger py-1">@editErrorMessage</div></div>
+                                                }
+                                                <div class="col-12 d-flex gap-2">
+                                                    <button type="submit" class="btn btn-sm btn-primary" disabled="@isSaving">
+                                                        @(isSaving ? "Speichert…" : "Speichern")
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelEdit">Abbrechen</button>
+                                                </div>
+                                            </EditForm>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="card-header d-flex justify-content-between align-items-center" style="background-color: transparent; border-color: rgba(0,0,0,0.1);">
+                                            <a href="/projects/@project.Id" class="text-decoration-none fw-bold text-dark">
+                                                @project.Name
+                                            </a>
+                                            <div class="d-flex gap-1">
+                                                <button class="btn btn-sm btn-outline-primary btn-icon" @onclick="() => StartEdit(project)" title="Bearbeiten">✎</button>
+                                                <button class="btn btn-sm btn-outline-danger btn-icon" @onclick="() => DeleteProjectAsync(project)" title="Löschen">🗑</button>
+                                            </div>
+                                        </div>
+
+                                        <div class="card-body">
+                                            @if (project.Description is not null)
+                                            {
+                                                <p class="card-text text-muted small">@project.Description</p>
+                                            }
+                                            <div class="d-flex gap-1 mt-2">
+                                                <span class="badge bg-primary">@project.Priority</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="card-footer text-muted small">
+                                            @{
+                                                var openTasks = project.TaskCount - project.DoneTaskCount;
+                                                var pct = project.TaskCount > 0
+                                                    ? (int)Math.Round(project.DoneTaskCount * 100.0 / project.TaskCount)
+                                                    : 0;
+                                            }
+                                            @if (project.TaskCount > 0)
+                                            {
+                                                <div class="progress mb-1" style="height: 5px;">
+                                                    <div class="progress-bar" role="progressbar"
+                                                         style="width: @pct%;"
+                                                         aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
+                                                </div>
+                                                <div class="d-flex justify-content-between">
+                                                    <span>@pct% erledigt · @openTasks offen</span>
+                                                    <span>Erstellt: @project.CreatedAt.ToString("dd.MM.yyyy")</span>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="d-flex justify-content-between">
+                                                    <span>Keine Tasks</span>
+                                                    <span>Erstellt: @project.CreatedAt.ToString("dd.MM.yyyy")</span>
+                                                </div>
+                                            }
+                                        </div>
                                     }
                                 </div>
-                                @if (editErrorMessage is not null)
-                                {
-                                    <div class="col-12"><div class="alert alert-danger py-1">@editErrorMessage</div></div>
-                                }
-                                <div class="col-12 d-flex gap-2">
-                                    <button type="submit" class="btn btn-sm btn-primary" disabled="@isSaving">
-                                        @(isSaving ? "Speichert…" : "Speichern")
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelEdit">Abbrechen</button>
-                                </div>
-                            </EditForm>
-                        </div>
-                    }
-                    else
-                    {
-                        <!-- Karten-Kopf mit Name und Aktions-Buttons -->
-                        <div class="card-header d-flex justify-content-between align-items-center" style="background-color: transparent; border-color: rgba(0,0,0,0.1);">
-                            <a href="/projects/@project.Id" class="text-decoration-none fw-bold text-dark">
-                                @project.Name
-                            </a>
-                            <div class="d-flex gap-1">
-                                <button class="btn btn-sm btn-outline-primary btn-icon" @onclick="() => StartEdit(project)" title="Bearbeiten">✎</button>
-                                <button class="btn btn-sm btn-outline-danger btn-icon" @onclick="() => DeleteProjectAsync(project)" title="Löschen">🗑</button>
                             </div>
-                        </div>
-
-                        <!-- Karten-Inhalt -->
-                        <div class="card-body">
-                            @if (project.Description is not null)
-                            {
-                                <p class="card-text text-muted small">@project.Description</p>
-                            }
-                            <div class="d-flex gap-1 mt-2">
-                                <span class="badge bg-secondary">@project.Status</span>
-                                <span class="badge bg-primary">@project.Priority</span>
-                            </div>
-                        </div>
-
-                        <!-- Karten-Fuß mit Metadaten -->
-                        <div class="card-footer text-muted small">
-                            @{
-                                var openTasks = project.TaskCount - project.DoneTaskCount;
-                                var pct = project.TaskCount > 0
-                                    ? (int)Math.Round(project.DoneTaskCount * 100.0 / project.TaskCount)
-                                    : 0;
-                            }
-                            @if (project.TaskCount > 0)
-                            {
-                                <div class="progress mb-1" style="height: 5px;">
-                                    <div class="progress-bar" role="progressbar"
-                                         style="width: @pct%;"
-                                         aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
-                                </div>
-                                <div class="d-flex justify-content-between">
-                                    <span>@pct% erledigt · @openTasks offen</span>
-                                    <span>Erstellt: @project.CreatedAt.ToString("dd.MM.yyyy")</span>
-                                </div>
-                            }
-                            else
-                            {
-                                <div class="d-flex justify-content-between">
-                                    <span>Keine Tasks</span>
-                                    <span>Erstellt: @project.CreatedAt.ToString("dd.MM.yyyy")</span>
-                                </div>
-                            }
-                        </div>
-                    }
-                </div>
-            </div>
-        }
-    </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    }
 }
 
 <!-- Formular zum Anlegen eines neuen Projekts -->
@@ -194,6 +212,22 @@ else
 
 @code {
     private List<ProjectResponseDto>? projects;
+
+    // Sektionen
+    private record SectionDef(string StatusLabel, string Title, string BadgeClass);
+    private static readonly SectionDef[] Sections =
+    [
+        new("Active",   "Aktive Projekte",    "bg-success"),
+        new("Paused",   "Pausierte Projekte", "bg-warning text-dark"),
+        new("Archived", "Archivierte Projekte","bg-secondary"),
+    ];
+    private Dictionary<string, bool> expandedSections = new()
+    {
+        ["Active"]   = true,
+        ["Paused"]   = true,
+        ["Archived"] = false,
+    };
+    private void ToggleSection(string key) => expandedSections[key] = !expandedSections[key];
 
     // Erstellen
     private ProjectCreateFormModel newProject = new();

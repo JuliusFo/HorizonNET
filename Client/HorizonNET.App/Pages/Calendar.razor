@@ -19,7 +19,7 @@ else
         @foreach (var task in tasks.OrderBy(t => t.DueDate))
         {
             <li>
-                <strong>@task.DueDate.ToString("dd.MM.yyyy")</strong>
+                <strong>@task.DueDate?.ToString("dd.MM.yyyy")</strong>
                 – @task.Title (@task.ProjectName)
             </li>
         }

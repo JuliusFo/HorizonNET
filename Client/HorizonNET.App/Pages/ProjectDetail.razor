@@ -121,9 +121,8 @@ else
                 <InputTextArea class="form-control" rows="2" @bind-Value="newTask.Description" />
             </div>
             <div class="mb-3">
-                <label class="form-label">Fälligkeitsdatum *</label>
+                <label class="form-label">Fälligkeitsdatum (optional)</label>
                 <InputDate class="form-control" @bind-Value="newTask.DueDate" />
-                <ValidationMessage For="() => newTask.DueDate" />
             </div>
             <div class="row mb-3">
                 <div class="col">
@@ -203,7 +202,7 @@ else
                         <span class="text-muted ms-2">@task.Description</span>
                     }
                     <div class="small text-muted">
-                        Fällig: @task.DueDate.ToString("dd.MM.yyyy")
+                        Fällig: @task.DueDate?.ToString("dd.MM.yyyy")
                         @if (task.StartTime is not null && task.EndTime is not null)
                         {
                             <span> · @task.StartTime.Value.ToString("HH:mm") – @task.EndTime.Value.ToString("HH:mm")</span>
@@ -237,7 +236,7 @@ else
                 <InputTextArea class="form-control" rows="2" @bind-Value="editTask.Description" placeholder="Beschreibung" />
             </div>
             <div class="col-md-4">
-                <label class="form-label small">Fällig *</label>
+                <label class="form-label small">Fällig (optional)</label>
                 <InputDate class="form-control" @bind-Value="editTask.DueDate" />
             </div>
             <div class="col-md-4">
@@ -475,8 +474,7 @@ else
         [System.ComponentModel.DataAnnotations.MaxLength(300)]
         public string Title { get; set; } = string.Empty;
         public string? Description { get; set; }
-        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Fälligkeitsdatum ist erforderlich.")]
-        public DateTime DueDate { get; set; } = DateTime.Today;
+        public DateTime? DueDate { get; set; }
         public DateTime? StartTime { get; set; }
         public DateTime? EndTime { get; set; }
         public Priority Priority { get; set; } = Priority.Medium;
@@ -488,8 +486,7 @@ else
         [System.ComponentModel.DataAnnotations.MaxLength(300)]
         public string Title { get; set; } = string.Empty;
         public string? Description { get; set; }
-        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Fälligkeitsdatum ist erforderlich.")]
-        public DateTime DueDate { get; set; } = DateTime.Today;
+        public DateTime? DueDate { get; set; }
         public DateTime? StartTime { get; set; }
         public DateTime? EndTime { get; set; }
         public Priority Priority { get; set; } = Priority.Medium;
