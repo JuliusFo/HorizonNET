@@ -8,6 +8,8 @@ public interface ITaskRepository
 
     Task<IEnumerable<TaskItem>> GetByProjectIdAsync(int projectId);
 
+    Task<IEnumerable<TaskItem>> GetInboxAsync();
+
     Task<TaskItem?> GetByIdAsync(int id);
 
     Task<TaskItem> CreateAsync(TaskItem task);

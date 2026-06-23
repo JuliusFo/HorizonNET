@@ -44,6 +44,9 @@ public class ApiService(HttpClient http)
     public Task<List<TaskResponseDto>?> GetTasksByProjectAsync(int projectId) =>
         http.GetFromJsonAsync<List<TaskResponseDto>>($"api/tasks/project/{projectId}");
 
+    public Task<List<TaskResponseDto>?> GetInboxTasksAsync() =>
+        http.GetFromJsonAsync<List<TaskResponseDto>>("api/tasks/inbox");
+
     public Task<TaskResponseDto?> GetTaskAsync(int id) =>
         http.GetFromJsonAsync<TaskResponseDto>($"api/tasks/{id}");
 

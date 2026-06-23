@@ -19,6 +19,12 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
             .Include(t => t.SubTasks)
             .ToListAsync();
 
+    public async Task<IEnumerable<TaskItem>> GetInboxAsync() =>
+        await context.Tasks
+            .Where(t => t.ProjectId == null && t.ParentTaskId == null)
+            .Include(t => t.SubTasks)
+            .ToListAsync();
+
     public async Task<TaskItem?> GetByIdAsync(int id) =>
         await context.Tasks
             .Include(t => t.Project)

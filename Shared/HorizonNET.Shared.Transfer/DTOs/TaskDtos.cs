@@ -9,7 +9,7 @@ public record TaskCreateDto(
     DateTime? StartTime,
     DateTime? EndTime,
     Priority Priority,
-    int ProjectId,
+    int? ProjectId,
     int? ParentTaskId = null,
     WorkStatus Status = WorkStatus.Planned
 );
@@ -22,7 +22,7 @@ public record TaskUpdateDto(
     DateTime? EndTime,
     WorkStatus Status,
     Priority Priority,
-    int ProjectId
+    int? ProjectId
 );
 
 public record TaskResponseDto(
@@ -34,8 +34,8 @@ public record TaskResponseDto(
     DateTime? EndTime,
     WorkStatus Status,
     string Priority,
-    int ProjectId,
-    string ProjectName,
+    int? ProjectId,
+    string? ProjectName,
     int? ParentTaskId = null,
     List<TaskResponseDto>? SubTasks = null
 )

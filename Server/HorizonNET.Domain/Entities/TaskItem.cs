@@ -22,9 +22,9 @@ public class TaskItem
 
     public Priority Priority { get; set; } = Priority.Medium;
 
-    public int ProjectId { get; set; }
+    public int? ProjectId { get; set; }
 
-    public Project Project { get; set; } = null!;
+    public Project? Project { get; set; }
 
     public int? ParentTaskId { get; set; }
 

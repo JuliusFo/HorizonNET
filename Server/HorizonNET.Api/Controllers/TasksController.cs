@@ -11,7 +11,7 @@ public class TasksController(ITaskRepository repo) : ControllerBase
 {
     private static TaskResponseDto ToDto(TaskItem t) =>
         new(t.Id, t.Title, t.Description, t.DueDate, t.StartTime, t.EndTime,
-            t.Status, t.Priority.ToString(), t.ProjectId, t.Project?.Name ?? string.Empty,
+            t.Status, t.Priority.ToString(), t.ProjectId, t.Project?.Name,
             t.ParentTaskId,
             t.SubTasks.Count > 0 ? t.SubTasks.Select(s => ToDto(s)).ToList() : null);
 
@@ -26,6 +26,13 @@ public class TasksController(ITaskRepository repo) : ControllerBase
     public async Task<IActionResult> GetByProject(int projectId)
     {
         var tasks = await repo.GetByProjectIdAsync(projectId);
+        return Ok(tasks.Select(ToDto));
+    }
+
+    [HttpGet("inbox")]
+    public async Task<IActionResult> GetInbox()
+    {
+        var tasks = await repo.GetInboxAsync();
         return Ok(tasks.Select(ToDto));
     }
 

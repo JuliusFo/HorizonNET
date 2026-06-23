@@ -118,4 +118,24 @@
     <value>Name ist erforderlich.</value>
   </data>
 
+  <!-- Inbox -->
+  <data name="Inbox_Title" xml:space="preserve">
+    <value>Inbox</value>
+  </data>
+  <data name="Inbox_Placeholder" xml:space="preserve">
+    <value>Neuer Task ohne Projekt…</value>
+  </data>
+  <data name="Inbox_Add" xml:space="preserve">
+    <value>Hinzufügen</value>
+  </data>
+  <data name="Inbox_Empty" xml:space="preserve">
+    <value>Keine Tasks in der Inbox.</value>
+  </data>
+  <data name="Inbox_AssignTo" xml:space="preserve">
+    <value>Projekt zuordnen…</value>
+  </data>
+  <data name="Inbox_DragHint" xml:space="preserve">
+    <value>Auf ein Projekt ziehen, um zuzuordnen</value>
+  </data>
+
 </root>
