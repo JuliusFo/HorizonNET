@@ -1,5 +1,6 @@
 @page "/"
 @inject ApiService Api
+@inject ProjectState ProjectState
 @inject IStringLocalizer<Home> L
 @inject IStringLocalizer<Enums> EnumL
 
@@ -280,7 +281,13 @@ else
 }
 
 @code {
-    private List<ProjectResponseDto>? projects;
+    // Projekte werden im geteilten ProjectState gehalten, damit die
+    // Navigationsleiste bei Änderungen mit aktualisiert wird.
+    private List<ProjectResponseDto>? projects
+    {
+        get => ProjectState.Projects;
+        set => ProjectState.Set(value);
+    }
 
     // Sektionen
     private record SectionDef(string StatusLabel, string TitleKey, string BadgeClass);
@@ -320,7 +327,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        projects   = await Api.GetProjectsAsync();
+        await ProjectState.EnsureLoadedAsync();
         inboxTasks = await Api.GetInboxTasksAsync();
     }
 
@@ -431,6 +438,7 @@ else
         {
             var idx = projects.FindIndex(p => p.Id == editingProjectId);
             if (idx >= 0) projects[idx] = updated;
+            ProjectState.NotifyChanged();
             editingProjectId = null;
         }
         else
@@ -447,7 +455,10 @@ else
     {
         var success = await Api.DeleteProjectAsync(project.Id);
         if (success)
+        {
             projects?.Remove(project);
+            ProjectState.NotifyChanged();
+        }
     }
 
     // ── Erstellen ────────────────────────────────────────────────────────────
@@ -476,6 +487,7 @@ else
         {
             projects ??= [];
             projects.Add(created);
+            ProjectState.NotifyChanged();
             showForm   = false;
             newProject = new();
         }

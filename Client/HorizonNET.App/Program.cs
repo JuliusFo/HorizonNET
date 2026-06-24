@@ -18,6 +18,9 @@ builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(apiBaseUr
 // ApiService für Dependency Injection registrieren
 builder.Services.AddScoped<ApiService>();
 
+// Gemeinsamer Projekt-State (geteilt zwischen Navigationsleiste und Seiten)
+builder.Services.AddScoped<ProjectState>();
+
 // Lokalisierung registrieren
 builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
 

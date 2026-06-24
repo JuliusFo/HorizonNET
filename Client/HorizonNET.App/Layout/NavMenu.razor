@@ -14,6 +14,20 @@
                 <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Übersicht
             </NavLink>
         </div>
+
+        @if (activeProjects.Any())
+        {
+            <div class="nav-item px-3 nav-subitems">
+                @foreach (var project in activeProjects)
+                {
+                    <NavLink class="nav-link nav-sublink" href="@($"projects/{project.Id}")">
+                        <span class="nav-project-dot" style="@(project.Color is not null ? $"background-color: {project.Color};" : "")" aria-hidden="true"></span>
+                        @project.Name
+                    </NavLink>
+                }
+            </div>
+        }
+
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="calendar">
                 <span class="bi bi-calendar3-nav-menu" aria-hidden="true"></span> Kalender
@@ -22,13 +36,32 @@
     </nav>
 </div>
 
+@inject ProjectState ProjectState
+@implements IDisposable
+
 @code {
     private bool collapseNavMenu = true;
 
     private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
 
+    private IEnumerable<ProjectResponseDto> activeProjects =>
+        ProjectState.Projects?.Where(p => p.Status == "Active") ?? [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        ProjectState.OnChange += HandleProjectsChanged;
+        await ProjectState.EnsureLoadedAsync();
+    }
+
+    private void HandleProjectsChanged() => InvokeAsync(StateHasChanged);
+
     private void ToggleNavMenu()
     {
         collapseNavMenu = !collapseNavMenu;
+    }
+
+    public void Dispose()
+    {
+        ProjectState.OnChange -= HandleProjectsChanged;
     }
 }
