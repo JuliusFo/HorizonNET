@@ -1,6 +1,7 @@
 @page "/"
 @inject ApiService Api
 @inject ProjectState ProjectState
+@inject WorkspaceState WorkspaceState
 @inject IStringLocalizer<Home> L
 @inject IStringLocalizer<Enums> EnumL
 
@@ -14,8 +15,114 @@
 }
 else
 {
+    @* ── Arbeitsbereiche & Inbox nebeneinander ─────────────────────────── *@
+    var workspacesExpanded = expandedSections["Workspaces"];
     var inboxExpanded = expandedSections["Inbox"];
-    <div class="card mb-3 overflow-hidden">
+    <div class="row g-3 mb-3">
+    <div class="col-12 col-lg-6 order-2">
+    <div class="card h-100 overflow-hidden">
+        <button class="btn btn-light w-100 d-flex justify-content-between align-items-center border-0 rounded-0 @(workspacesExpanded ? "border-bottom" : "")"
+                @onclick='() => ToggleSection("Workspaces")'>
+            <span class="fw-semibold">
+                <span class="badge bg-secondary me-2">@(workspaces?.Count ?? 0)</span>
+                @L["Workspaces_Title"]
+            </span>
+            <span>@(workspacesExpanded ? "▲" : "▼")</span>
+        </button>
+
+        @if (workspacesExpanded)
+        {
+            <div class="card-body">
+                @if (workspaces is not null && workspaces.Any())
+                {
+                    <ul class="list-group mb-3">
+                        @foreach (var ws in workspaces)
+                        {
+                            <li class="list-group-item">
+                                @if (editingWorkspaceId == ws.Id)
+                                {
+                                    <EditForm Model="editWorkspace" OnValidSubmit="SaveWorkspaceEditAsync" class="row g-2">
+                                        <DataAnnotationsValidator />
+                                        <div class="col-12 col-md-4">
+                                            <InputText class="form-control form-control-sm" @bind-Value="editWorkspace.Name" placeholder="@L["Field_Name"]" />
+                                            <ValidationMessage For="() => editWorkspace.Name" />
+                                        </div>
+                                        <div class="col-12 col-md-5">
+                                            <InputText class="form-control form-control-sm" @bind-Value="editWorkspace.Description" placeholder="@L["Field_Description"]" />
+                                        </div>
+                                        <div class="col-auto d-flex align-items-center gap-2">
+                                            <input type="color" class="form-control form-control-color form-control-sm"
+                                                   value="@(editWorkspace.Color ?? "#6c757d")"
+                                                   @oninput="e => editWorkspace.Color = e.Value?.ToString()" />
+                                            <button type="submit" class="btn btn-sm btn-primary" disabled="@isSaving">@L["Button_Save"]</button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelEditWorkspace">@L["Button_Cancel"]</button>
+                                        </div>
+                                    </EditForm>
+                                }
+                                else
+                                {
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="d-flex align-items-center gap-2">
+                                            <span class="nav-project-dot" style="display:inline-block;width:0.7rem;height:0.7rem;border-radius:2px;background-color:@(ws.Color ?? "#6c757d");"></span>
+                                            <span class="fw-semibold">@ws.Name</span>
+                                            <span class="badge bg-light text-dark">@ProjectCountLabel(ws.ProjectCount)</span>
+                                            <span class="badge bg-light text-dark">@OpenTasksLabel(OpenTasksInWorkspace(ws.Id))</span>
+                                            @if (ws.Description is not null)
+                                            {
+                                                <span class="text-muted small">@ws.Description</span>
+                                            }
+                                        </span>
+                                        <span class="d-flex gap-1">
+                                            <button class="btn btn-sm btn-outline-primary btn-icon" @onclick="() => StartEditWorkspace(ws)" title="@L["Button_Edit_Title"]">✎</button>
+                                            <button class="btn btn-sm btn-outline-danger btn-icon" @onclick="() => DeleteWorkspaceAsync(ws)" title="@L["Button_Delete_Title"]">🗑</button>
+                                        </span>
+                                    </div>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+                else
+                {
+                    <p class="text-muted small">@L["Workspaces_Empty"]</p>
+                }
+
+                @if (showWorkspaceForm)
+                {
+                    <EditForm Model="newWorkspace" OnValidSubmit="CreateWorkspaceAsync" class="row g-2 align-items-end">
+                        <DataAnnotationsValidator />
+                        <div class="col-12 col-md-4">
+                            <label class="form-label small mb-1">@L["Field_Name"]</label>
+                            <InputText class="form-control form-control-sm" @bind-Value="newWorkspace.Name" />
+                            <ValidationMessage For="() => newWorkspace.Name" />
+                        </div>
+                        <div class="col-12 col-md-5">
+                            <label class="form-label small mb-1">@L["Field_Description"]</label>
+                            <InputText class="form-control form-control-sm" @bind-Value="newWorkspace.Description" />
+                        </div>
+                        <div class="col-auto d-flex align-items-center gap-2">
+                            <input type="color" class="form-control form-control-color form-control-sm"
+                                   value="@(newWorkspace.Color ?? "#6c757d")"
+                                   @oninput="e => newWorkspace.Color = e.Value?.ToString()" />
+                            <button type="submit" class="btn btn-sm btn-primary" disabled="@isSaving">@L["Button_Save"]</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="ToggleWorkspaceForm">@L["Button_Cancel"]</button>
+                        </div>
+                        @if (workspaceErrorMessage is not null)
+                        {
+                            <div class="col-12"><div class="alert alert-danger py-1 mb-0">@workspaceErrorMessage</div></div>
+                        }
+                    </EditForm>
+                }
+                else
+                {
+                    <button class="btn btn-sm btn-outline-primary" @onclick="ToggleWorkspaceForm">@L["Workspaces_New"]</button>
+                }
+            </div>
+        }
+    </div>
+    </div>
+    <div class="col-12 col-lg-6 order-1">
+    <div class="card h-100 overflow-hidden">
         <button class="btn btn-light w-100 d-flex justify-content-between align-items-center border-0 rounded-0 @(inboxExpanded ? "border-bottom" : "")"
                 @onclick='() => ToggleSection("Inbox")'>
             <span class="fw-semibold">
@@ -73,6 +180,8 @@ else
                 }
             </div>
         }
+    </div>
+    </div>
     </div>
 
     @foreach (var section in Sections)
@@ -148,6 +257,19 @@ else
                                                         <button type="button" class="btn btn-sm btn-outline-secondary"
                                                                 @onclick="() => editProject.Color = null">@L["Button_ColorReset"]</button>
                                                     }
+                                                </div>
+                                                <div class="col-12">
+                                                    <label class="form-label small">@L["Field_Workspace"]</label>
+                                                    <InputSelect class="form-select form-select-sm" @bind-Value="editProject.WorkspaceId">
+                                                        <option value="">@L["Workspace_None"]</option>
+                                                        @if (workspaces is not null)
+                                                        {
+                                                            @foreach (var ws in workspaces)
+                                                            {
+                                                                <option value="@ws.Id">@ws.Name</option>
+                                                            }
+                                                        }
+                                                    </InputSelect>
                                                 </div>
                                                 @if (editErrorMessage is not null)
                                                 {
@@ -270,6 +392,19 @@ else
                         @onclick="() => newProject.Color = null">@L["Button_ColorReset"]</button>
             }
         </div>
+        <div class="mb-3">
+            <label class="form-label">@L["Field_Workspace"]</label>
+            <InputSelect class="form-select" @bind-Value="newProject.WorkspaceId">
+                <option value="">@L["Workspace_None"]</option>
+                @if (workspaces is not null)
+                {
+                    @foreach (var ws in workspaces)
+                    {
+                        <option value="@ws.Id">@ws.Name</option>
+                    }
+                }
+            </InputSelect>
+        </div>
         @if (errorMessage is not null)
         {
             <div class="alert alert-danger">@errorMessage</div>
@@ -289,6 +424,13 @@ else
         set => ProjectState.Set(value);
     }
 
+    // Arbeitsbereiche werden ebenfalls im geteilten State gehalten.
+    private List<WorkspaceResponseDto>? workspaces
+    {
+        get => WorkspaceState.Workspaces;
+        set => WorkspaceState.Set(value);
+    }
+
     // Sektionen
     private record SectionDef(string StatusLabel, string TitleKey, string BadgeClass);
     private static readonly SectionDef[] Sections =
@@ -299,10 +441,11 @@ else
     ];
     private Dictionary<string, bool> expandedSections = new()
     {
-        ["Inbox"]    = true,
-        ["Active"]   = true,
-        ["Paused"]   = true,
-        ["Archived"] = false,
+        ["Workspaces"] = true,
+        ["Inbox"]      = true,
+        ["Active"]     = true,
+        ["Paused"]     = false,
+        ["Archived"]   = false,
     };
     private void ToggleSection(string key) => expandedSections[key] = !expandedSections[key];
 
@@ -325,9 +468,17 @@ else
     private ProjectEditFormModel editProject = new();
     private string? editErrorMessage;
 
+    // Arbeitsbereiche
+    private bool showWorkspaceForm;
+    private WorkspaceFormModel newWorkspace = new();
+    private int? editingWorkspaceId;
+    private WorkspaceFormModel editWorkspace = new();
+    private string? workspaceErrorMessage;
+
     protected override async Task OnInitializedAsync()
     {
         await ProjectState.EnsureLoadedAsync();
+        await WorkspaceState.EnsureLoadedAsync();
         inboxTasks = await Api.GetInboxTasksAsync();
     }
 
@@ -409,7 +560,8 @@ else
             Description = project.Description,
             Status      = Enum.Parse<ProjectStatus>(project.Status),
             Priority    = Enum.Parse<Priority>(project.Priority),
-            Color       = project.Color
+            Color       = project.Color,
+            WorkspaceId = project.WorkspaceId
         };
     }
 
@@ -431,7 +583,10 @@ else
             string.IsNullOrWhiteSpace(editProject.Description) ? null : editProject.Description,
             editProject.Status,
             editProject.Priority,
-            editProject.Color);
+            editProject.Color,
+            editProject.WorkspaceId);
+
+        var previousWorkspaceId = projects.FirstOrDefault(p => p.Id == editingProjectId)?.WorkspaceId;
 
         var updated = await Api.UpdateProjectAsync(editingProjectId.Value, dto);
         if (updated is not null)
@@ -439,6 +594,8 @@ else
             var idx = projects.FindIndex(p => p.Id == editingProjectId);
             if (idx >= 0) projects[idx] = updated;
             ProjectState.NotifyChanged();
+            if (updated.WorkspaceId != previousWorkspaceId)
+                await WorkspaceState.RefreshAsync();
             editingProjectId = null;
         }
         else
@@ -458,6 +615,8 @@ else
         {
             projects?.Remove(project);
             ProjectState.NotifyChanged();
+            if (project.WorkspaceId is not null)
+                await WorkspaceState.RefreshAsync();
         }
     }
 
@@ -480,7 +639,8 @@ else
             string.IsNullOrWhiteSpace(newProject.Description) ? null : newProject.Description,
             newProject.Status,
             newProject.Priority,
-            newProject.Color);
+            newProject.Color,
+            newProject.WorkspaceId);
 
         var created = await Api.CreateProjectAsync(dto);
         if (created is not null)
@@ -488,6 +648,8 @@ else
             projects ??= [];
             projects.Add(created);
             ProjectState.NotifyChanged();
+            if (created.WorkspaceId is not null)
+                await WorkspaceState.RefreshAsync();
             showForm   = false;
             newProject = new();
         }
@@ -497,6 +659,116 @@ else
         }
 
         isSaving = false;
+    }
+
+    // ── Arbeitsbereiche ────────────────────────────────────────────────────────
+
+    // Summe der offenen Tasks aller Projekte eines Arbeitsbereichs
+    private int OpenTasksInWorkspace(int workspaceId) =>
+        projects?.Where(p => p.WorkspaceId == workspaceId)
+                 .Sum(p => p.TaskCount - p.DoneTaskCount) ?? 0;
+
+    // Beschriftungen mit korrekter Singular-/Pluralform
+    private string ProjectCountLabel(int count) =>
+        string.Format(L[count == 1 ? "Workspaces_ProjectCount_One" : "Workspaces_ProjectCount"], count);
+
+    private string OpenTasksLabel(int count) =>
+        string.Format(L[count == 1 ? "Workspaces_OpenTasks_One" : "Workspaces_OpenTasks"], count);
+
+    private void ToggleWorkspaceForm()
+    {
+        showWorkspaceForm     = !showWorkspaceForm;
+        workspaceErrorMessage = null;
+        newWorkspace          = new();
+    }
+
+    private async Task CreateWorkspaceAsync()
+    {
+        isSaving              = true;
+        workspaceErrorMessage = null;
+
+        var dto = new WorkspaceCreateDto(
+            newWorkspace.Name,
+            string.IsNullOrWhiteSpace(newWorkspace.Description) ? null : newWorkspace.Description,
+            newWorkspace.Color);
+
+        var created = await Api.CreateWorkspaceAsync(dto);
+        if (created is not null)
+        {
+            workspaces ??= [];
+            workspaces.Add(created);
+            WorkspaceState.NotifyChanged();
+            showWorkspaceForm = false;
+            newWorkspace      = new();
+        }
+        else
+        {
+            workspaceErrorMessage = L["Workspaces_Error"];
+        }
+
+        isSaving = false;
+    }
+
+    private void StartEditWorkspace(WorkspaceResponseDto ws)
+    {
+        editingWorkspaceId    = ws.Id;
+        workspaceErrorMessage = null;
+        editWorkspace = new WorkspaceFormModel
+        {
+            Name        = ws.Name,
+            Description = ws.Description,
+            Color       = ws.Color
+        };
+    }
+
+    private void CancelEditWorkspace()
+    {
+        editingWorkspaceId    = null;
+        workspaceErrorMessage = null;
+    }
+
+    private async Task SaveWorkspaceEditAsync()
+    {
+        if (editingWorkspaceId is null || workspaces is null) return;
+
+        isSaving = true;
+
+        var dto = new WorkspaceUpdateDto(
+            editWorkspace.Name,
+            string.IsNullOrWhiteSpace(editWorkspace.Description) ? null : editWorkspace.Description,
+            editWorkspace.Color);
+
+        var updated = await Api.UpdateWorkspaceAsync(editingWorkspaceId.Value, dto);
+        if (updated is not null)
+        {
+            var idx = workspaces.FindIndex(w => w.Id == editingWorkspaceId);
+            if (idx >= 0) workspaces[idx] = updated;
+            WorkspaceState.NotifyChanged();
+            editingWorkspaceId = null;
+        }
+
+        isSaving = false;
+    }
+
+    private async Task DeleteWorkspaceAsync(WorkspaceResponseDto ws)
+    {
+        var success = await Api.DeleteWorkspaceAsync(ws.Id);
+        if (!success) return;
+
+        workspaces?.Remove(ws);
+        WorkspaceState.NotifyChanged();
+
+        // Projekte dieses Bereichs verlieren serverseitig ihre Zuordnung
+        // (ON DELETE SET NULL) – lokalen Projekt-State entsprechend angleichen.
+        if (projects is not null)
+        {
+            for (var i = 0; i < projects.Count; i++)
+            {
+                if (projects[i].WorkspaceId == ws.Id)
+                    projects[i] = projects[i] with { WorkspaceId = null };
+            }
+            ProjectState.NotifyChanged();
+        }
     }
 
     // ── Formularmodelle ──────────────────────────────────────────────────────
@@ -510,6 +782,7 @@ else
         public ProjectStatus Status { get; set; } = ProjectStatus.Active;
         public Priority Priority { get; set; } = Priority.Medium;
         public string? Color { get; set; }
+        public int? WorkspaceId { get; set; }
     }
 
     private class ProjectEditFormModel
@@ -520,6 +793,16 @@ else
         public string? Description { get; set; }
         public ProjectStatus Status { get; set; } = ProjectStatus.Active;
         public Priority Priority { get; set; } = Priority.Medium;
+        public string? Color { get; set; }
+        public int? WorkspaceId { get; set; }
+    }
+
+    private class WorkspaceFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Name ist erforderlich.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(200)]
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
         public string? Color { get; set; }
     }
 

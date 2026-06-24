@@ -18,5 +18,9 @@ public class Project
 
     public string? Color { get; set; }
 
+    public int? WorkspaceId { get; set; }
+
+    public Workspace? Workspace { get; set; }
+
     public ICollection<TaskItem> Tasks { get; set; } = [];
 }

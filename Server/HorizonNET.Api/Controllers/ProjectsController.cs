@@ -10,7 +10,7 @@ namespace HorizonNET.Api.Controllers;
 public class ProjectsController(IProjectRepository repo) : ControllerBase
 {
     private static ProjectResponseDto ToDto(Project p) =>
-        new(p.Id, p.Name, p.Description, p.Status.ToString(), p.Priority.ToString(), p.CreatedAt, p.Tasks.Count, p.Tasks.Count(t => t.IsCompleted), p.Color);
+        new(p.Id, p.Name, p.Description, p.Status.ToString(), p.Priority.ToString(), p.CreatedAt, p.Tasks.Count, p.Tasks.Count(t => t.IsCompleted), p.Color, p.WorkspaceId);
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
@@ -36,7 +36,8 @@ public class ProjectsController(IProjectRepository repo) : ControllerBase
             Description = dto.Description,
             Status = dto.Status,
             Priority = dto.Priority,
-            Color = dto.Color
+            Color = dto.Color,
+            WorkspaceId = dto.WorkspaceId
         };
         var created = await repo.CreateAsync(project);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, ToDto(created));
@@ -51,7 +52,8 @@ public class ProjectsController(IProjectRepository repo) : ControllerBase
             Description = dto.Description,
             Status = dto.Status,
             Priority = dto.Priority,
-            Color = dto.Color
+            Color = dto.Color,
+            WorkspaceId = dto.WorkspaceId
         });
         if (updated is null) return NotFound();
         return Ok(ToDto(updated));

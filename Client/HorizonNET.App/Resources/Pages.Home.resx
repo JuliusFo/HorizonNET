@@ -76,6 +76,38 @@
     <value>Keine Projekte vorhanden.</value>
   </data>
 
+  <!-- Arbeitsbereiche -->
+  <data name="Workspaces_Title" xml:space="preserve">
+    <value>Arbeitsbereiche</value>
+  </data>
+  <data name="Workspaces_Empty" xml:space="preserve">
+    <value>Keine Arbeitsbereiche vorhanden.</value>
+  </data>
+  <data name="Workspaces_New" xml:space="preserve">
+    <value>+ Neuer Arbeitsbereich</value>
+  </data>
+  <data name="Workspaces_Error" xml:space="preserve">
+    <value>Arbeitsbereich konnte nicht gespeichert werden.</value>
+  </data>
+  <data name="Workspaces_ProjectCount" xml:space="preserve">
+    <value>{0} Projekte</value>
+  </data>
+  <data name="Workspaces_ProjectCount_One" xml:space="preserve">
+    <value>{0} Projekt</value>
+  </data>
+  <data name="Workspaces_OpenTasks" xml:space="preserve">
+    <value>{0} offene Tasks</value>
+  </data>
+  <data name="Workspaces_OpenTasks_One" xml:space="preserve">
+    <value>{0} offene Task</value>
+  </data>
+  <data name="Field_Workspace" xml:space="preserve">
+    <value>Arbeitsbereich</value>
+  </data>
+  <data name="Workspace_None" xml:space="preserve">
+    <value>Kein Arbeitsbereich</value>
+  </data>
+
   <!-- Felder -->
   <data name="Field_Name" xml:space="preserve">
     <value>Name *</value>

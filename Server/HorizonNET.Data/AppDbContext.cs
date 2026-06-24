@@ -9,6 +9,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<Workspace>(e =>
+        {
+            e.HasKey(w => w.Id);
+            e.Property(w => w.Name).IsRequired().HasMaxLength(200);
+            e.Property(w => w.Description).HasMaxLength(1000);
+        });
+
         modelBuilder.Entity<Project>(e =>
         {
             e.HasKey(p => p.Id);
@@ -16,6 +23,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(p => p.Description).HasMaxLength(1000);
             e.Property(p => p.Status).HasConversion<string>();
             e.Property(p => p.Priority).HasConversion<string>();
+
+            // Beim Löschen eines Arbeitsbereichs bleiben die Projekte erhalten
+            // (Zuordnung wird auf null gesetzt).
+            e.HasOne(p => p.Workspace)
+                .WithMany(w => w.Projects)
+                .HasForeignKey(p => p.WorkspaceId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<TaskItem>(e =>
@@ -41,6 +55,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     #endregion
 
     #region Entities
+
+    public DbSet<Workspace> Workspaces => Set<Workspace>();
 
     public DbSet<Project> Projects => Set<Project>();
 

@@ -21,6 +21,9 @@ builder.Services.AddScoped<ApiService>();
 // Gemeinsamer Projekt-State (geteilt zwischen Navigationsleiste und Seiten)
 builder.Services.AddScoped<ProjectState>();
 
+// Gemeinsamer Arbeitsbereich-State
+builder.Services.AddScoped<WorkspaceState>();
+
 // Lokalisierung registrieren
 builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
 

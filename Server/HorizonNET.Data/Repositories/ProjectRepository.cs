@@ -29,6 +29,7 @@ public class ProjectRepository(AppDbContext context) : IProjectRepository
         existing.Status = updated.Status;
         existing.Priority = updated.Priority;
         existing.Color = updated.Color;
+        existing.WorkspaceId = updated.WorkspaceId;
         await context.SaveChangesAsync();
         return existing;
     }

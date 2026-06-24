@@ -7,7 +7,8 @@ public record ProjectCreateDto(
     string? Description,
     ProjectStatus Status,
     Priority Priority,
-    string? Color = null
+    string? Color = null,
+    int? WorkspaceId = null
 );
 
 public record ProjectUpdateDto(
@@ -15,7 +16,8 @@ public record ProjectUpdateDto(
     string? Description,
     ProjectStatus Status,
     Priority Priority,
-    string? Color = null
+    string? Color = null,
+    int? WorkspaceId = null
 );
 
 public record ProjectResponseDto(
@@ -27,5 +29,6 @@ public record ProjectResponseDto(
     DateTime CreatedAt,
     int TaskCount,
     int DoneTaskCount,
-    string? Color = null
+    string? Color = null,
+    int? WorkspaceId = null
 );

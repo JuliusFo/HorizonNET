@@ -6,6 +6,36 @@ namespace HorizonNET.App.Services;
 // Kapselt alle HTTP-Aufrufe an die HorizonNET-API
 public class ApiService(HttpClient http)
 {
+    // ── Arbeitsbereiche ───────────────────────────────────────────────────────
+
+    public Task<List<WorkspaceResponseDto>?> GetWorkspacesAsync() =>
+        http.GetFromJsonAsync<List<WorkspaceResponseDto>>("api/workspaces");
+
+    public Task<WorkspaceResponseDto?> GetWorkspaceAsync(int id) =>
+        http.GetFromJsonAsync<WorkspaceResponseDto>($"api/workspaces/{id}");
+
+    public async Task<WorkspaceResponseDto?> CreateWorkspaceAsync(WorkspaceCreateDto dto)
+    {
+        var response = await http.PostAsJsonAsync("api/workspaces", dto);
+        return response.IsSuccessStatusCode
+            ? await response.Content.ReadFromJsonAsync<WorkspaceResponseDto>()
+            : null;
+    }
+
+    public async Task<WorkspaceResponseDto?> UpdateWorkspaceAsync(int id, WorkspaceUpdateDto dto)
+    {
+        var response = await http.PutAsJsonAsync($"api/workspaces/{id}", dto);
+        return response.IsSuccessStatusCode
+            ? await response.Content.ReadFromJsonAsync<WorkspaceResponseDto>()
+            : null;
+    }
+
+    public async Task<bool> DeleteWorkspaceAsync(int id)
+    {
+        var response = await http.DeleteAsync($"api/workspaces/{id}");
+        return response.IsSuccessStatusCode;
+    }
+
     // ── Projekte ────────────────────────────────────────────────────────────
 
     public Task<List<ProjectResponseDto>?> GetProjectsAsync() =>

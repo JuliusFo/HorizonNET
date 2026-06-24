@@ -20,13 +20,32 @@
             </NavLink>
         </div>
 
-        @if (activeProjects.Any())
+        @* Aktive Projekte ohne Arbeitsbereich – direkt unter "Übersicht" *@
+        @if (UngroupedActiveProjects.Any())
         {
             <div class="nav-item px-3 nav-subitems">
-                @foreach (var project in activeProjects)
+                @foreach (var project in UngroupedActiveProjects)
                 {
                     <NavLink class="nav-link nav-sublink" href="@($"projects/{project.Id}")">
-                        <span class="nav-project-dot" style="@(project.Color is not null ? $"background-color: {project.Color};" : "")" aria-hidden="true"></span>
+                        <span class="nav-project-dot" style="@DotStyle(project.Color)" aria-hidden="true"></span>
+                        @project.Name
+                    </NavLink>
+                }
+            </div>
+        }
+
+        @* Arbeitsbereiche mit ihren aktiven Projekten *@
+        @foreach (var workspace in WorkspacesWithActiveProjects)
+        {
+            <div class="nav-item nav-workspace">
+                <span class="nav-workspace-dot" style="@DotStyle(workspace.Color)" aria-hidden="true"></span>
+                @workspace.Name
+            </div>
+            <div class="nav-item px-3 nav-subitems">
+                @foreach (var project in ActiveProjectsIn(workspace.Id))
+                {
+                    <NavLink class="nav-link nav-sublink" href="@($"projects/{project.Id}")">
+                        <span class="nav-project-dot" style="@DotStyle(project.Color)" aria-hidden="true"></span>
                         @project.Name
                     </NavLink>
                 }
@@ -42,6 +61,7 @@
 </div>
 
 @inject ProjectState ProjectState
+@inject WorkspaceState WorkspaceState
 @implements IDisposable
 
 @code {
@@ -49,16 +69,32 @@
 
     private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
 
-    private IEnumerable<ProjectResponseDto> activeProjects =>
+    private IEnumerable<ProjectResponseDto> ActiveProjects =>
         ProjectState.Projects?.Where(p => p.Status == "Active") ?? [];
+
+    private IEnumerable<ProjectResponseDto> UngroupedActiveProjects =>
+        ActiveProjects.Where(p => p.WorkspaceId is null);
+
+    private IEnumerable<ProjectResponseDto> ActiveProjectsIn(int workspaceId) =>
+        ActiveProjects.Where(p => p.WorkspaceId == workspaceId);
+
+    // Nur Arbeitsbereiche zeigen, die auch aktive Projekte enthalten
+    private IEnumerable<WorkspaceResponseDto> WorkspacesWithActiveProjects =>
+        (WorkspaceState.Workspaces ?? [])
+            .Where(w => ActiveProjects.Any(p => p.WorkspaceId == w.Id));
+
+    private static string DotStyle(string? color) =>
+        color is not null ? $"background-color: {color};" : string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
-        ProjectState.OnChange += HandleProjectsChanged;
+        ProjectState.OnChange += HandleChanged;
+        WorkspaceState.OnChange += HandleChanged;
         await ProjectState.EnsureLoadedAsync();
+        await WorkspaceState.EnsureLoadedAsync();
     }
 
-    private void HandleProjectsChanged() => InvokeAsync(StateHasChanged);
+    private void HandleChanged() => InvokeAsync(StateHasChanged);
 
     private void ToggleNavMenu()
     {
@@ -67,6 +103,7 @@
 
     public void Dispose()
     {
-        ProjectState.OnChange -= HandleProjectsChanged;
+        ProjectState.OnChange -= HandleChanged;
+        WorkspaceState.OnChange -= HandleChanged;
     }
 }
