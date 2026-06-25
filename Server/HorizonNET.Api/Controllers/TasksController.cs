@@ -12,6 +12,7 @@ public class TasksController(ITaskRepository repo) : ControllerBase
     private static TaskResponseDto ToDto(TaskItem t) =>
         new(t.Id, t.Title, t.Description, t.DueDate, t.StartTime, t.EndTime,
             t.Status, t.Priority.ToString(), t.ProjectId, t.Project?.Name,
+            t.SortOrder,
             t.ParentTaskId,
             t.SubTasks.Count > 0 ? t.SubTasks.Select(s => ToDto(s)).ToList() : null);
 
@@ -61,6 +62,13 @@ public class TasksController(ITaskRepository repo) : ControllerBase
         };
         var created = await repo.CreateAsync(task);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, ToDto(created));
+    }
+
+    [HttpPut("reorder")]
+    public async Task<IActionResult> Reorder([FromBody] TaskReorderDto dto)
+    {
+        await repo.ReorderAsync(dto.Status, dto.OrderedTaskIds);
+        return NoContent();
     }
 
     [HttpPut("{id:int}")]

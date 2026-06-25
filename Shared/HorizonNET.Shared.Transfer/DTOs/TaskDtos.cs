@@ -36,9 +36,17 @@ public record TaskResponseDto(
     string Priority,
     int? ProjectId,
     string? ProjectName,
+    int SortOrder = 0,
     int? ParentTaskId = null,
     List<TaskResponseDto>? SubTasks = null
 )
 {
     public bool IsCompleted => Status == WorkStatus.Done || Status == WorkStatus.Abandoned;
 }
+
+// Neue Reihenfolge einer Kanban-Spalte: die Task-Ids in gewünschter
+// Reihenfolge; der Server setzt SortOrder = Index und Status = Status.
+public record TaskReorderDto(
+    WorkStatus Status,
+    List<int> OrderedTaskIds
+);

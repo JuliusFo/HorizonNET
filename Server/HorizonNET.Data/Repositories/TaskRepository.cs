@@ -1,5 +1,6 @@
 using HorizonNET.Domain.Entities;
 using HorizonNET.Domain.Interfaces;
+using HorizonNET.Shared.Transfer.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace HorizonNET.Data.Repositories;
@@ -53,6 +54,20 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         existing.ProjectId = updated.ProjectId;
         await context.SaveChangesAsync();
         return existing;
+    }
+
+    public async Task ReorderAsync(WorkStatus status, IList<int> orderedTaskIds)
+    {
+        var tasks = await context.Tasks
+            .Where(t => orderedTaskIds.Contains(t.Id))
+            .ToListAsync();
+
+        foreach (var t in tasks)
+        {
+            t.SortOrder = orderedTaskIds.IndexOf(t.Id);
+            t.Status = status;
+        }
+        await context.SaveChangesAsync();
     }
 
     public async Task<bool> DeleteAsync(int id)

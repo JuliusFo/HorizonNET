@@ -101,4 +101,10 @@ public class ApiService(HttpClient http)
         var response = await http.DeleteAsync($"api/tasks/{id}");
         return response.IsSuccessStatusCode;
     }
+
+    public async Task<bool> ReorderTasksAsync(TaskReorderDto dto)
+    {
+        var response = await http.PutAsJsonAsync("api/tasks/reorder", dto);
+        return response.IsSuccessStatusCode;
+    }
 }

@@ -1,5 +1,7 @@
 @page "/workspaces/{Id:int}"
 @inject ApiService Api
+@inject ProjectState ProjectState
+@inject IStringLocalizer<Enums> EnumL
 
 <PageTitle>@(workspace?.Name ?? "Arbeitsbereich") – HorizonNET</PageTitle>
 
@@ -13,19 +15,160 @@ else if (workspace is null)
 }
 else
 {
-    <div class="d-flex align-items-center gap-2 mb-2">
+    <div class="d-flex align-items-center gap-2 mb-3">
         <span class="d-inline-block" style="width:0.9rem;height:0.9rem;border-radius:3px;background-color:@(workspace.Color ?? "#6c757d");"></span>
         <h1 class="mb-0">@workspace.Name</h1>
     </div>
-    @if (workspace.Description is not null)
-    {
-        <p class="text-muted">@workspace.Description</p>
-    }
 
-    <div class="card mt-3" style="border: 2px dashed var(--bs-border-color);">
-        <div class="card-body text-center text-muted py-5">
-            <div style="font-size: 2rem;">🗂️</div>
-            <p class="mb-0">Hier entsteht das Kanban-Board für diesen Arbeitsbereich.</p>
+    @if (tasks is null)
+    {
+        <p>Wird geladen…</p>
+    }
+    else
+    {
+        <div class="kanban-board">
+            @foreach (var status in Columns)
+            {
+                var columnTasks = tasks.Where(t => t.ParentTaskId is null && t.Status == status)
+                                       .OrderBy(t => t.SortOrder).ToList();
+                var isCollapsed  = collapsed[status];
+
+                <div class="kanban-column @(isCollapsed ? "collapsed" : "") @(dragOverStatus == status ? "drop-active" : "")"
+                     @ondragover:preventDefault="true"
+                     @ondragover="() => { if (draggedTask is not null) { dragOverStatus = status; dragOverTaskId = null; } }"
+                     @ondrop="() => DropOnColumnAsync(status)">
+
+                    <div class="kanban-column-header">
+                        @if (isCollapsed)
+                        {
+                            <button type="button" class="kanban-collapse-btn" @onclick="() => ToggleColumn(status)"
+                                    title="@EnumL[$"WorkStatus_{status}"]">›</button>
+                            <span class="badge bg-secondary">@columnTasks.Count</span>
+                        }
+                        else
+                        {
+                            <span class="fw-semibold text-truncate">@EnumL[$"WorkStatus_{status}"]</span>
+                            <span class="d-flex align-items-center gap-2">
+                                <span class="badge bg-secondary">@columnTasks.Count</span>
+                                <button type="button" class="kanban-collapse-btn" @onclick="() => ToggleColumn(status)"
+                                        title="Spalte einklappen">‹</button>
+                            </span>
+                        }
+                    </div>
+                    <div class="kanban-column-body">
+                        @if (isCollapsed)
+                        {
+                            <button type="button" class="kanban-collapsed-toggle" @onclick="() => ToggleColumn(status)"
+                                    title="@EnumL[$"WorkStatus_{status}"]">
+                                <span class="kanban-collapsed-title">@EnumL[$"WorkStatus_{status}"]</span>
+                            </button>
+                        }
+                        else
+                        {
+                            @foreach (var task in columnTasks)
+                            {
+                                var color = ProjectColor(task.ProjectId);
+                                <div class="kanban-card @(dragOverTaskId == task.Id ? "drop-before" : "")" draggable="true"
+                                     style="@(color is not null ? $"border-color:{color};background-color:{color}1A;" : "")"
+                                     @onclick="() => OpenTask(task)"
+                                     @ondragstart="() => draggedTask = task"
+                                     @ondragend="() => { draggedTask = null; dragOverStatus = null; dragOverTaskId = null; }"
+                                     @ondragover:preventDefault="true"
+                                     @ondragover:stopPropagation="true"
+                                     @ondragover="() => { if (draggedTask is not null) { dragOverStatus = status; dragOverTaskId = task.Id; } }">
+                                    <div class="kanban-card-title">@task.Title</div>
+                                    <div class="d-flex justify-content-between align-items-center mt-1">
+                                        <span class="badge bg-primary">@EnumL[$"Priority_{task.Priority}"]</span>
+                                        @if (task.ProjectName is not null)
+                                        {
+                                            <span class="small text-muted text-truncate ms-2">@task.ProjectName</span>
+                                        }
+                                    </div>
+                                    @if (task.DueDate is not null)
+                                    {
+                                        <div class="small text-muted mt-1">📅 @task.DueDate.Value.ToString("dd.MM.yyyy")</div>
+                                    }
+                                </div>
+                            }
+                            @if (columnTasks.Count == 0)
+                            {
+                                <div class="kanban-empty text-muted small">—</div>
+                            }
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@* Bearbeiten-Dialog (leichtgewichtiges Overlay, kein JS-Interop) *@
+@if (selectedTask is not null)
+{
+    <div class="task-dialog-backdrop" @onclick="CloseDialog"></div>
+    <div class="task-dialog">
+        <div class="task-dialog-content" @onclick:stopPropagation="true">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">Task bearbeiten</h5>
+                <button type="button" class="btn-close" @onclick="CloseDialog" aria-label="Schließen"></button>
+            </div>
+            <EditForm Model="editModel" OnValidSubmit="SaveTaskAsync">
+                <DataAnnotationsValidator />
+                <div class="mb-3">
+                    <label class="form-label">Titel</label>
+                    <InputText class="form-control" @bind-Value="editModel.Title" />
+                    <ValidationMessage For="() => editModel.Title" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Beschreibung</label>
+                    <InputTextArea class="form-control" rows="3" @bind-Value="editModel.Description" />
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Fällig</label>
+                        <InputDate class="form-control" @bind-Value="editModel.DueDate" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Von</label>
+                        <InputDate Type="InputDateType.Time" class="form-control" @bind-Value="editModel.StartTime" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Bis</label>
+                        <InputDate Type="InputDateType.Time" class="form-control" @bind-Value="editModel.EndTime" />
+                    </div>
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Status</label>
+                        <InputSelect class="form-select" @bind-Value="editModel.Status">
+                            @foreach (var s in Enum.GetValues<WorkStatus>())
+                            {
+                                <option value="@s">@EnumL[$"WorkStatus_{s}"]</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Priorität</label>
+                        <InputSelect class="form-select" @bind-Value="editModel.Priority">
+                            @foreach (var p in Enum.GetValues<Priority>())
+                            {
+                                <option value="@p">@EnumL[$"Priority_{p}"]</option>
+                            }
+                        </InputSelect>
+                    </div>
+                </div>
+                @if (editError is not null)
+                {
+                    <div class="alert alert-danger py-1">@editError</div>
+                }
+                <div class="d-flex justify-content-between">
+                    <button type="button" class="btn btn-outline-danger" @onclick="DeleteTaskAsync" disabled="@isSaving">Löschen</button>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary" @onclick="CloseDialog">Abbrechen</button>
+                        <button type="submit" class="btn btn-primary" disabled="@isSaving">@(isSaving ? "Speichert…" : "Speichern")</button>
+                    </div>
+                </div>
+            </EditForm>
         </div>
     </div>
 }
@@ -34,18 +177,201 @@ else
     [Parameter] public int Id { get; set; }
 
     private WorkspaceResponseDto? workspace;
+    private List<TaskResponseDto>? tasks;
     private bool loading = true;
     private int? loadedId;
 
-    // OnParametersSetAsync statt OnInitializedAsync, damit beim Wechsel
-    // zwischen zwei Arbeitsbereichen (gleiche Komponente) neu geladen wird.
+    // Drag & Drop
+    private TaskResponseDto? draggedTask;
+    private WorkStatus? dragOverStatus;
+    private int? dragOverTaskId;   // Karte, vor der eingefügt wird (null = ans Ende)
+
+    // Bearbeiten-Dialog
+    private TaskResponseDto? selectedTask;
+    private TaskEditModel editModel = new();
+    private bool isSaving;
+    private string? editError;
+
+    // ProjektId → Farbe (für die farbliche Hervorhebung der Karten)
+    private Dictionary<int, string?> projectColors = new();
+
+    // Spalten = alle WorkStatus-Werte in Deklarationsreihenfolge
+    private static readonly WorkStatus[] Columns = Enum.GetValues<WorkStatus>();
+
+    // Einklapp-Zustand je Spalte (bleibt über Workspace-Wechsel hinweg erhalten)
+    private Dictionary<WorkStatus, bool> collapsed = new();
+
+    // OnParametersSetAsync statt OnInitializedAsync: lädt neu beim Wechsel
+    // zwischen zwei Arbeitsbereichen (gleiche Komponenteninstanz).
     protected override async Task OnParametersSetAsync()
     {
         if (loadedId == Id) return;
+        loadedId = Id;
+        loading  = true;
+        tasks    = null;
 
-        loading   = true;
         workspace = await Api.GetWorkspaceAsync(Id);
-        loadedId  = Id;
-        loading   = false;
+        if (workspace is not null)
+        {
+            await ProjectState.EnsureLoadedAsync();
+            var projects = (ProjectState.Projects ?? []).Where(p => p.WorkspaceId == Id).ToList();
+            projectColors = projects.ToDictionary(p => p.Id, p => p.Color);
+
+            // Tasks aller Projekte des Arbeitsbereichs einsammeln (Client-Aggregation)
+            var all = new List<TaskResponseDto>();
+            foreach (var p in projects)
+            {
+                var projectTasks = await Api.GetTasksByProjectAsync(p.Id);
+                if (projectTasks is not null) all.AddRange(projectTasks);
+            }
+            tasks = all;
+
+            // Standard: alles aufgeklappt außer Done/Abandoned (nur beim ersten Mal)
+            if (collapsed.Count == 0)
+            {
+                foreach (var s in Columns)
+                    collapsed[s] = s is WorkStatus.Done or WorkStatus.Abandoned;
+            }
+        }
+
+        loading = false;
+    }
+
+    private void ToggleColumn(WorkStatus status) => collapsed[status] = !collapsed[status];
+
+    private string? ProjectColor(int? projectId) =>
+        projectId is not null && projectColors.TryGetValue(projectId.Value, out var c) ? c : null;
+
+    private async Task DropOnColumnAsync(WorkStatus status)
+    {
+        var task     = draggedTask;
+        var beforeId = dragOverTaskId;
+        draggedTask    = null;
+        dragOverStatus = null;
+        dragOverTaskId = null;
+
+        if (task is null || tasks is null) return;
+
+        // Aktuelle Reihenfolge der Ziel-Spalte (ohne den gezogenen Task)
+        var column = tasks.Where(t => t.ParentTaskId is null && t.Status == status && t.Id != task.Id)
+                          .OrderBy(t => t.SortOrder)
+                          .ToList();
+
+        // Einfügeposition: vor der überfahrenen Karte, sonst ans Ende
+        var insertAt = beforeId is not null ? column.FindIndex(t => t.Id == beforeId) : -1;
+        if (insertAt < 0) insertAt = column.Count;
+        column.Insert(insertAt, task);
+
+        // Optimistisch lokal aktualisieren (Status + fortlaufende SortOrder)
+        for (var i = 0; i < column.Count; i++)
+        {
+            var idx = tasks.FindIndex(t => t.Id == column[i].Id);
+            if (idx >= 0) tasks[idx] = tasks[idx] with { Status = status, SortOrder = i };
+        }
+
+        // Persistieren (Server setzt SortOrder = Index und Status = Spalte)
+        await Api.ReorderTasksAsync(new TaskReorderDto(status, column.Select(t => t.Id).ToList()));
+    }
+
+    // ── Bearbeiten-Dialog ──────────────────────────────────────────────────────
+
+    private void OpenTask(TaskResponseDto task)
+    {
+        selectedTask = task;
+        editError    = null;
+        editModel = new TaskEditModel
+        {
+            Title       = task.Title,
+            Description = task.Description,
+            DueDate     = task.DueDate,
+            StartTime   = task.StartTime,
+            EndTime     = task.EndTime,
+            Priority    = Enum.Parse<Priority>(task.Priority),
+            Status      = task.Status
+        };
+    }
+
+    private void CloseDialog()
+    {
+        selectedTask = null;
+        editError    = null;
+    }
+
+    private async Task SaveTaskAsync()
+    {
+        if (selectedTask is null || tasks is null) return;
+
+        isSaving  = true;
+        editError = null;
+
+        var taskId        = selectedTask.Id;
+        var newStatus     = editModel.Status;
+        var statusChanged = newStatus != selectedTask.Status;
+
+        var dto = new TaskUpdateDto(
+            editModel.Title,
+            string.IsNullOrWhiteSpace(editModel.Description) ? null : editModel.Description,
+            editModel.DueDate, editModel.StartTime, editModel.EndTime,
+            newStatus, editModel.Priority, selectedTask.ProjectId);
+
+        var updated = await Api.UpdateTaskAsync(taskId, dto);
+        if (updated is null)
+        {
+            editError = "Speichern fehlgeschlagen.";
+            isSaving  = false;
+            return;
+        }
+
+        var idx = tasks.FindIndex(t => t.Id == taskId);
+        if (idx >= 0) tasks[idx] = updated;
+
+        // Bei Status-Wechsel im Dialog ans Ende der neuen Spalte einsortieren
+        if (statusChanged)
+        {
+            var orderedIds = tasks.Where(t => t.ParentTaskId is null && t.Status == newStatus && t.Id != taskId)
+                                  .OrderBy(t => t.SortOrder)
+                                  .Select(t => t.Id)
+                                  .ToList();
+            orderedIds.Add(taskId);
+
+            for (var i = 0; i < orderedIds.Count; i++)
+            {
+                var j = tasks.FindIndex(t => t.Id == orderedIds[i]);
+                if (j >= 0) tasks[j] = tasks[j] with { SortOrder = i };
+            }
+
+            await Api.ReorderTasksAsync(new TaskReorderDto(newStatus, orderedIds));
+        }
+
+        isSaving     = false;
+        selectedTask = null;
+    }
+
+    private async Task DeleteTaskAsync()
+    {
+        if (selectedTask is null || tasks is null) return;
+
+        var ok = await Api.DeleteTaskAsync(selectedTask.Id);
+        if (!ok)
+        {
+            editError = "Löschen fehlgeschlagen.";
+            return;
+        }
+
+        tasks.RemoveAll(t => t.Id == selectedTask.Id);
+        selectedTask = null;
+    }
+
+    private class TaskEditModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Titel ist erforderlich.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(300)]
+        public string Title { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public DateTime? DueDate { get; set; }
+        public DateTime? StartTime { get; set; }
+        public DateTime? EndTime { get; set; }
+        public Priority Priority { get; set; } = Priority.Medium;
+        public WorkStatus Status { get; set; } = WorkStatus.Planned;
     }
 }

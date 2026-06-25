@@ -1,4 +1,5 @@
 using HorizonNET.Domain.Entities;
+using HorizonNET.Shared.Transfer.Enums;
 
 namespace HorizonNET.Domain.Interfaces;
 
@@ -15,6 +16,9 @@ public interface ITaskRepository
     Task<TaskItem> CreateAsync(TaskItem task);
 
     Task<TaskItem?> UpdateAsync(int id, TaskItem task);
+
+    // Setzt für die übergebenen Tasks SortOrder = Listenindex und Status = status.
+    Task ReorderAsync(WorkStatus status, IList<int> orderedTaskIds);
 
     Task<bool> DeleteAsync(int id);
 }

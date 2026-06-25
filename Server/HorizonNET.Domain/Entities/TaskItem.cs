@@ -18,6 +18,10 @@ public class TaskItem
 
     public WorkStatus Status { get; set; } = WorkStatus.Planned;
 
+    // Manuelle Reihenfolge innerhalb einer Kanban-Spalte (Status).
+    // Sortiert wird stets erst nach Status, dann nach SortOrder.
+    public int SortOrder { get; set; }
+
     public bool IsCompleted => Status == WorkStatus.Done || Status == WorkStatus.Abandoned;
 
     public Priority Priority { get; set; } = Priority.Medium;
