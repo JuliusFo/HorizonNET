@@ -118,34 +118,3 @@
     white-space: nowrap;
     color: #6c757d;
 }
-
-/* Bearbeiten-Dialog */
-.task-dialog-backdrop {
-    position: fixed;
-    inset: 0;
-    background-color: rgba(0, 0, 0, 0.4);
-    z-index: 1040;
-}
-
-.task-dialog {
-    position: fixed;
-    inset: 0;
-    z-index: 1050;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1rem;
-    pointer-events: none;
-}
-
-.task-dialog-content {
-    pointer-events: auto;
-    width: 100%;
-    max-width: 32rem;
-    max-height: 90vh;
-    overflow-y: auto;
-    background-color: #fff;
-    border-radius: 0.5rem;
-    padding: 1.25rem;
-    box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.3);
-}

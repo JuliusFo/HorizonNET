@@ -102,76 +102,10 @@ else
     }
 }
 
-@* Bearbeiten-Dialog (leichtgewichtiges Overlay, kein JS-Interop) *@
-@if (selectedTask is not null)
-{
-    <div class="task-dialog-backdrop" @onclick="CloseDialog"></div>
-    <div class="task-dialog">
-        <div class="task-dialog-content" @onclick:stopPropagation="true">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5 class="mb-0">Task bearbeiten</h5>
-                <button type="button" class="btn-close" @onclick="CloseDialog" aria-label="Schließen"></button>
-            </div>
-            <EditForm Model="editModel" OnValidSubmit="SaveTaskAsync">
-                <DataAnnotationsValidator />
-                <div class="mb-3">
-                    <label class="form-label">Titel</label>
-                    <InputText class="form-control" @bind-Value="editModel.Title" />
-                    <ValidationMessage For="() => editModel.Title" />
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Beschreibung</label>
-                    <InputTextArea class="form-control" rows="3" @bind-Value="editModel.Description" />
-                </div>
-                <div class="row g-2 mb-3">
-                    <div class="col-md-4">
-                        <label class="form-label">Fällig</label>
-                        <InputDate class="form-control" @bind-Value="editModel.DueDate" />
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Von</label>
-                        <InputDate Type="InputDateType.Time" class="form-control" @bind-Value="editModel.StartTime" />
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Bis</label>
-                        <InputDate Type="InputDateType.Time" class="form-control" @bind-Value="editModel.EndTime" />
-                    </div>
-                </div>
-                <div class="row g-2 mb-3">
-                    <div class="col-md-6">
-                        <label class="form-label">Status</label>
-                        <InputSelect class="form-select" @bind-Value="editModel.Status">
-                            @foreach (var s in Enum.GetValues<WorkStatus>())
-                            {
-                                <option value="@s">@EnumL[$"WorkStatus_{s}"]</option>
-                            }
-                        </InputSelect>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Priorität</label>
-                        <InputSelect class="form-select" @bind-Value="editModel.Priority">
-                            @foreach (var p in Enum.GetValues<Priority>())
-                            {
-                                <option value="@p">@EnumL[$"Priority_{p}"]</option>
-                            }
-                        </InputSelect>
-                    </div>
-                </div>
-                @if (editError is not null)
-                {
-                    <div class="alert alert-danger py-1">@editError</div>
-                }
-                <div class="d-flex justify-content-between">
-                    <button type="button" class="btn btn-outline-danger" @onclick="DeleteTaskAsync" disabled="@isSaving">Löschen</button>
-                    <div class="d-flex gap-2">
-                        <button type="button" class="btn btn-outline-secondary" @onclick="CloseDialog">Abbrechen</button>
-                        <button type="submit" class="btn btn-primary" disabled="@isSaving">@(isSaving ? "Speichert…" : "Speichern")</button>
-                    </div>
-                </div>
-            </EditForm>
-        </div>
-    </div>
-}
+<TaskEditDialog Task="selectedTask"
+                OnSaved="HandleTaskSaved"
+                OnDeleted="HandleTaskDeleted"
+                OnClose="@(() => selectedTask = null)" />
 
 @code {
     [Parameter] public int Id { get; set; }
@@ -186,11 +120,8 @@ else
     private WorkStatus? dragOverStatus;
     private int? dragOverTaskId;   // Karte, vor der eingefügt wird (null = ans Ende)
 
-    // Bearbeiten-Dialog
+    // Bearbeiten-Dialog (geteilte Komponente)
     private TaskResponseDto? selectedTask;
-    private TaskEditModel editModel = new();
-    private bool isSaving;
-    private string? editError;
 
     // ProjektId → Farbe (für die farbliche Hervorhebung der Karten)
     private Dictionary<int, string?> projectColors = new();
@@ -275,64 +206,26 @@ else
 
     // ── Bearbeiten-Dialog ──────────────────────────────────────────────────────
 
-    private void OpenTask(TaskResponseDto task)
+    private void OpenTask(TaskResponseDto task) => selectedTask = task;
+
+    private async Task HandleTaskSaved(TaskResponseDto updated)
     {
-        selectedTask = task;
-        editError    = null;
-        editModel = new TaskEditModel
-        {
-            Title       = task.Title,
-            Description = task.Description,
-            DueDate     = task.DueDate,
-            StartTime   = task.StartTime,
-            EndTime     = task.EndTime,
-            Priority    = Enum.Parse<Priority>(task.Priority),
-            Status      = task.Status
-        };
-    }
+        if (tasks is null) { selectedTask = null; return; }
 
-    private void CloseDialog()
-    {
-        selectedTask = null;
-        editError    = null;
-    }
+        var oldStatus = selectedTask?.Status;
 
-    private async Task SaveTaskAsync()
-    {
-        if (selectedTask is null || tasks is null) return;
-
-        isSaving  = true;
-        editError = null;
-
-        var taskId        = selectedTask.Id;
-        var newStatus     = editModel.Status;
-        var statusChanged = newStatus != selectedTask.Status;
-
-        var dto = new TaskUpdateDto(
-            editModel.Title,
-            string.IsNullOrWhiteSpace(editModel.Description) ? null : editModel.Description,
-            editModel.DueDate, editModel.StartTime, editModel.EndTime,
-            newStatus, editModel.Priority, selectedTask.ProjectId);
-
-        var updated = await Api.UpdateTaskAsync(taskId, dto);
-        if (updated is null)
-        {
-            editError = "Speichern fehlgeschlagen.";
-            isSaving  = false;
-            return;
-        }
-
-        var idx = tasks.FindIndex(t => t.Id == taskId);
+        var idx = tasks.FindIndex(t => t.Id == updated.Id);
         if (idx >= 0) tasks[idx] = updated;
 
         // Bei Status-Wechsel im Dialog ans Ende der neuen Spalte einsortieren
-        if (statusChanged)
+        if (oldStatus is not null && oldStatus != updated.Status)
         {
-            var orderedIds = tasks.Where(t => t.ParentTaskId is null && t.Status == newStatus && t.Id != taskId)
+            var newStatus = updated.Status;
+            var orderedIds = tasks.Where(t => t.ParentTaskId is null && t.Status == newStatus && t.Id != updated.Id)
                                   .OrderBy(t => t.SortOrder)
                                   .Select(t => t.Id)
                                   .ToList();
-            orderedIds.Add(taskId);
+            orderedIds.Add(updated.Id);
 
             for (var i = 0; i < orderedIds.Count; i++)
             {
@@ -343,35 +236,12 @@ else
             await Api.ReorderTasksAsync(new TaskReorderDto(newStatus, orderedIds));
         }
 
-        isSaving     = false;
         selectedTask = null;
     }
 
-    private async Task DeleteTaskAsync()
+    private void HandleTaskDeleted(int id)
     {
-        if (selectedTask is null || tasks is null) return;
-
-        var ok = await Api.DeleteTaskAsync(selectedTask.Id);
-        if (!ok)
-        {
-            editError = "Löschen fehlgeschlagen.";
-            return;
-        }
-
-        tasks.RemoveAll(t => t.Id == selectedTask.Id);
+        tasks?.RemoveAll(t => t.Id == id);
         selectedTask = null;
-    }
-
-    private class TaskEditModel
-    {
-        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Titel ist erforderlich.")]
-        [System.ComponentModel.DataAnnotations.MaxLength(300)]
-        public string Title { get; set; } = string.Empty;
-        public string? Description { get; set; }
-        public DateTime? DueDate { get; set; }
-        public DateTime? StartTime { get; set; }
-        public DateTime? EndTime { get; set; }
-        public Priority Priority { get; set; } = Priority.Medium;
-        public WorkStatus Status { get; set; } = WorkStatus.Planned;
     }
 }

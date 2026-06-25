@@ -75,14 +75,8 @@
   <data name="Task_EditSave" xml:space="preserve">
     <value>Speichern</value>
   </data>
-  <data name="Task_EditSaving" xml:space="preserve">
-    <value>Speichert…</value>
-  </data>
   <data name="Task_EditCancel" xml:space="preserve">
     <value>Abbrechen</value>
-  </data>
-  <data name="Task_EditError" xml:space="preserve">
-    <value>Task konnte nicht gespeichert werden.</value>
   </data>
   <data name="SubTask_Placeholder" xml:space="preserve">
     <value>Sub-Task Titel *</value>
@@ -96,9 +90,6 @@
     <value>Name *</value>
   </data>
   <data name="Field_Status" xml:space="preserve">
-    <value>Status</value>
-  </data>
-  <data name="Field_WorkStatus" xml:space="preserve">
     <value>Status</value>
   </data>
 

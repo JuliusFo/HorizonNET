@@ -1,0 +1,170 @@
+@inject ApiService Api
+@inject IStringLocalizer<Enums> EnumL
+
+@* Wiederverwendbarer Bearbeiten-Dialog für Tasks (leichtgewichtiges Overlay,
+   kein JS-Interop). Die Sichtbarkeit steuert der Aufrufer über den Task-Parameter. *@
+@if (Task is not null)
+{
+    <div class="task-dialog-backdrop" @onclick="CloseAsync"></div>
+    <div class="task-dialog">
+        <div class="task-dialog-content" @onclick:stopPropagation="true">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">Task bearbeiten</h5>
+                <button type="button" class="btn-close" @onclick="CloseAsync" aria-label="Schließen"></button>
+            </div>
+            <EditForm Model="editModel" OnValidSubmit="SaveAsync">
+                <DataAnnotationsValidator />
+                <div class="mb-3">
+                    <label class="form-label">Titel</label>
+                    <InputText class="form-control" @bind-Value="editModel.Title" />
+                    <ValidationMessage For="() => editModel.Title" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Beschreibung</label>
+                    <InputTextArea class="form-control" rows="3" @bind-Value="editModel.Description" />
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Fällig</label>
+                        <InputDate class="form-control" @bind-Value="editModel.DueDate" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Von</label>
+                        <InputDate Type="InputDateType.Time" class="form-control" @bind-Value="editModel.StartTime" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Bis</label>
+                        <InputDate Type="InputDateType.Time" class="form-control" @bind-Value="editModel.EndTime" />
+                    </div>
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Status</label>
+                        <InputSelect class="form-select" @bind-Value="editModel.Status">
+                            @foreach (var s in Enum.GetValues<WorkStatus>())
+                            {
+                                <option value="@s">@EnumL[$"WorkStatus_{s}"]</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Priorität</label>
+                        <InputSelect class="form-select" @bind-Value="editModel.Priority">
+                            @foreach (var p in Enum.GetValues<Priority>())
+                            {
+                                <option value="@p">@EnumL[$"Priority_{p}"]</option>
+                            }
+                        </InputSelect>
+                    </div>
+                </div>
+                @if (editError is not null)
+                {
+                    <div class="alert alert-danger py-1">@editError</div>
+                }
+                <div class="d-flex justify-content-between">
+                    <button type="button" class="btn btn-outline-danger" @onclick="DeleteAsync" disabled="@isSaving">Löschen</button>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary" @onclick="CloseAsync">Abbrechen</button>
+                        <button type="submit" class="btn btn-primary" disabled="@isSaving">@(isSaving ? "Speichert…" : "Speichern")</button>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@code {
+    // Der zu bearbeitende Task; null = Dialog geschlossen. Der Aufrufer steuert
+    // die Sichtbarkeit, indem er diesen Parameter setzt bzw. (via OnClose/OnSaved)
+    // wieder auf null setzt.
+    [Parameter] public TaskResponseDto? Task { get; set; }
+
+    // Liefert den aktualisierten Task; der Aufrufer pflegt seine eigene Liste.
+    [Parameter] public EventCallback<TaskResponseDto> OnSaved { get; set; }
+
+    // Liefert die Id des gelöschten Tasks.
+    [Parameter] public EventCallback<int> OnDeleted { get; set; }
+
+    // Schließen ohne Speichern (X / Backdrop / Abbrechen).
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private TaskEditModel editModel = new();
+    private bool isSaving;
+    private string? editError;
+    private int? loadedTaskId;
+
+    protected override void OnParametersSet()
+    {
+        // Formular nur (neu) befüllen, wenn ein anderer Task übergeben wurde.
+        if (Task is null) { loadedTaskId = null; return; }
+        if (loadedTaskId == Task.Id) return;
+
+        loadedTaskId = Task.Id;
+        editError    = null;
+        editModel = new TaskEditModel
+        {
+            Title       = Task.Title,
+            Description = Task.Description,
+            DueDate     = Task.DueDate,
+            StartTime   = Task.StartTime,
+            EndTime     = Task.EndTime,
+            Priority    = Enum.Parse<Priority>(Task.Priority),
+            Status      = Task.Status
+        };
+    }
+
+    private async Task SaveAsync()
+    {
+        if (Task is null) return;
+
+        isSaving  = true;
+        editError = null;
+
+        var dto = new TaskUpdateDto(
+            editModel.Title,
+            string.IsNullOrWhiteSpace(editModel.Description) ? null : editModel.Description,
+            editModel.DueDate, editModel.StartTime, editModel.EndTime,
+            editModel.Status, editModel.Priority, Task.ProjectId);
+
+        var updated = await Api.UpdateTaskAsync(Task.Id, dto);
+        isSaving = false;
+
+        if (updated is null)
+        {
+            editError = "Speichern fehlgeschlagen.";
+            return;
+        }
+
+        await OnSaved.InvokeAsync(updated);
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (Task is null) return;
+
+        var id = Task.Id;
+        var ok = await Api.DeleteTaskAsync(id);
+        if (!ok)
+        {
+            editError = "Löschen fehlgeschlagen.";
+            return;
+        }
+
+        await OnDeleted.InvokeAsync(id);
+    }
+
+    private async Task CloseAsync() => await OnClose.InvokeAsync();
+
+    private class TaskEditModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Titel ist erforderlich.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(300)]
+        public string Title { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public DateTime? DueDate { get; set; }
+        public DateTime? StartTime { get; set; }
+        public DateTime? EndTime { get; set; }
+        public Priority Priority { get; set; } = Priority.Medium;
+        public WorkStatus Status { get; set; } = WorkStatus.Planned;
+    }
+}
