@@ -8,99 +8,158 @@
     <div class="task-dialog-backdrop" @onclick="CloseAsync"></div>
     <div class="task-dialog">
         <div class="task-dialog-content" @onclick:stopPropagation="true">
-            <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="task-dialog-header">
                 <h5 class="mb-0">Task bearbeiten</h5>
                 <button type="button" class="btn-close" @onclick="CloseAsync" aria-label="Schließen"></button>
             </div>
-            <EditForm Model="editModel" OnValidSubmit="SaveAsync">
-                <DataAnnotationsValidator />
-                <div class="mb-3">
-                    <label class="form-label">Titel</label>
-                    <InputText class="form-control" @bind-Value="editModel.Title" />
-                    <ValidationMessage For="() => editModel.Title" />
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Beschreibung</label>
-                    <InputTextArea class="form-control" rows="3" @bind-Value="editModel.Description" />
-                </div>
-                <div class="row g-2 mb-3">
-                    <div class="col-md-4">
-                        <label class="form-label">Fällig</label>
-                        <InputDate class="form-control" @bind-Value="editModel.DueDate" />
+
+            <div class="task-dialog-body">
+                @* Hauptfelder – eigenes Formular, damit das Sub-Task-Eingabefeld
+                   unten (außerhalb des Formulars) bei Enter nichts absendet. *@
+                <EditForm id="taskEditForm" Model="editModel" OnValidSubmit="SaveAsync">
+                    <DataAnnotationsValidator />
+                    <div class="mb-3">
+                        <label class="form-label">Titel</label>
+                        <InputText class="form-control" @bind-Value="editModel.Title" />
+                        <ValidationMessage For="() => editModel.Title" />
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Von</label>
-                        <InputDate Type="InputDateType.Time" class="form-control" @bind-Value="editModel.StartTime" />
+                    <div class="mb-3">
+                        <label class="form-label">Beschreibung</label>
+                        <InputTextArea class="form-control" rows="3" @bind-Value="editModel.Description" />
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Bis</label>
-                        <InputDate Type="InputDateType.Time" class="form-control" @bind-Value="editModel.EndTime" />
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Fällig</label>
+                            <InputDate class="form-control" @bind-Value="editModel.DueDate" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Von</label>
+                            <InputDate Type="InputDateType.Time" class="form-control" @bind-Value="editModel.StartTime" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Bis</label>
+                            <InputDate Type="InputDateType.Time" class="form-control" @bind-Value="editModel.EndTime" />
+                        </div>
                     </div>
-                </div>
-                <div class="row g-2 mb-3">
-                    <div class="col-md-6">
-                        <label class="form-label">Status</label>
-                        <InputSelect class="form-select" @bind-Value="editModel.Status">
-                            @foreach (var s in Enum.GetValues<WorkStatus>())
-                            {
-                                <option value="@s">@EnumL[$"WorkStatus_{s}"]</option>
-                            }
-                        </InputSelect>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label">Status</label>
+                            <InputSelect class="form-select" @bind-Value="editModel.Status">
+                                @foreach (var s in Enum.GetValues<WorkStatus>())
+                                {
+                                    <option value="@s">@EnumL[$"WorkStatus_{s}"]</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Priorität</label>
+                            <InputSelect class="form-select" @bind-Value="editModel.Priority">
+                                @foreach (var p in Enum.GetValues<Priority>())
+                                {
+                                    <option value="@p">@EnumL[$"Priority_{p}"]</option>
+                                }
+                            </InputSelect>
+                        </div>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Priorität</label>
-                        <InputSelect class="form-select" @bind-Value="editModel.Priority">
-                            @foreach (var p in Enum.GetValues<Priority>())
-                            {
-                                <option value="@p">@EnumL[$"Priority_{p}"]</option>
-                            }
-                        </InputSelect>
-                    </div>
-                </div>
-                @if (editError is not null)
+                    @if (editError is not null)
+                    {
+                        <div class="alert alert-danger py-1 mt-3 mb-0">@editError</div>
+                    }
+                </EditForm>
+
+                @* Sub-Tasks – nur bei Haupt-Tasks (eine Verschachtelungsebene) *@
+                @if (Task.ParentTaskId is null)
                 {
-                    <div class="alert alert-danger py-1">@editError</div>
-                }
-                <div class="d-flex justify-content-between">
-                    <button type="button" class="btn btn-outline-danger" @onclick="DeleteAsync" disabled="@isSaving">Löschen</button>
-                    <div class="d-flex gap-2">
-                        <button type="button" class="btn btn-outline-secondary" @onclick="CloseAsync">Abbrechen</button>
-                        <button type="submit" class="btn btn-primary" disabled="@isSaving">@(isSaving ? "Speichert…" : "Speichern")</button>
+                    @if (subTasks.Count > 0)
+                    {
+                        <hr class="my-3" />
+                        <div class="fw-semibold mb-2">
+                            Sub-Tasks <span class="text-muted fw-normal">(@subTasks.Count(s => s.IsCompleted)/@subTasks.Count)</span>
+                        </div>
+                        <ul class="list-group mb-2">
+                            @foreach (var sub in subTasks)
+                            {
+                                <li class="list-group-item d-flex align-items-center gap-2 py-1 px-2 @(dragOverSubId == sub.Id ? "subtask-drop-before" : "")"
+                                    draggable="true"
+                                    @ondragstart="() => draggedSub = sub"
+                                    @ondragend="() => { draggedSub = null; dragOverSubId = null; }"
+                                    @ondragover:preventDefault="true"
+                                    @ondragover="() => { if (draggedSub is not null) dragOverSubId = sub.Id; }"
+                                    @ondrop="() => DropSubTaskAsync(sub)">
+                                    <span class="subtask-handle" title="Zum Sortieren ziehen">⠿</span>
+                                    <label class="d-flex align-items-center gap-2 mb-0 flex-grow-1" style="cursor:pointer;">
+                                        <input type="checkbox" class="form-check-input mt-0"
+                                               checked="@sub.IsCompleted"
+                                               @onchange="() => ToggleSubTaskAsync(sub)" />
+                                        <span class="@(sub.IsCompleted ? "text-decoration-line-through text-muted" : "")">@sub.Title</span>
+                                    </label>
+                                    <button type="button" class="btn btn-sm btn-outline-danger border-0"
+                                            @onclick="() => DeleteSubTaskAsync(sub)" title="Löschen">🗑</button>
+                                </li>
+                            }
+                        </ul>
+                    }
+
+                    <div class="d-flex gap-2 mt-3">
+                        <input class="form-control form-control-sm" placeholder="Neuer Sub-Task…"
+                               @bind="newSubTaskTitle" @bind:event="oninput"
+                               @onkeydown="HandleSubTaskKeyAsync" />
+                        <button type="button" class="btn btn-sm btn-primary text-nowrap"
+                                @onclick="AddSubTaskAsync"
+                                disabled="@string.IsNullOrWhiteSpace(newSubTaskTitle)">Hinzufügen</button>
                     </div>
+                }
+            </div>
+
+            <div class="task-dialog-footer">
+                <button type="button" class="btn btn-outline-danger" @onclick="DeleteAsync" disabled="@isSaving">Löschen</button>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-secondary" @onclick="CloseAsync">Abbrechen</button>
+                    <button type="submit" form="taskEditForm" class="btn btn-primary" disabled="@isSaving">
+                        @(isSaving ? "Speichert…" : "Speichern")
+                    </button>
                 </div>
-            </EditForm>
+            </div>
         </div>
     </div>
 }
 
 @code {
     // Der zu bearbeitende Task; null = Dialog geschlossen. Der Aufrufer steuert
-    // die Sichtbarkeit, indem er diesen Parameter setzt bzw. (via OnClose/OnSaved)
-    // wieder auf null setzt.
+    // die Sichtbarkeit, indem er diesen Parameter setzt bzw. wieder auf null setzt.
     [Parameter] public TaskResponseDto? Task { get; set; }
 
-    // Liefert den aktualisierten Task; der Aufrufer pflegt seine eigene Liste.
+    // Liefert den aktualisierten Task nach "Speichern" (schließt den Dialog).
     [Parameter] public EventCallback<TaskResponseDto> OnSaved { get; set; }
 
-    // Liefert die Id des gelöschten Tasks.
+    // Liefert die Id des gelöschten Tasks (schließt den Dialog).
     [Parameter] public EventCallback<int> OnDeleted { get; set; }
+
+    // Live-Aktualisierung (z. B. Sub-Tasks geändert) – Dialog bleibt offen.
+    [Parameter] public EventCallback<TaskResponseDto> OnTaskUpdated { get; set; }
 
     // Schließen ohne Speichern (X / Backdrop / Abbrechen).
     [Parameter] public EventCallback OnClose { get; set; }
 
     private TaskEditModel editModel = new();
+    private List<TaskResponseDto> subTasks = new();
+    private string newSubTaskTitle = string.Empty;
+    private TaskResponseDto? draggedSub;
+    private int? dragOverSubId;
     private bool isSaving;
     private string? editError;
     private int? loadedTaskId;
 
     protected override void OnParametersSet()
     {
-        // Formular nur (neu) befüllen, wenn ein anderer Task übergeben wurde.
+        // Nur (neu) befüllen, wenn ein anderer Task übergeben wurde.
         if (Task is null) { loadedTaskId = null; return; }
         if (loadedTaskId == Task.Id) return;
 
-        loadedTaskId = Task.Id;
-        editError    = null;
+        loadedTaskId    = Task.Id;
+        editError       = null;
+        newSubTaskTitle = string.Empty;
+        subTasks        = Task.SubTasks?.OrderBy(s => s.SortOrder).ToList() ?? new();
         editModel = new TaskEditModel
         {
             Title       = Task.Title,
@@ -112,6 +171,8 @@
             Status      = Task.Status
         };
     }
+
+    // ── Hauptfelder ────────────────────────────────────────────────────────────
 
     private async Task SaveAsync()
     {
@@ -135,6 +196,8 @@
             return;
         }
 
+        // Die API liefert beim Update keine Sub-Tasks mit – lokalen Stand erhalten.
+        updated = updated with { SubTasks = subTasks.Count > 0 ? subTasks.ToList() : null };
         await OnSaved.InvokeAsync(updated);
     }
 
@@ -154,6 +217,77 @@
     }
 
     private async Task CloseAsync() => await OnClose.InvokeAsync();
+
+    // ── Sub-Tasks (wirken sofort über die API) ──────────────────────────────────
+
+    private async Task AddSubTaskAsync()
+    {
+        if (Task is null || string.IsNullOrWhiteSpace(newSubTaskTitle)) return;
+
+        var dto = new TaskCreateDto(
+            newSubTaskTitle.Trim(), null, null, null, null,
+            Priority.Medium, Task.ProjectId, ParentTaskId: Task.Id);
+
+        var created = await Api.CreateTaskAsync(dto);
+        if (created is null) return;
+
+        subTasks.Add(created);
+        newSubTaskTitle = string.Empty;
+        await NotifyTaskUpdatedAsync();
+    }
+
+    private async Task ToggleSubTaskAsync(TaskResponseDto sub)
+    {
+        var newStatus = sub.IsCompleted ? WorkStatus.Planned : WorkStatus.Done;
+        var dto = new TaskUpdateDto(
+            sub.Title, sub.Description, sub.DueDate, sub.StartTime, sub.EndTime,
+            newStatus, Enum.Parse<Priority>(sub.Priority), sub.ProjectId);
+
+        var updated = await Api.UpdateTaskAsync(sub.Id, dto);
+        if (updated is null) return;
+
+        var idx = subTasks.FindIndex(s => s.Id == sub.Id);
+        if (idx >= 0) subTasks[idx] = updated;
+        await NotifyTaskUpdatedAsync();
+    }
+
+    private async Task DeleteSubTaskAsync(TaskResponseDto sub)
+    {
+        var ok = await Api.DeleteTaskAsync(sub.Id);
+        if (!ok) return;
+
+        subTasks.RemoveAll(s => s.Id == sub.Id);
+        await NotifyTaskUpdatedAsync();
+    }
+
+    private async Task HandleSubTaskKeyAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await AddSubTaskAsync();
+    }
+
+    // Sub-Task per Drag&Drop vor den Ziel-Sub-Task einsortieren
+    private async Task DropSubTaskAsync(TaskResponseDto target)
+    {
+        var dragged   = draggedSub;
+        draggedSub    = null;
+        dragOverSubId = null;
+
+        if (dragged is null || dragged.Id == target.Id) return;
+
+        subTasks.RemoveAll(s => s.Id == dragged.Id);
+        var newIdx = subTasks.FindIndex(s => s.Id == target.Id);
+        if (newIdx < 0) newIdx = subTasks.Count;
+        subTasks.Insert(newIdx, dragged);
+
+        await Api.ReorderSubTasksAsync(subTasks.Select(s => s.Id).ToList());
+        await NotifyTaskUpdatedAsync();
+    }
+
+    private async Task NotifyTaskUpdatedAsync()
+    {
+        if (Task is null) return;
+        await OnTaskUpdated.InvokeAsync(Task with { SubTasks = subTasks.Count > 0 ? subTasks.ToList() : null });
+    }
 
     private class TaskEditModel
     {

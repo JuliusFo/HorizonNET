@@ -107,4 +107,10 @@ public class ApiService(HttpClient http)
         var response = await http.PutAsJsonAsync("api/tasks/reorder", dto);
         return response.IsSuccessStatusCode;
     }
+
+    public async Task<bool> ReorderSubTasksAsync(List<int> orderedTaskIds)
+    {
+        var response = await http.PutAsJsonAsync("api/tasks/reorder-subtasks", orderedTaskIds);
+        return response.IsSuccessStatusCode;
+    }
 }

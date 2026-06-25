@@ -145,6 +145,7 @@ else
 <TaskEditDialog Task="selectedTask"
                 OnSaved="HandleTaskSaved"
                 OnDeleted="HandleTaskDeleted"
+                OnTaskUpdated="HandleTaskUpdated"
                 OnClose="@(() => selectedTask = null)" />
 
 @code {
@@ -289,6 +290,15 @@ else
         }
 
         selectedTask = null;
+    }
+
+    // Live-Aktualisierung (Sub-Tasks geändert) – Dialog bleibt offen, die
+    // Sub-Task-Zeilen in der Liste aktualisieren sich mit.
+    private void HandleTaskUpdated(TaskResponseDto updated)
+    {
+        if (tasks is null) return;
+        var idx = tasks.FindIndex(t => t.Id == updated.Id);
+        if (idx >= 0) tasks[idx] = updated;
     }
 
     // ── Löschen ──────────────────────────────────────────────────────────────

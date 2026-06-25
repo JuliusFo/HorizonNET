@@ -14,7 +14,7 @@ public class TasksController(ITaskRepository repo) : ControllerBase
             t.Status, t.Priority.ToString(), t.ProjectId, t.Project?.Name,
             t.SortOrder,
             t.ParentTaskId,
-            t.SubTasks.Count > 0 ? t.SubTasks.Select(s => ToDto(s)).ToList() : null);
+            t.SubTasks.Count > 0 ? t.SubTasks.OrderBy(s => s.SortOrder).Select(s => ToDto(s)).ToList() : null);
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
@@ -68,6 +68,13 @@ public class TasksController(ITaskRepository repo) : ControllerBase
     public async Task<IActionResult> Reorder([FromBody] TaskReorderDto dto)
     {
         await repo.ReorderAsync(dto.Status, dto.OrderedTaskIds);
+        return NoContent();
+    }
+
+    [HttpPut("reorder-subtasks")]
+    public async Task<IActionResult> ReorderSubTasks([FromBody] List<int> orderedTaskIds)
+    {
+        await repo.ReorderSubTasksAsync(orderedTaskIds);
         return NoContent();
     }
 

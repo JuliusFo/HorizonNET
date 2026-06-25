@@ -20,5 +20,8 @@ public interface ITaskRepository
     // Setzt für die übergebenen Tasks SortOrder = Listenindex und Status = status.
     Task ReorderAsync(WorkStatus status, IList<int> orderedTaskIds);
 
+    // Setzt nur SortOrder = Listenindex (Status bleibt unverändert) – für Sub-Tasks.
+    Task ReorderSubTasksAsync(IList<int> orderedTaskIds);
+
     Task<bool> DeleteAsync(int id);
 }

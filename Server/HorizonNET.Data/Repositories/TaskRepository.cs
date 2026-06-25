@@ -70,6 +70,19 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         await context.SaveChangesAsync();
     }
 
+    public async Task ReorderSubTasksAsync(IList<int> orderedTaskIds)
+    {
+        var tasks = await context.Tasks
+            .Where(t => orderedTaskIds.Contains(t.Id))
+            .ToListAsync();
+
+        // Nur die Reihenfolge ändern – der Status der Sub-Tasks bleibt erhalten.
+        foreach (var t in tasks)
+            t.SortOrder = orderedTaskIds.IndexOf(t.Id);
+
+        await context.SaveChangesAsync();
+    }
+
     public async Task<bool> DeleteAsync(int id)
     {
         var existing = await context.Tasks
