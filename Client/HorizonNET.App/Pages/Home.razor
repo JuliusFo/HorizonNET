@@ -64,7 +64,7 @@ else
                                     <div class="d-flex justify-content-between align-items-center">
                                         <span class="d-flex align-items-center gap-2">
                                             <span class="nav-project-dot" style="display:inline-block;width:0.7rem;height:0.7rem;border-radius:2px;background-color:@(ws.Color ?? "#6c757d");"></span>
-                                            <span class="fw-semibold">@ws.Name</span>
+                                            <a href="workspaces/@ws.Id" class="fw-semibold text-decoration-none">@ws.Name</a>
                                             <span class="badge bg-light text-dark">@ProjectCountLabel(ws.ProjectCount)</span>
                                             <span class="badge bg-light text-dark">@OpenTasksLabel(OpenTasksInWorkspace(ws.Id))</span>
                                             @if (ws.Description is not null)

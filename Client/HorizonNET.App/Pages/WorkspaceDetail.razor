@@ -1,0 +1,51 @@
+@page "/workspaces/{Id:int}"
+@inject ApiService Api
+
+<PageTitle>@(workspace?.Name ?? "Arbeitsbereich") – HorizonNET</PageTitle>
+
+@if (loading)
+{
+    <p>Wird geladen…</p>
+}
+else if (workspace is null)
+{
+    <p class="text-muted">Arbeitsbereich nicht gefunden.</p>
+}
+else
+{
+    <div class="d-flex align-items-center gap-2 mb-2">
+        <span class="d-inline-block" style="width:0.9rem;height:0.9rem;border-radius:3px;background-color:@(workspace.Color ?? "#6c757d");"></span>
+        <h1 class="mb-0">@workspace.Name</h1>
+    </div>
+    @if (workspace.Description is not null)
+    {
+        <p class="text-muted">@workspace.Description</p>
+    }
+
+    <div class="card mt-3" style="border: 2px dashed var(--bs-border-color);">
+        <div class="card-body text-center text-muted py-5">
+            <div style="font-size: 2rem;">🗂️</div>
+            <p class="mb-0">Hier entsteht das Kanban-Board für diesen Arbeitsbereich.</p>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private WorkspaceResponseDto? workspace;
+    private bool loading = true;
+    private int? loadedId;
+
+    // OnParametersSetAsync statt OnInitializedAsync, damit beim Wechsel
+    // zwischen zwei Arbeitsbereichen (gleiche Komponente) neu geladen wird.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loadedId == Id) return;
+
+        loading   = true;
+        workspace = await Api.GetWorkspaceAsync(Id);
+        loadedId  = Id;
+        loading   = false;
+    }
+}

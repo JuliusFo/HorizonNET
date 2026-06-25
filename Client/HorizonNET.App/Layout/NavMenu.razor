@@ -38,8 +38,10 @@
         @foreach (var workspace in WorkspacesWithActiveProjects)
         {
             <div class="nav-item nav-workspace">
-                <span class="nav-workspace-dot" style="@DotStyle(workspace.Color)" aria-hidden="true"></span>
-                @workspace.Name
+                <NavLink class="nav-workspace-link" href="@($"workspaces/{workspace.Id}")">
+                    <span class="nav-workspace-dot" style="@DotStyle(workspace.Color)" aria-hidden="true"></span>
+                    @workspace.Name
+                </NavLink>
             </div>
             <div class="nav-item px-3 nav-subitems">
                 @foreach (var project in ActiveProjectsIn(workspace.Id))
