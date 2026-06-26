@@ -1,0 +1,19 @@
+.priority-indicator {
+    font-weight: 700;
+    font-size: 0.95rem;
+    line-height: 1;
+    letter-spacing: -0.08em;
+    white-space: nowrap;
+}
+
+.priority-high {
+    color: #dc3545;
+}
+
+.priority-medium {
+    color: #198754;
+}
+
+.priority-low {
+    color: #6c757d;
+}

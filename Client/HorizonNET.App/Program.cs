@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Microsoft.Extensions.Localization;
 using HorizonNET.App;
 using HorizonNET.App.Services;
+using Radzen;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -17,6 +18,9 @@ builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(apiBaseUr
 
 // ApiService für Dependency Injection registrieren
 builder.Services.AddScoped<ApiService>();
+
+// Radzen-Komponenten (u. a. für den Kalender-Scheduler)
+builder.Services.AddRadzenComponents();
 
 // Gemeinsamer Projekt-State (geteilt zwischen Navigationsleiste und Seiten)
 builder.Services.AddScoped<ProjectState>();

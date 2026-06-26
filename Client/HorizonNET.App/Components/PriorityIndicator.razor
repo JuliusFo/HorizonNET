@@ -1,0 +1,16 @@
+@inject IStringLocalizer<Enums> EnumL
+
+@* Zeigt die Priorität als farbiges Pfeil-Symbol (Tooltip/aria-label tragen den Text). *@
+<span class="priority-indicator @PriorityDisplay.CssClass(_priority)"
+      title="@EnumL[$"Priority_{_priority}"]"
+      aria-label="@EnumL[$"Priority_{_priority}"]">@PriorityDisplay.Symbol(_priority)</span>
+
+@code {
+    // Priorität als String (wie in den DTOs geliefert), z. B. "High".
+    [Parameter] public string Value { get; set; } = "";
+
+    private Priority _priority;
+
+    protected override void OnParametersSet()
+        => _priority = Enum.TryParse<Priority>(Value, out var p) ? p : Priority.Medium;
+}

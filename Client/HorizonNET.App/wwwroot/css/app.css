@@ -1,3 +1,14 @@
+/* Das Radzen "Standard"-Theme setzt auf <body> eine helle Hintergrundfarbe
+   UND ein dekoratives Mesh-SVG als background-image (unten/rechts). Beides
+   neutralisieren, damit die App ihren weißen Bootstrap-Look behält. */
+:root {
+    --rz-body-background-color: #ffffff;
+}
+
+body {
+    background-image: none;
+}
+
 html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }

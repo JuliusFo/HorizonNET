@@ -93,14 +93,13 @@ else
                                      @ondragover:preventDefault="true"
                                      @ondragover:stopPropagation="true"
                                      @ondragover="() => { if (draggedTask is not null) { dragOverStatus = status; dragOverTaskId = task.Id; } }">
-                                    <div class="kanban-card-title">@task.Title</div>
-                                    <div class="d-flex justify-content-between align-items-center mt-1">
-                                        <span class="badge bg-primary">@EnumL[$"Priority_{task.Priority}"]</span>
-                                        @if (task.ProjectName is not null)
-                                        {
-                                            <span class="small text-muted text-truncate ms-2">@task.ProjectName</span>
-                                        }
+                                    <div class="kanban-card-title">
+                                        <PriorityIndicator Value="@task.Priority" /> @task.Title
                                     </div>
+                                    @if (task.ProjectName is not null)
+                                    {
+                                        <div class="small text-muted text-truncate mt-1">@task.ProjectName</div>
+                                    }
                                     @if (task.DueDate is not null)
                                     {
                                         <div class="small text-muted mt-1">📅 @task.DueDate.Value.ToString("dd.MM.yyyy")</div>

@@ -56,7 +56,7 @@
                             <InputSelect class="form-select" @bind-Value="editModel.Priority">
                                 @foreach (var p in Enum.GetValues<Priority>())
                                 {
-                                    <option value="@p">@EnumL[$"Priority_{p}"]</option>
+                                    <option value="@p">@PriorityDisplay.Symbol(p) @EnumL[$"Priority_{p}"]</option>
                                 }
                             </InputSelect>
                         </div>

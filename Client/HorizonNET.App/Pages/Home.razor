@@ -163,7 +163,7 @@ else
                                     <span class="text-muted me-1" title="@L["Inbox_DragHint"]">⠿</span>@task.Title
                                 </span>
                                 <div class="d-flex align-items-center gap-2">
-                                    <span class="badge bg-primary">@EnumL[$"Priority_{task.Priority}"]</span>
+                                    <PriorityIndicator Value="@task.Priority" />
                                     <select class="form-select form-select-sm w-auto"
                                             @onchange="e => AssignTaskToProjectAsync(task, e.Value?.ToString())">
                                         <option value="">@L["Inbox_AssignTo"]</option>
@@ -243,7 +243,7 @@ else
                                                     <InputSelect class="form-select form-select-sm" @bind-Value="editProject.Priority">
                                                         @foreach (var p in Enum.GetValues<Priority>())
                                                         {
-                                                            <option value="@p">@EnumL[$"Priority_{p}"]</option>
+                                                            <option value="@p">@PriorityDisplay.Symbol(p) @EnumL[$"Priority_{p}"]</option>
                                                         }
                                                     </InputSelect>
                                                 </div>
@@ -291,7 +291,7 @@ else
                                                 <a href="/projects/@project.Id" class="text-decoration-none fw-bold text-dark">
                                                     @project.Name
                                                 </a>
-                                                <span class="badge bg-primary">@EnumL[$"Priority_{project.Priority}"]</span>
+                                                <PriorityIndicator Value="@project.Priority" />
                                             </div>
                                             <div class="d-flex gap-1">
                                                 <button class="btn btn-sm btn-outline-primary btn-icon" @onclick="() => StartEdit(project)" title="@L["Button_Edit_Title"]">✎</button>
@@ -377,7 +377,7 @@ else
             <InputSelect class="form-select" @bind-Value="newProject.Priority">
                 @foreach (var priority in Enum.GetValues<Priority>())
                 {
-                    <option value="@priority">@EnumL[$"Priority_{priority}"]</option>
+                    <option value="@priority">@PriorityDisplay.Symbol(priority) @EnumL[$"Priority_{priority}"]</option>
                 }
             </InputSelect>
         </div>
