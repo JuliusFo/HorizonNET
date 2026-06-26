@@ -17,6 +17,10 @@ public interface ITaskRepository
 
     Task<TaskItem?> UpdateAsync(int id, TaskItem task);
 
+    // Setzt nur die Google-Event-Verknüpfung (serverseitiger Sync). Bewusst getrennt
+    // vom DTO-getriebenen UpdateAsync, damit dieser Wert dort nicht überschrieben wird.
+    Task SetGoogleEventIdAsync(int taskId, string? googleEventId);
+
     // Setzt für die übergebenen Tasks SortOrder = Listenindex und Status = status.
     Task ReorderAsync(WorkStatus status, IList<int> orderedTaskIds);
 

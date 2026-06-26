@@ -1,6 +1,7 @@
 @page "/calendar"
 @inject ApiService Api
 @inject ProjectState ProjectState
+@inject SettingsState Settings
 
 <PageTitle>Kalender – HorizonNET</PageTitle>
 
@@ -12,16 +13,57 @@
 }
 else
 {
-    <RadzenScheduler @ref="scheduler" TItem="TaskAppointment" Data="appointments"
-                     StartProperty="Start" EndProperty="End" TextProperty="Text"
-                     SelectedIndex="0"
-                     AppointmentSelect="OnAppointmentSelect"
-                     AppointmentRender="OnAppointmentRender"
-                     style="height: calc(100vh - 11rem);">
-        <RadzenDayView Text="Tag" StartTime="@(TimeSpan.FromHours(0))" EndTime="@(TimeSpan.FromHours(24))" TimeFormat="HH:mm" />
-        <RadzenWeekView Text="Woche" StartTime="@(TimeSpan.FromHours(0))" EndTime="@(TimeSpan.FromHours(24))" TimeFormat="HH:mm" />
-        <RadzenMonthView Text="Monat" />
-    </RadzenScheduler>
+    <div class="d-flex gap-3 align-items-start">
+        @* Seitenleiste: ungeplante Tasks (ohne Fälligkeitsdatum) *@
+        <div class="calendar-sidebar">
+            <div class="fw-semibold mb-2">Ungeplant</div>
+
+            @if (armedTask is not null)
+            {
+                <div class="alert alert-info py-1 px-2 small mb-2">
+                    „@armedTask.Title" – jetzt einen Slot im Kalender anklicken.
+                    <button type="button" class="btn-close ms-1" style="font-size:0.6rem;"
+                            @onclick="() => armedTask = null" aria-label="Abbrechen"></button>
+                </div>
+            }
+
+            @{
+                var unscheduled = tasks.Where(t => t.DueDate is null).ToList();
+            }
+            @if (unscheduled.Count == 0)
+            {
+                <p class="text-muted small mb-0">Keine ungeplanten Tasks.</p>
+            }
+            else
+            {
+                @foreach (var t in unscheduled)
+                {
+                    <div class="calendar-unscheduled-item @(armedTask?.Id == t.Id ? "armed" : "")"
+                         @onclick="() => ToggleArm(t)">
+                        <span class="cal-dot" style="background-color:@(ProjectColor(t.ProjectId) ?? "#6c757d");"></span>
+                        <PriorityIndicator Value="@t.Priority" />
+                        <span class="text-truncate">@t.Title</span>
+                    </div>
+                }
+            }
+        </div>
+
+        @* Kalender *@
+        <div class="flex-grow-1">
+            <RadzenScheduler @ref="scheduler" TItem="CalendarAppointment" Data="appointments"
+                             StartProperty="Start" EndProperty="End" TextProperty="Text"
+                             SelectedIndex="@Settings.CalendarDefaultView"
+                             SlotSelect="OnSlotSelect"
+                             AppointmentSelect="OnAppointmentSelect"
+                             AppointmentMove="OnAppointmentMove"
+                             AppointmentRender="OnAppointmentRender"
+                             style="height: calc(100vh - 11rem);">
+                <RadzenDayView Text="Tag" StartTime="@(TimeSpan.FromHours(0))" EndTime="@(TimeSpan.FromHours(24))" TimeFormat="HH:mm" />
+                <RadzenWeekView Text="Woche" StartTime="@(TimeSpan.FromHours(0))" EndTime="@(TimeSpan.FromHours(24))" TimeFormat="HH:mm" />
+                <RadzenMonthView Text="Monat" />
+            </RadzenScheduler>
+        </div>
+    </div>
 }
 
 <TaskEditDialog Task="selectedTask"
@@ -31,31 +73,44 @@ else
                 OnClose="@(() => selectedTask = null)" />
 
 @code {
-    private RadzenScheduler<TaskAppointment>? scheduler;
+    private RadzenScheduler<CalendarAppointment>? scheduler;
     private List<TaskResponseDto>? tasks;
-    private List<TaskAppointment> appointments = new();
+    private List<GoogleEventDto> googleEvents = new();
+    private List<CalendarAppointment> appointments = new();
     private Dictionary<int, string?> projectColors = new();
-    private TaskResponseDto? selectedTask;
+    private TaskResponseDto? selectedTask;   // für den Edit-Dialog
+    private TaskResponseDto? armedTask;      // in der Seitenleiste „aufgenommener" Task
 
     protected override async Task OnInitializedAsync()
     {
         await ProjectState.EnsureLoadedAsync();
+        await Settings.EnsureLoadedAsync();
         projectColors = (ProjectState.Projects ?? []).ToDictionary(p => p.Id, p => p.Color);
         tasks = await Api.GetTasksAsync();
+
+        // Google-Termine in einem großzügigen Fenster um heute laden (nur falls verbunden;
+        // bei nicht verbunden / Fehler liefert der ApiService eine leere Liste).
+        var now = DateTime.Now;
+        googleEvents = await Api.GetGoogleEventsAsync(
+            now.AddMonths(-1).ToUniversalTime(), now.AddMonths(2).ToUniversalTime());
+
         BuildAppointments();
     }
 
-    // Tasks mit Fälligkeitsdatum in Termine umwandeln:
-    // Start/Endzeit vorhanden → Termin mit Uhrzeit, sonst Ganztags-Eintrag.
+    // Tasks mit Fälligkeitsdatum + Google-Termine in Scheduler-Einträge umwandeln.
     private void BuildAppointments()
     {
         appointments = (tasks ?? [])
             .Where(t => t.DueDate is not null)
             .Select(ToAppointment)
+            .Concat(googleEvents.Select(ToAppointment))
             .ToList();
     }
 
-    private TaskAppointment ToAppointment(TaskResponseDto t)
+    private CalendarAppointment ToAppointment(GoogleEventDto e) =>
+        new() { Start = e.Start, End = e.End, Text = e.Title, IsGoogle = true };
+
+    private CalendarAppointment ToAppointment(TaskResponseDto t)
     {
         var date = t.DueDate!.Value.Date;
         DateTime start, end;
@@ -72,18 +127,83 @@ else
             end   = date.AddDays(1);
         }
 
-        return new TaskAppointment { Start = start, End = end, Text = t.Title, Task = t };
+        return new CalendarAppointment { Start = start, End = end, Text = t.Title, Task = t };
     }
 
-    private void OnAppointmentSelect(SchedulerAppointmentSelectEventArgs<TaskAppointment> args)
-        => selectedTask = args.Data.Task;
+    private string? ProjectColor(int? projectId)
+        => projectId is not null && projectColors.TryGetValue(projectId.Value, out var c) ? c : null;
 
-    // Farbe je Projekt; Standardgrau, wenn keine Projektfarbe gesetzt ist.
-    private void OnAppointmentRender(SchedulerAppointmentRenderEventArgs<TaskAppointment> args)
+    // ── Seitenleiste: Task „aufnehmen" und per Slot-Klick platzieren ───────────
+
+    private void ToggleArm(TaskResponseDto t)
+        => armedTask = armedTask?.Id == t.Id ? null : t;
+
+    private async Task OnSlotSelect(SchedulerSlotSelectEventArgs args)
     {
-        var pid   = args.Data.Task.ProjectId;
-        var color = pid is not null && projectColors.TryGetValue(pid.Value, out var c) ? c : null;
-        color ??= "#6c757d";
+        var task = armedTask;
+        if (task is null) return;
+
+        // Zeit-Slot (< 1 Tag) → mit Uhrzeit; Tages-Slot (Monatsansicht) → ganztägig.
+        var isTimed = (args.End - args.Start) < TimeSpan.FromDays(1);
+
+        DateTime? due   = args.Start.Date;
+        DateTime? start = isTimed ? args.Start : null;
+        DateTime? end   = isTimed ? args.End : null;
+
+        var dto = new TaskUpdateDto(
+            task.Title, task.Description, due, start, end,
+            task.Status, Enum.Parse<Priority>(task.Priority), task.ProjectId);
+
+        var updated = await Api.UpdateTaskAsync(task.Id, dto);
+        if (updated is null) return;
+
+        ReplaceTask(updated);
+        armedTask = null;
+        await RefreshAsync();
+    }
+
+    private void OnAppointmentSelect(SchedulerAppointmentSelectEventArgs<CalendarAppointment> args)
+    {
+        // Google-Termine sind read-only – kein Edit-Dialog.
+        if (!args.Data.IsGoogle) selectedTask = args.Data.Task;
+    }
+
+    // Termin per Drag verschoben → neue Zeit/Datum übernehmen und speichern.
+    private async Task OnAppointmentMove(SchedulerAppointmentMoveEventArgs moved)
+    {
+        if (moved.TimeSpan == TimeSpan.Zero) return;
+
+        var appt = (CalendarAppointment)moved.Appointment.Data;
+
+        // Google-Termine sind read-only und werden nicht verschoben.
+        if (appt.IsGoogle || appt.Task is null) return;
+        var task = appt.Task;
+
+        var newStart = appt.Start + moved.TimeSpan;
+        var newEnd   = appt.End + moved.TimeSpan;
+
+        // Ganztägig (kein Start/Ende) bleibt ganztägig – nur das Datum ändert sich.
+        var isTimed = task.StartTime is not null && task.EndTime is not null;
+
+        DateTime? due   = newStart.Date;
+        DateTime? start = isTimed ? newStart : null;
+        DateTime? end   = isTimed ? newEnd : null;
+
+        var dto = new TaskUpdateDto(
+            task.Title, task.Description, due, start, end,
+            task.Status, Enum.Parse<Priority>(task.Priority), task.ProjectId);
+
+        var updated = await Api.UpdateTaskAsync(task.Id, dto);
+        if (updated is null) return;
+
+        ReplaceTask(updated);
+        await RefreshAsync();
+    }
+
+    // Google-Termine in Google-Blau; Task-Termine in Projektfarbe (Standardgrau ohne Projekt).
+    private void OnAppointmentRender(SchedulerAppointmentRenderEventArgs<CalendarAppointment> args)
+    {
+        var color = args.Data.IsGoogle ? "#4285F4" : (ProjectColor(args.Data.Task?.ProjectId) ?? "#6c757d");
         args.Attributes["style"] = $"background-color: {color}; border-color: {color}; color: #fff;";
     }
 
@@ -122,11 +242,15 @@ else
         if (scheduler is not null) await scheduler.Reload();
     }
 
-    private class TaskAppointment
+    private class CalendarAppointment
     {
         public DateTime Start { get; set; }
         public DateTime End { get; set; }
         public string Text { get; set; } = "";
-        public TaskResponseDto Task { get; set; } = default!;
+
+        // Bei Task-Terminen gesetzt; bei read-only Google-Terminen null.
+        public TaskResponseDto? Task { get; set; }
+
+        public bool IsGoogle { get; set; }
     }
 }

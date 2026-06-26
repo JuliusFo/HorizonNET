@@ -1,3 +1,4 @@
+using HorizonNET.Api.Services;
 using HorizonNET.Domain.Entities;
 using HorizonNET.Domain.Interfaces;
 using HorizonNET.Shared.Transfer.DTOs;
@@ -7,7 +8,7 @@ namespace HorizonNET.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class TasksController(ITaskRepository repo) : ControllerBase
+public class TasksController(ITaskRepository repo, GoogleCalendarService google) : ControllerBase
 {
     private static TaskResponseDto ToDto(TaskItem t) =>
         new(t.Id, t.Title, t.Description, t.DueDate, t.StartTime, t.EndTime,
@@ -53,14 +54,16 @@ public class TasksController(ITaskRepository repo) : ControllerBase
             Title = dto.Title,
             Description = dto.Description,
             DueDate = dto.DueDate,
-            StartTime = dto.StartTime,
-            EndTime = dto.EndTime,
+            // Ohne Fälligkeitsdatum keine Uhrzeit (Invariante, unabhängig vom Aufrufer).
+            StartTime = dto.DueDate is null ? null : dto.StartTime,
+            EndTime = dto.DueDate is null ? null : dto.EndTime,
             Priority = dto.Priority,
             ProjectId = dto.ProjectId,
             ParentTaskId = dto.ParentTaskId,
             Status = dto.Status
         };
         var created = await repo.CreateAsync(task);
+        await google.SyncTaskAsync(created); // geplanten Task in Google spiegeln (best-effort)
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, ToDto(created));
     }
 
@@ -86,21 +89,32 @@ public class TasksController(ITaskRepository repo) : ControllerBase
             Title = dto.Title,
             Description = dto.Description,
             DueDate = dto.DueDate,
-            StartTime = dto.StartTime,
-            EndTime = dto.EndTime,
+            // Ohne Fälligkeitsdatum keine Uhrzeit (Invariante, unabhängig vom Aufrufer).
+            StartTime = dto.DueDate is null ? null : dto.StartTime,
+            EndTime = dto.DueDate is null ? null : dto.EndTime,
             Status = dto.Status,
             Priority = dto.Priority,
             ProjectId = dto.ProjectId
         });
         if (updated is null) return NotFound();
+        await google.SyncTaskAsync(updated); // Änderung nach Google spiegeln (best-effort)
         return Ok(ToDto(updated));
     }
 
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
+        // Event-ID vor dem Löschen merken, um den Google-Eintrag danach zu entfernen.
+        var task = await repo.GetByIdAsync(id);
+        if (task is null) return NotFound();
+        var googleEventId = task.GoogleEventId;
+
         var deleted = await repo.DeleteAsync(id);
         if (!deleted) return NotFound();
+
+        if (!string.IsNullOrEmpty(googleEventId))
+            await google.DeleteTaskEventAsync(googleEventId); // best-effort
+
         return NoContent();
     }
 }

@@ -38,6 +38,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(t => t.Title).IsRequired().HasMaxLength(300);
             e.Property(t => t.Description).HasMaxLength(2000);
             e.Property(t => t.Priority).HasConversion<string>();
+            e.Property(t => t.GoogleEventId).HasMaxLength(1024);
 
             e.HasOne(t => t.Project)
                 .WithMany(p => p.Tasks)
@@ -50,6 +51,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasForeignKey(t => t.ParentTaskId)
                 .OnDelete(DeleteBehavior.NoAction);
         });
+
+        modelBuilder.Entity<GoogleConnection>(e =>
+        {
+            e.HasKey(c => c.Id);
+            e.Property(c => c.RefreshToken).IsRequired();
+            e.Property(c => c.Email).HasMaxLength(320);
+        });
     }
 
     #endregion
@@ -61,6 +69,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Project> Projects => Set<Project>();
 
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
+
+    public DbSet<GoogleConnection> GoogleConnections => Set<GoogleConnection>();
 
     #endregion
 }

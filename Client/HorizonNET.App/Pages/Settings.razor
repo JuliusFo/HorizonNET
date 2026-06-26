@@ -1,0 +1,99 @@
+@page "/settings"
+@inject SettingsState AppSettings
+@inject ApiService Api
+@inject IConfiguration Config
+
+<PageTitle>Einstellungen – HorizonNET</PageTitle>
+
+<h1 class="mb-4">Einstellungen</h1>
+
+<div class="card mb-3 settings-card">
+    <div class="card-header fw-semibold">Allgemein</div>
+    <div class="card-body">
+        <label for="calView" class="form-label">Standard-Ansicht im Kalender</label>
+        <select id="calView" class="form-select" style="max-width: 16rem;"
+                value="@AppSettings.CalendarDefaultView"
+                @onchange="OnCalendarViewChanged">
+            <option value="0">Tag</option>
+            <option value="1">Woche</option>
+            <option value="2">Monat</option>
+        </select>
+        <div class="form-text">Wird beim Öffnen des Kalenders vorausgewählt.</div>
+    </div>
+</div>
+
+<div class="card settings-card">
+    <div class="card-header fw-semibold">Google-Kalender</div>
+    <div class="card-body">
+        <p class="text-muted">
+            Verbinde dein Google-Konto, um Termine aus deinem Google-Kalender anzuzeigen
+            und geplante Tasks dorthin zu schreiben.
+        </p>
+
+        @if (GoogleResult == "connected")
+        {
+            <div class="alert alert-success py-2">Google-Konto erfolgreich verbunden.</div>
+        }
+        else if (GoogleResult == "error")
+        {
+            <div class="alert alert-danger py-2">Verbindung fehlgeschlagen. Bitte erneut versuchen.</div>
+        }
+
+        @if (status is null)
+        {
+            <p class="text-muted mb-0">Status wird geladen…</p>
+        }
+        else if (status.Connected)
+        {
+            <div class="mb-3">
+                <span class="badge bg-success">Verbunden</span>
+                @if (!string.IsNullOrEmpty(status.Email))
+                {
+                    <span class="ms-2">@status.Email</span>
+                }
+            </div>
+            <button type="button" class="btn btn-outline-danger" @onclick="DisconnectAsync" disabled="@busy">
+                Verbindung trennen
+            </button>
+        }
+        else
+        {
+            <div class="mb-3">
+                <span class="badge bg-secondary">Nicht verbunden</span>
+            </div>
+            <a class="btn btn-primary" href="@ConnectUrl">Mit Google verbinden</a>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, SupplyParameterFromQuery(Name = "google")]
+    public string? GoogleResult { get; set; }
+
+    private GoogleStatusDto? status;
+    private bool busy;
+
+    // Vollständige Navigation zur API (anderer Origin), die den OAuth-Flow startet.
+    private string ConnectUrl =>
+        $"{(Config["ApiSettings:BaseUrl"] ?? string.Empty).TrimEnd('/')}/api/google/connect";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AppSettings.EnsureLoadedAsync();
+        status = await Api.GetGoogleStatusAsync();
+    }
+
+    private async Task OnCalendarViewChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var index))
+            await AppSettings.SetCalendarDefaultViewAsync(index);
+    }
+
+    private async Task DisconnectAsync()
+    {
+        busy = true;
+        await Api.DisconnectGoogleAsync();
+        status = await Api.GetGoogleStatusAsync();
+        busy = false;
+    }
+}

@@ -28,6 +28,9 @@ builder.Services.AddScoped<ProjectState>();
 // Gemeinsamer Arbeitsbereich-State
 builder.Services.AddScoped<WorkspaceState>();
 
+// Lokale UI-Einstellungen (localStorage)
+builder.Services.AddScoped<SettingsState>();
+
 // Lokalisierung registrieren
 builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
 

@@ -34,5 +34,9 @@ public class TaskItem
 
     public TaskItem? ParentTask { get; set; }
 
+    // Verknüpfung zum gespiegelten Google-Kalender-Eintrag (Einweg-Sync).
+    // Wird ausschließlich serverseitig vom Sync gesetzt, nie über das Client-DTO.
+    public string? GoogleEventId { get; set; }
+
     public ICollection<TaskItem> SubTasks { get; set; } = [];
 }

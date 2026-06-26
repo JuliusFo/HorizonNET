@@ -365,3 +365,6 @@ FodyWeavers.xsd
 *.db
 *.db-shm
 *.db-wal
+
+# Lokale Secrets (nicht committen)
+appsettings.Secrets.json

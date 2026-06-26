@@ -113,4 +113,32 @@ public class ApiService(HttpClient http)
         var response = await http.PutAsJsonAsync("api/tasks/reorder-subtasks", orderedTaskIds);
         return response.IsSuccessStatusCode;
     }
+
+    // ── Google-Kalender ────────────────────────────────────────────────────────
+
+    public Task<GoogleStatusDto?> GetGoogleStatusAsync() =>
+        http.GetFromJsonAsync<GoogleStatusDto>("api/google/status");
+
+    public async Task<bool> DisconnectGoogleAsync()
+    {
+        var response = await http.DeleteAsync("api/google");
+        return response.IsSuccessStatusCode;
+    }
+
+    // Holt die Google-Termine eines Zeitraums. Fehler (z. B. nicht verbunden oder
+    // Google nicht erreichbar) werden geschluckt, damit der Kalender trotzdem funktioniert.
+    public async Task<List<GoogleEventDto>> GetGoogleEventsAsync(DateTime fromUtc, DateTime toUtc)
+    {
+        try
+        {
+            var from = new DateTimeOffset(fromUtc, TimeSpan.Zero).ToString("o");
+            var to = new DateTimeOffset(toUtc, TimeSpan.Zero).ToString("o");
+            var url = $"api/google/events?from={Uri.EscapeDataString(from)}&to={Uri.EscapeDataString(to)}";
+            return await http.GetFromJsonAsync<List<GoogleEventDto>>(url) ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
 }

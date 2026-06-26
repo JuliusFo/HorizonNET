@@ -56,6 +56,15 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         return existing;
     }
 
+    public async Task SetGoogleEventIdAsync(int taskId, string? googleEventId)
+    {
+        var existing = await context.Tasks.FindAsync(taskId);
+        if (existing is null) return;
+
+        existing.GoogleEventId = googleEventId;
+        await context.SaveChangesAsync();
+    }
+
     public async Task ReorderAsync(WorkStatus status, IList<int> orderedTaskIds)
     {
         var tasks = await context.Tasks

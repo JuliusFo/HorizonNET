@@ -1,3 +1,4 @@
+using HorizonNET.Api.Services;
 using HorizonNET.Data;
 using HorizonNET.Data.Repositories;
 using HorizonNET.Domain.Interfaces;
@@ -5,6 +6,9 @@ using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Lokale Secrets (Google-Credentials etc.) – Datei ist per .gitignore ausgeschlossen
+builder.Configuration.AddJsonFile("appsettings.Secrets.json", optional: true, reloadOnChange: true);
 
 // Controller und Validierung
 builder.Services.AddControllers();
@@ -28,6 +32,10 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<IWorkspaceRepository, WorkspaceRepository>();
 builder.Services.AddScoped<IProjectRepository, ProjectRepository>();
 builder.Services.AddScoped<ITaskRepository, TaskRepository>();
+builder.Services.AddScoped<IGoogleConnectionRepository, GoogleConnectionRepository>();
+
+// Google-Kalender-Anbindung (OAuth + späterer Calendar-Zugriff)
+builder.Services.AddScoped<GoogleCalendarService>();
 
 var app = builder.Build();
 
