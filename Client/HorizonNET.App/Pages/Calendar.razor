@@ -335,11 +335,13 @@ else
         await RefreshAsync();
     }
 
-    // Google-Termine in Google-Blau; Task-Termine in Projektfarbe (Standardgrau ohne Projekt).
+    // Look wie die Projektkarten in der Übersicht: abgeschwächter Farbton (~10 %),
+    // farbiger Rand + dezenter linker Akzent, dunkler Text. Google = Google-Blau.
     private void OnAppointmentRender(SchedulerAppointmentRenderEventArgs<CalendarAppointment> args)
     {
         var color = args.Data.IsGoogle ? "#4285F4" : (ProjectColor(args.Data.Task?.ProjectId) ?? "#6c757d");
-        args.Attributes["style"] = $"background-color: {color}; border-color: {color}; color: #fff;";
+        args.Attributes["style"] =
+            $"background-color: {color}1A; border: 1px solid {color}; border-left: 3px solid {color}; color: #212529;";
     }
 
     // Sub-Task (Voraussetzung) direkt im Tages-Termin abhaken. Aktualisiert den
