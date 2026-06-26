@@ -34,3 +34,129 @@
     border-radius: 3px;
     flex-shrink: 0;
 }
+
+/* Filter-Legende über dem Kalender */
+.cal-legend {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    padding: 0.4rem 0.7rem;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    background-color: #f8f9fa;
+}
+
+.cal-legend-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: #6c757d;
+}
+
+.cal-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: #495057;
+    border: none;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+}
+
+.cal-legend-item:hover {
+    color: #000;
+}
+
+.cal-legend-item.is-active {
+    font-weight: 600;
+}
+
+.cal-legend-item.is-inactive {
+    opacity: 0.4;
+}
+
+.cal-legend-dot {
+    display: inline-block;
+    width: 0.8rem;
+    height: 0.8rem;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.cal-legend-clear {
+    font-size: 0.75rem;
+    color: #6c757d;
+    border: none;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.cal-legend-clear:hover {
+    color: #000;
+}
+
+/* Termin-Inhalt (eigenes Template) */
+.cal-appt {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    overflow: hidden;
+    height: 100%;
+}
+
+.cal-appt-title {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+/* Bereit/Wartend-Icon vor dem Titel */
+.cal-ready-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 0.95rem;
+    height: 0.95rem;
+    border-radius: 50%;
+    font-size: 0.62rem;
+    line-height: 1;
+    color: #fff;
+    flex-shrink: 0;
+}
+
+.cal-ready {
+    background-color: #28a745;
+}
+
+.cal-blocked {
+    background-color: #dc3545;
+}
+
+/* Inline-Sub-Tasks (nur Tagesansicht, Termine mit Uhrzeit) */
+.cal-appt-subs {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    margin-top: 0.15rem;
+    overflow-y: auto;
+}
+
+.cal-appt-sub {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.75rem;
+    margin: 0;
+    cursor: pointer;
+}
+
+.cal-appt-sub input {
+    margin: 0;
+    flex-shrink: 0;
+}

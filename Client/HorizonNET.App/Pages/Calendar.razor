@@ -13,6 +13,28 @@
 }
 else
 {
+    @* Filter-Legende: Quellen ein-/ausblenden (leer = alles anzeigen) *@
+    @if (legend.Count > 0)
+    {
+        <div class="cal-legend mb-3">
+            <span class="cal-legend-label">Anzeigen</span>
+            @foreach (var item in legend)
+            {
+                <button type="button"
+                        class="cal-legend-item @(activeFilters.Count > 0 ? (activeFilters.Contains(item.Key) ? "is-active" : "is-inactive") : "")"
+                        @onclick="() => ToggleFilterAsync(item.Key)"
+                        title="@(activeFilters.Contains(item.Key) ? "Filter entfernen" : "Nur dies anzeigen")">
+                    <span class="cal-legend-dot" style="background-color:@item.Color;"></span>
+                    @item.Label
+                </button>
+            }
+            @if (activeFilters.Count > 0)
+            {
+                <button type="button" class="cal-legend-clear" @onclick="ClearFiltersAsync">Alle anzeigen</button>
+            }
+        </div>
+    }
+
     <div class="d-flex gap-3 align-items-start">
         @* Seitenleiste: ungeplante Tasks (ohne Fälligkeitsdatum) *@
         <div class="calendar-sidebar">
@@ -52,15 +74,58 @@ else
         <div class="flex-grow-1">
             <RadzenScheduler @ref="scheduler" TItem="CalendarAppointment" Data="appointments"
                              StartProperty="Start" EndProperty="End" TextProperty="Text"
-                             SelectedIndex="@Settings.CalendarDefaultView"
+                             @bind-SelectedIndex="selectedViewIndex"
                              SlotSelect="OnSlotSelect"
                              AppointmentSelect="OnAppointmentSelect"
                              AppointmentMove="OnAppointmentMove"
                              AppointmentRender="OnAppointmentRender"
                              style="height: calc(100vh - 11rem);">
-                <RadzenDayView Text="Tag" StartTime="@(TimeSpan.FromHours(0))" EndTime="@(TimeSpan.FromHours(24))" TimeFormat="HH:mm" />
-                <RadzenWeekView Text="Woche" StartTime="@(TimeSpan.FromHours(0))" EndTime="@(TimeSpan.FromHours(24))" TimeFormat="HH:mm" />
-                <RadzenMonthView Text="Monat" />
+                <ChildContent>
+                    <RadzenDayView Text="Tag" StartTime="@(TimeSpan.FromHours(0))" EndTime="@(TimeSpan.FromHours(24))" TimeFormat="HH:mm" />
+                    <RadzenWeekView Text="Woche" StartTime="@(TimeSpan.FromHours(0))" EndTime="@(TimeSpan.FromHours(24))" TimeFormat="HH:mm" />
+                    <RadzenMonthView Text="Monat" />
+                </ChildContent>
+                <Template Context="appt">
+                    @if (appt.IsGoogle || appt.Task is null)
+                    {
+                        <span>@appt.Text</span>
+                    }
+                    else
+                    {
+                        var t = appt.Task;
+                        var prereqs = t.SubTasks;
+                        var hasPrereqs = prereqs is { Count: > 0 };
+                        var ready = hasPrereqs && prereqs!.All(s => s.IsCompleted);
+                        // Inline-Checkboxen nur in der Tagesansicht (Index 0) und nur bei
+                        // Terminen mit Uhrzeit (genug Höhe) – sonst kompakt nur mit Status-Icon.
+                        var showInline = selectedViewIndex == 0 && hasPrereqs
+                                         && t.StartTime is not null && t.EndTime is not null;
+
+                        <div class="cal-appt">
+                            <div class="cal-appt-title">
+                                @if (hasPrereqs && !t.IsCompleted)
+                                {
+                                    <span class="cal-ready-badge @(ready ? "cal-ready" : "cal-blocked")">@(ready ? "✓" : "✗")</span>
+                                }
+                                <span class="@(t.IsCompleted ? "text-decoration-line-through" : "")">@appt.Text</span>
+                            </div>
+                            @if (showInline)
+                            {
+                                <div class="cal-appt-subs">
+                                    @foreach (var sub in prereqs!)
+                                    {
+                                        <label class="cal-appt-sub" @onclick:stopPropagation="true">
+                                            <input type="checkbox" checked="@sub.IsCompleted"
+                                                   @onchange="() => ToggleSubReadyAsync(t, sub)"
+                                                   @onclick:stopPropagation="true" />
+                                            <span class="@(sub.IsCompleted ? "text-decoration-line-through" : "")">@sub.Title</span>
+                                        </label>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </Template>
             </RadzenScheduler>
         </div>
     </div>
@@ -76,16 +141,30 @@ else
     private RadzenScheduler<CalendarAppointment>? scheduler;
     private List<TaskResponseDto>? tasks;
     private List<GoogleEventDto> googleEvents = new();
-    private List<CalendarAppointment> appointments = new();
+    private List<CalendarAppointment> allAppointments = new();   // ungefiltert
+    private List<CalendarAppointment> appointments = new();      // an den Scheduler gebunden (gefiltert)
     private Dictionary<int, string?> projectColors = new();
+    private Dictionary<int, string> projectNames = new();
     private TaskResponseDto? selectedTask;   // für den Edit-Dialog
     private TaskResponseDto? armedTask;      // in der Seitenleiste „aufgenommener" Task
+
+    // Aktive Filter-Schlüssel (leer = alles anzeigen): "p:{id}", "none", "google".
+    private readonly HashSet<string> activeFilters = new();
+    private List<(string Key, string Label, string Color)> legend = new();
+
+    // Aktive Scheduler-Ansicht (0=Tag/1=Woche/2=Monat) – steuert das Termin-Template.
+    private int selectedViewIndex;
 
     protected override async Task OnInitializedAsync()
     {
         await ProjectState.EnsureLoadedAsync();
         await Settings.EnsureLoadedAsync();
         projectColors = (ProjectState.Projects ?? []).ToDictionary(p => p.Id, p => p.Color);
+        projectNames = (ProjectState.Projects ?? []).ToDictionary(p => p.Id, p => p.Name);
+
+        // Anfangsansicht aus der gespeicherten Default-Ansicht (0=Tag/1=Woche/2=Monat).
+        selectedViewIndex = Settings.CalendarDefaultView;
+
         tasks = await Api.GetTasksAsync();
 
         // Google-Termine in einem großzügigen Fenster um heute laden (nur falls verbunden;
@@ -97,18 +176,67 @@ else
         BuildAppointments();
     }
 
-    // Tasks mit Fälligkeitsdatum + Google-Termine in Scheduler-Einträge umwandeln.
+    // Tasks mit Fälligkeitsdatum + Google-Termine in Scheduler-Einträge umwandeln,
+    // dann Legende neu aufbauen und den aktiven Filter anwenden.
     private void BuildAppointments()
     {
-        appointments = (tasks ?? [])
+        allAppointments = (tasks ?? [])
             .Where(t => t.DueDate is not null)
             .Select(ToAppointment)
             .Concat(googleEvents.Select(ToAppointment))
             .ToList();
+
+        BuildLegend();
+        ApplyFilter();
+    }
+
+    // Legende aus den vorhandenen Terminen ableiten: je Projekt mit geplanten Tasks
+    // ein Eintrag, dazu „Ohne Projekt" und „Google-Kalender", falls vorhanden.
+    private void BuildLegend()
+    {
+        var items = allAppointments
+            .Where(a => a.Task?.ProjectId is not null)
+            .Select(a => a.Task!.ProjectId!.Value)
+            .Distinct()
+            .Select(pid => (
+                Key: $"p:{pid}",
+                Label: projectNames.GetValueOrDefault(pid, $"Projekt {pid}"),
+                Color: (projectColors.TryGetValue(pid, out var c) ? c : null) ?? "#6c757d"))
+            .OrderBy(i => i.Label)
+            .ToList();
+
+        if (allAppointments.Any(a => a.Task is not null && a.Task.ProjectId is null))
+            items.Add(("none", "Ohne Projekt", "#6c757d"));
+
+        if (allAppointments.Any(a => a.IsGoogle))
+            items.Add(("google", "Google-Kalender", "#4285F4"));
+
+        legend = items;
+    }
+
+    private void ApplyFilter()
+    {
+        appointments = activeFilters.Count == 0
+            ? allAppointments
+            : allAppointments.Where(a => activeFilters.Contains(a.FilterKey)).ToList();
+    }
+
+    private async Task ToggleFilterAsync(string key)
+    {
+        if (!activeFilters.Add(key)) activeFilters.Remove(key);
+        ApplyFilter();
+        if (scheduler is not null) await scheduler.Reload();
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        activeFilters.Clear();
+        ApplyFilter();
+        if (scheduler is not null) await scheduler.Reload();
     }
 
     private CalendarAppointment ToAppointment(GoogleEventDto e) =>
-        new() { Start = e.Start, End = e.End, Text = e.Title, IsGoogle = true };
+        new() { Start = e.Start, End = e.End, Text = e.Title, IsGoogle = true, FilterKey = "google" };
 
     private CalendarAppointment ToAppointment(TaskResponseDto t)
     {
@@ -127,7 +255,14 @@ else
             end   = date.AddDays(1);
         }
 
-        return new CalendarAppointment { Start = start, End = end, Text = t.Title, Task = t };
+        return new CalendarAppointment
+        {
+            Start = start,
+            End = end,
+            Text = t.Title,
+            Task = t,
+            FilterKey = t.ProjectId is int pid ? $"p:{pid}" : "none"
+        };
     }
 
     private string? ProjectColor(int? projectId)
@@ -207,6 +342,26 @@ else
         args.Attributes["style"] = $"background-color: {color}; border-color: {color}; color: #fff;";
     }
 
+    // Sub-Task (Voraussetzung) direkt im Tages-Termin abhaken. Aktualisiert den
+    // lokalen Stand und baut die Termine neu, damit das Bereit-Icon nachzieht.
+    private async Task ToggleSubReadyAsync(TaskResponseDto parent, TaskResponseDto sub)
+    {
+        if (parent.SubTasks is null) return;
+
+        var newStatus = sub.IsCompleted ? WorkStatus.Planned : WorkStatus.Done;
+        var dto = new TaskUpdateDto(
+            sub.Title, sub.Description, sub.DueDate, sub.StartTime, sub.EndTime,
+            newStatus, Enum.Parse<Priority>(sub.Priority), sub.ProjectId);
+
+        var updated = await Api.UpdateTaskAsync(sub.Id, dto);
+        if (updated is null) return;
+
+        var idx = parent.SubTasks.FindIndex(s => s.Id == sub.Id);
+        if (idx >= 0) parent.SubTasks[idx] = updated;
+
+        await RefreshAsync();
+    }
+
     // ── Dialog-Callbacks ───────────────────────────────────────────────────────
 
     private async Task HandleTaskSaved(TaskResponseDto updated)
@@ -252,5 +407,8 @@ else
         public TaskResponseDto? Task { get; set; }
 
         public bool IsGoogle { get; set; }
+
+        // Schlüssel für die Filter-Legende: "p:{projektId}", "none" oder "google".
+        public string FilterKey { get; set; } = "none";
     }
 }

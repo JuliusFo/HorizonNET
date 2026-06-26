@@ -21,6 +21,10 @@ public interface ITaskRepository
     // vom DTO-getriebenen UpdateAsync, damit dieser Wert dort nicht überschrieben wird.
     Task SetGoogleEventIdAsync(int taskId, string? googleEventId);
 
+    // Alle gesetzten Google-Event-Ids – um beim Lesen die von der App selbst
+    // gespiegelten Termine auszublenden (sonst Doppelanzeige Task + Google-Event).
+    Task<HashSet<string>> GetGoogleEventIdsAsync();
+
     // Setzt für die übergebenen Tasks SortOrder = Listenindex und Status = status.
     Task ReorderAsync(WorkStatus status, IList<int> orderedTaskIds);
 

@@ -153,6 +153,7 @@ else
 
     private ProjectResponseDto? project;
     private List<TaskResponseDto>? tasks;
+    private int? loadedId;
 
     // Neuer Task
     private TaskCreateFormModel newTask = new();
@@ -168,8 +169,20 @@ else
     private TaskCreateFormModel newSubTask = new();
     private string? subTaskErrorMessage;
 
-    protected override async Task OnInitializedAsync()
+    // OnParametersSetAsync statt OnInitializedAsync: lädt neu beim Wechsel
+    // zwischen zwei Projekten (gleiche Komponenteninstanz, nur Id ändert sich).
+    protected override async Task OnParametersSetAsync()
     {
+        if (loadedId == Id) return;
+        loadedId = Id;
+
+        // Beim Projektwechsel Daten und transienten UI-Zustand zurücksetzen.
+        project            = null;
+        tasks              = null;
+        selectedTask       = null;
+        showForm           = false;
+        addingSubTaskForId = null;
+
         project = await Api.GetProjectAsync(Id);
         tasks   = await Api.GetTasksByProjectAsync(Id);
     }

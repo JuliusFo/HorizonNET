@@ -127,7 +127,12 @@ public class GoogleCalendarService
 
         var response = await request.ExecuteAsync();
 
+        // Termine ausblenden, die die App selbst aus Tasks gespiegelt hat – sonst
+        // erschiene jeder geplante Task doppelt (lokaler Task + sein Google-Event).
+        var ownIds = await taskRepo.GetGoogleEventIdsAsync();
+
         return (response.Items ?? [])
+            .Where(e => e.Id is null || !ownIds.Contains(e.Id))
             .Select(ToEventDto)
             .Where(e => e is not null)
             .Select(e => e!)
