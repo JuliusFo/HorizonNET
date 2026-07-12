@@ -368,3 +368,6 @@ FodyWeavers.xsd
 
 # Lokale Secrets (nicht committen)
 appsettings.Secrets.json
+
+# Lokale Planungs-/Konzeptdokumente (nicht committen)
+docs/

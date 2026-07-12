@@ -108,6 +108,16 @@ public class GoogleCalendarService
         return new UserCredential(CreateFlow(), UserKey, token);
     }
 
+    // Erkennt einen von Google widerrufenen oder abgelaufenen Refresh-Token.
+    // Tritt im Testing-Modus zwangsläufig nach 7 Tagen auf.
+    private static bool IsRevokedToken(TokenResponseException ex) =>
+        ex.Error?.Error == "invalid_grant";
+
+    // Verwirft die gespeicherte Verbindung, wenn Google den Refresh-Token nicht mehr
+    // akzeptiert. Danach zeigt die App wieder "nicht verbunden" (statt bei jedem Aufruf
+    // zu scheitern) und signalisiert dem Nutzer, dass er neu verbinden muss.
+    private Task HandleRevokedTokenAsync() => repo.DeleteAsync();
+
     // Liest die Termine des primären Kalenders im angegebenen (UTC-)Zeitraum.
     // Leere Liste, wenn nicht verbunden.
     public async Task<IReadOnlyList<GoogleEventDto>> GetEventsAsync(DateTime fromUtc, DateTime toUtc)
@@ -115,28 +125,38 @@ public class GoogleCalendarService
         var credential = await GetCredentialAsync();
         if (credential is null) return [];
 
-        using var service = CreateCalendarService(credential);
+        try
+        {
+            using var service = CreateCalendarService(credential);
 
-        var request = service.Events.List("primary");
-        request.TimeMinDateTimeOffset = new DateTimeOffset(fromUtc, TimeSpan.Zero);
-        request.TimeMaxDateTimeOffset = new DateTimeOffset(toUtc, TimeSpan.Zero);
-        request.SingleEvents = true; // wiederkehrende Termine zu Einzelterminen expandieren
-        request.OrderBy = EventsResource.ListRequest.OrderByEnum.StartTime;
-        request.ShowDeleted = false;
-        request.MaxResults = 2500;
+            var request = service.Events.List("primary");
+            request.TimeMinDateTimeOffset = new DateTimeOffset(fromUtc, TimeSpan.Zero);
+            request.TimeMaxDateTimeOffset = new DateTimeOffset(toUtc, TimeSpan.Zero);
+            request.SingleEvents = true; // wiederkehrende Termine zu Einzelterminen expandieren
+            request.OrderBy = EventsResource.ListRequest.OrderByEnum.StartTime;
+            request.ShowDeleted = false;
+            request.MaxResults = 2500;
 
-        var response = await request.ExecuteAsync();
+            var response = await request.ExecuteAsync();
 
-        // Termine ausblenden, die die App selbst aus Tasks gespiegelt hat – sonst
-        // erschiene jeder geplante Task doppelt (lokaler Task + sein Google-Event).
-        var ownIds = await taskRepo.GetGoogleEventIdsAsync();
+            // Termine ausblenden, die die App selbst aus Tasks gespiegelt hat – sonst
+            // erschiene jeder geplante Task doppelt (lokaler Task + sein Google-Event).
+            var ownIds = await taskRepo.GetGoogleEventIdsAsync();
 
-        return (response.Items ?? [])
-            .Where(e => e.Id is null || !ownIds.Contains(e.Id))
-            .Select(ToEventDto)
-            .Where(e => e is not null)
-            .Select(e => e!)
-            .ToList();
+            return (response.Items ?? [])
+                .Where(e => e.Id is null || !ownIds.Contains(e.Id))
+                .Select(ToEventDto)
+                .Where(e => e is not null)
+                .Select(e => e!)
+                .ToList();
+        }
+        catch (TokenResponseException ex) when (IsRevokedToken(ex))
+        {
+            // Refresh-Token widerrufen/abgelaufen: Verbindung verwerfen und leer liefern,
+            // statt den Kalender-Load serverseitig mit 500 scheitern zu lassen.
+            await HandleRevokedTokenAsync();
+            return [];
+        }
     }
 
     private static GoogleEventDto? ToEventDto(Event e)
@@ -217,6 +237,12 @@ public class GoogleCalendarService
                 }
             }
         }
+        catch (TokenResponseException ex) when (IsRevokedToken(ex))
+        {
+            // Refresh-Token widerrufen/abgelaufen: Verbindung verwerfen, damit die App
+            // wieder "nicht verbunden" zeigt. Lokale Speicherung bleibt unberührt.
+            await HandleRevokedTokenAsync();
+        }
         catch
         {
             // Google-Sync ist best-effort; die lokale Speicherung bleibt unberührt.
@@ -233,6 +259,10 @@ public class GoogleCalendarService
 
             using var service = CreateCalendarService(credential);
             await TryDeleteAsync(service, googleEventId);
+        }
+        catch (TokenResponseException ex) when (IsRevokedToken(ex))
+        {
+            await HandleRevokedTokenAsync();
         }
         catch
         {
