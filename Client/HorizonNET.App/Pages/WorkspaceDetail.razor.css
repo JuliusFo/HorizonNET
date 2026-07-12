@@ -147,6 +147,16 @@
     font-size: 0.875rem;
 }
 
+/* Titel-Link zur Detailseite: sieht aus wie der Kartentext, unterstreicht beim Hover. */
+.kanban-card-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.kanban-card-link:hover {
+    text-decoration: underline;
+}
+
 /* Trennlinie zwischen Task und Sub-Tasks (wie im Edit-Dialog) */
 .kanban-card-divider {
     margin: 0.5rem 0 0.4rem;

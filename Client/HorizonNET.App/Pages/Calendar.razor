@@ -108,6 +108,8 @@ else
                                     <span class="cal-ready-badge @(ready ? "cal-ready" : "cal-blocked")">@(ready ? "✓" : "✗")</span>
                                 }
                                 <span class="@(t.IsCompleted ? "text-decoration-line-through" : "")">@appt.Text</span>
+                                <a href="tasks/@t.Id" class="cal-appt-link" title="Zur Detailseite"
+                                   @onclick:stopPropagation="true">↗</a>
                             </div>
                             @if (showInline)
                             {

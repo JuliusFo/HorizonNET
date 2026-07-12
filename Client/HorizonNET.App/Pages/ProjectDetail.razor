@@ -202,9 +202,11 @@ else
                     }
                 </select>
                 <div>
-                    <strong class="@(task.IsCompleted ? "text-decoration-line-through text-muted" : "")">
-                        @task.Title
-                    </strong>
+                    <a href="@($"tasks/{task.Id}")" class="task-title-link" title="@L["Button_Edit_Title"]">
+                        <strong class="@(task.IsCompleted ? "text-decoration-line-through text-muted" : "")">
+                            @task.Title
+                        </strong>
+                    </a>
                     @if (task.Description is not null)
                     {
                         <span class="text-muted ms-2">@task.Description</span>

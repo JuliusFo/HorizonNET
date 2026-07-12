@@ -116,6 +116,19 @@
     gap: 0.3rem;
 }
 
+/* Link zur Detailseite im Termin – erscheint dezent, schiebt sich nach rechts. */
+.cal-appt-link {
+    margin-left: auto;
+    color: inherit;
+    text-decoration: none;
+    opacity: 0.65;
+    font-size: 0.85em;
+}
+
+.cal-appt-link:hover {
+    opacity: 1;
+}
+
 /* Bereit/Wartend-Icon vor dem Titel */
 .cal-ready-badge {
     display: inline-flex;

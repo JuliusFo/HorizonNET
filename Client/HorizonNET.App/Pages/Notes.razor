@@ -1,0 +1,97 @@
+@page "/notes"
+@inject ApiService Api
+
+<PageTitle>Notizen – HorizonNET</PageTitle>
+
+<div class="notes-layout">
+    @* Liste + Suche/Filter *@
+    <div class="notes-sidebar">
+        <div class="notes-sidebar-header">
+            <h1 class="h5 mb-2">Notizen</h1>
+            <button class="btn btn-sm btn-primary w-100 mb-2" @onclick="CreateNoteAsync">+ Neue Notiz</button>
+            <input class="form-control form-control-sm mb-2" placeholder="Suchen…"
+                   @bind="search" @bind:event="oninput" />
+            <select class="form-select form-select-sm" @bind="filter">
+                <option value="all">Alle</option>
+                <option value="none">Ohne Zuordnung</option>
+                <option value="project">Mit Projekt</option>
+                <option value="task">Mit Task</option>
+            </select>
+        </div>
+
+        @if (notes is null)
+        {
+            <p class="p-2 text-muted">Wird geladen…</p>
+        }
+        else
+        {
+            <NoteList Notes="Filtered" SelectedId="selected?.Id" OnSelect="SelectAsync"
+                      EmptyText="@(notes.Count == 0 ? "Noch keine Notizen." : "Keine Treffer.")" />
+        }
+    </div>
+
+    @* Editor *@
+    <div class="notes-main">
+        <NoteEditor @ref="editor" Note="selected" OnSaved="HandleSaved" OnDeleted="HandleDeleted" />
+    </div>
+</div>
+
+@code {
+    private List<NoteResponseDto>? notes;
+    private NoteResponseDto? selected;
+    private NoteEditor? editor;
+    private string search = string.Empty;
+    private string filter = "all";
+
+    protected override async Task OnInitializedAsync()
+    {
+        notes = await Api.GetNotesAsync() ?? new();
+    }
+
+    private List<NoteResponseDto> Filtered => (notes ?? new())
+        .Where(n => filter switch
+        {
+            "none"    => n.TaskItemId is null && n.ProjectId is null,
+            "project" => n.ProjectId is not null,
+            "task"    => n.TaskItemId is not null,
+            _         => true
+        })
+        .Where(n => string.IsNullOrWhiteSpace(search)
+                    || n.Title.Contains(search, StringComparison.OrdinalIgnoreCase)
+                    || (n.Content?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false))
+        .ToList();
+
+    private async Task SelectAsync(NoteResponseDto note)
+    {
+        if (selected?.Id == note.Id) return;
+        if (editor is not null) await editor.FlushAsync(); // offene Änderungen sichern
+        selected = note;
+    }
+
+    private async Task CreateNoteAsync()
+    {
+        if (editor is not null) await editor.FlushAsync();
+
+        var created = await Api.CreateNoteAsync(new NoteCreateDto("Neue Notiz", null));
+        if (created is null || notes is null) return;
+
+        notes.Insert(0, created);
+        selected = created;
+    }
+
+    private void HandleSaved(NoteResponseDto updated)
+    {
+        if (notes is null) return;
+        var idx = notes.FindIndex(n => n.Id == updated.Id);
+        if (idx >= 0) notes[idx] = updated;
+        if (selected?.Id == updated.Id) selected = updated;
+        StateHasChanged();
+    }
+
+    private void HandleDeleted(int id)
+    {
+        notes?.RemoveAll(n => n.Id == id);
+        if (selected?.Id == id) selected = null;
+        StateHasChanged();
+    }
+}

@@ -38,5 +38,10 @@ public class TaskItem
     // Wird ausschließlich serverseitig vom Sync gesetzt, nie über das Client-DTO.
     public string? GoogleEventId { get; set; }
 
+    // Zeitstempel; ausschließlich serverseitig im Repository gesetzt.
+    public DateTime CreatedAt { get; set; }
+
+    public DateTime UpdatedAt { get; set; }
+
     public ICollection<TaskItem> SubTasks { get; set; } = [];
 }

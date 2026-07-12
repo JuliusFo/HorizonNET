@@ -10,7 +10,11 @@
         <div class="task-dialog-content" @onclick:stopPropagation="true">
             <div class="task-dialog-header">
                 <h5 class="mb-0">Task bearbeiten</h5>
-                <button type="button" class="btn-close" @onclick="CloseAsync" aria-label="Schließen"></button>
+                <div class="d-flex align-items-center gap-2">
+                    <a class="btn btn-sm btn-outline-secondary" href="@($"tasks/{Task.Id}")"
+                       title="Zur Detailseite">Details</a>
+                    <button type="button" class="btn-close" @onclick="CloseAsync" aria-label="Schließen"></button>
+                </div>
             </div>
 
             <div class="task-dialog-body">
@@ -72,54 +76,19 @@
                 @* Sub-Tasks – nur bei Haupt-Tasks (eine Verschachtelungsebene) *@
                 @if (Task.ParentTaskId is null)
                 {
-                    @if (subTasks.Count > 0)
-                    {
-                        <hr class="my-3" />
-                        <div class="fw-semibold mb-2">
-                            Sub-Tasks <span class="text-muted fw-normal">(@subTasks.Count(s => s.IsCompleted)/@subTasks.Count)</span>
-                        </div>
-                        <ul class="list-group mb-2">
-                            @foreach (var sub in subTasks)
-                            {
-                                <li class="list-group-item d-flex align-items-center gap-2 py-1 px-2 @(dragOverSubId == sub.Id ? "subtask-drop-before" : "")"
-                                    draggable="true"
-                                    @ondragstart="() => draggedSub = sub"
-                                    @ondragend="() => { draggedSub = null; dragOverSubId = null; }"
-                                    @ondragover:preventDefault="true"
-                                    @ondragover="() => { if (draggedSub is not null) dragOverSubId = sub.Id; }"
-                                    @ondrop="() => DropSubTaskAsync(sub)">
-                                    <span class="subtask-handle" title="Zum Sortieren ziehen">⠿</span>
-                                    <label class="d-flex align-items-center gap-2 mb-0 flex-grow-1" style="cursor:pointer;">
-                                        <input type="checkbox" class="form-check-input mt-0"
-                                               checked="@sub.IsCompleted"
-                                               @onchange="() => ToggleSubTaskAsync(sub)" />
-                                        <span class="@(sub.IsCompleted ? "text-decoration-line-through text-muted" : "")">@sub.Title</span>
-                                    </label>
-                                    <button type="button" class="btn btn-sm btn-outline-danger border-0"
-                                            @onclick="() => DeleteSubTaskAsync(sub)" title="Löschen">🗑</button>
-                                </li>
-                            }
-                        </ul>
-                    }
-
-                    <div class="d-flex gap-2 mt-3">
-                        <input class="form-control form-control-sm" placeholder="Neuer Sub-Task…"
-                               @bind="newSubTaskTitle" @bind:event="oninput"
-                               @onkeydown="HandleSubTaskKeyAsync" />
-                        <button type="button" class="btn btn-sm btn-primary text-nowrap"
-                                @onclick="AddSubTaskAsync"
-                                disabled="@string.IsNullOrWhiteSpace(newSubTaskTitle)">Hinzufügen</button>
-                    </div>
+                    <hr class="my-3" />
+                    <SubTaskList ParentTaskId="Task.Id" ProjectId="Task.ProjectId"
+                                 SubTasks="subTasks" SubTasksChanged="HandleSubTasksChanged" />
                 }
             </div>
 
             <div class="task-dialog-footer">
                 <button type="button" class="btn btn-outline-danger" @onclick="DeleteAsync" disabled="@isSaving">Löschen</button>
                 <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-outline-secondary" @onclick="CloseAsync">Abbrechen</button>
                     <button type="submit" form="taskEditForm" class="btn btn-primary" disabled="@isSaving">
                         @(isSaving ? "Speichert…" : "Speichern")
                     </button>
+                    <button type="button" class="btn btn-outline-secondary" @onclick="CloseAsync">Abbrechen</button>
                 </div>
             </div>
         </div>
@@ -145,9 +114,6 @@
 
     private TaskEditModel editModel = new();
     private List<TaskResponseDto> subTasks = new();
-    private string newSubTaskTitle = string.Empty;
-    private TaskResponseDto? draggedSub;
-    private int? dragOverSubId;
     private bool isSaving;
     private string? editError;
     private int? loadedTaskId;
@@ -158,10 +124,9 @@
         if (Task is null) { loadedTaskId = null; return; }
         if (loadedTaskId == Task.Id) return;
 
-        loadedTaskId    = Task.Id;
-        editError       = null;
-        newSubTaskTitle = string.Empty;
-        subTasks        = Task.SubTasks?.OrderBy(s => s.SortOrder).ToList() ?? new();
+        loadedTaskId = Task.Id;
+        editError    = null;
+        subTasks     = Task.SubTasks?.OrderBy(s => s.SortOrder).ToList() ?? new();
         editModel = new TaskEditModel
         {
             Title       = Task.Title,
@@ -220,68 +185,12 @@
 
     private async Task CloseAsync() => await OnClose.InvokeAsync();
 
-    // ── Sub-Tasks (wirken sofort über die API) ──────────────────────────────────
+    // ── Sub-Tasks ────────────────────────────────────────────────────────────────
 
-    private async Task AddSubTaskAsync()
+    // Die SubTaskList wirkt sofort über die API und meldet den neuen Stand hier zurück.
+    private async Task HandleSubTasksChanged(List<TaskResponseDto> updated)
     {
-        if (Task is null || string.IsNullOrWhiteSpace(newSubTaskTitle)) return;
-
-        var dto = new TaskCreateDto(
-            newSubTaskTitle.Trim(), null, null, null, null,
-            Priority.Medium, Task.ProjectId, ParentTaskId: Task.Id);
-
-        var created = await Api.CreateTaskAsync(dto);
-        if (created is null) return;
-
-        subTasks.Add(created);
-        newSubTaskTitle = string.Empty;
-        await NotifyTaskUpdatedAsync();
-    }
-
-    private async Task ToggleSubTaskAsync(TaskResponseDto sub)
-    {
-        var newStatus = sub.IsCompleted ? WorkStatus.Planned : WorkStatus.Done;
-        var dto = new TaskUpdateDto(
-            sub.Title, sub.Description, sub.DueDate, sub.StartTime, sub.EndTime,
-            newStatus, Enum.Parse<Priority>(sub.Priority), sub.ProjectId);
-
-        var updated = await Api.UpdateTaskAsync(sub.Id, dto);
-        if (updated is null) return;
-
-        var idx = subTasks.FindIndex(s => s.Id == sub.Id);
-        if (idx >= 0) subTasks[idx] = updated;
-        await NotifyTaskUpdatedAsync();
-    }
-
-    private async Task DeleteSubTaskAsync(TaskResponseDto sub)
-    {
-        var ok = await Api.DeleteTaskAsync(sub.Id);
-        if (!ok) return;
-
-        subTasks.RemoveAll(s => s.Id == sub.Id);
-        await NotifyTaskUpdatedAsync();
-    }
-
-    private async Task HandleSubTaskKeyAsync(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter") await AddSubTaskAsync();
-    }
-
-    // Sub-Task per Drag&Drop vor den Ziel-Sub-Task einsortieren
-    private async Task DropSubTaskAsync(TaskResponseDto target)
-    {
-        var dragged   = draggedSub;
-        draggedSub    = null;
-        dragOverSubId = null;
-
-        if (dragged is null || dragged.Id == target.Id) return;
-
-        subTasks.RemoveAll(s => s.Id == dragged.Id);
-        var newIdx = subTasks.FindIndex(s => s.Id == target.Id);
-        if (newIdx < 0) newIdx = subTasks.Count;
-        subTasks.Insert(newIdx, dragged);
-
-        await Api.ReorderSubTasksAsync(subTasks.Select(s => s.Id).ToList());
+        subTasks = updated;
         await NotifyTaskUpdatedAsync();
     }
 

@@ -1,0 +1,74 @@
+.note-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 20rem;
+}
+
+.note-editor {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.note-editor-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.note-editor-title {
+    border-color: transparent;
+    background-color: transparent;
+    padding-left: 0.25rem;
+}
+
+.note-editor-title:hover {
+    border-color: #dee2e6;
+}
+
+.note-editor-title:focus {
+    border-color: #86b7fe;
+    background-color: #fff;
+}
+
+.note-editor-status {
+    font-size: 0.8rem;
+    color: #6c757d;
+    white-space: nowrap;
+}
+
+.note-editor-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Radzen-Dropdowns auf handliche Breite begrenzen. */
+.note-assign-project,
+.note-assign-task {
+    min-width: 12rem;
+    max-width: 18rem;
+}
+
+/* Farbpunkt hinter dem Projektnamen im Dropdown. */
+.note-project-dot {
+    display: inline-block;
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 50%;
+    margin-left: 0.4rem;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+/* Editor füllt den restlichen Platz; Radzen setzt eine eigene Mindesthöhe. */
+.note-editor-html {
+    flex: 1 1 auto;
+    min-height: 22rem;
+}

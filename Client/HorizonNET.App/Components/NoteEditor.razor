@@ -1,0 +1,245 @@
+@inject ApiService Api
+@inject ProjectState ProjectState
+@inject WorkspaceState WorkspaceState
+@implements IAsyncDisposable
+
+@* Editor für eine einzelne Notiz mit debounced Auto-Save (2 s nach letzter Änderung).
+   Ausstehende Änderungen werden beim Wechsel auf eine andere Notiz und beim Verlassen
+   der Seite noch gespeichert (FlushAsync / DisposeAsync). *@
+@if (loaded is null)
+{
+    <div class="note-empty text-muted">Keine Notiz ausgewählt.</div>
+}
+else
+{
+    <div class="note-editor">
+        <div class="note-editor-bar">
+            <input class="form-control form-control-lg fw-semibold note-editor-title"
+                   placeholder="Titel…" value="@title" @oninput="OnTitleInput" />
+            <span class="note-editor-status">@StatusText</span>
+            <button type="button" class="btn btn-sm btn-outline-danger" @onclick="DeleteAsync"
+                    title="Notiz löschen">🗑</button>
+        </div>
+
+        <div class="note-editor-meta">
+            <RadzenDropDown TValue="int?" Data="projectOptions" TextProperty="Label" ValueProperty="Id"
+                            @bind-Value="selectedProjectId" Change="OnAssignmentChanged"
+                            AllowFiltering="true" AllowClear="true"
+                            FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                            Placeholder="— kein Projekt —" class="note-assign-project">
+                <Template Context="opt">
+                    @{ var po = (ProjectOption)opt; }
+                    <span>@po.Label</span>
+                    <span class="note-project-dot" style="background-color:@(po.Color ?? "#6c757d");"></span>
+                </Template>
+            </RadzenDropDown>
+
+            <RadzenDropDown TValue="int?" Data="taskOptions" TextProperty="Label" ValueProperty="Id"
+                            @bind-Value="selectedTaskId" Change="OnAssignmentChanged"
+                            AllowFiltering="true" AllowClear="true"
+                            FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                            Placeholder="— kein Task —" class="note-assign-task" />
+
+            <span class="text-muted ms-auto">Geändert: @loaded.UpdatedAt.ToString("dd.MM.yyyy HH:mm")</span>
+        </div>
+
+        @* Value wird EINWEG gebunden und nur beim Notiz-Wechsel gesetzt. Würde man
+           @bind-Value nutzen, schriebe Radzen den Inhalt bei jedem Tastendruck zurück
+           in den DOM → spürbare Eingabeverzögerung. Änderungen holen wir über Input/Change. *@
+        <RadzenHtmlEditor Value="@editorValue" Input="OnContentInput" Change="OnContentInput"
+                          class="note-editor-html" />
+    </div>
+}
+
+@code {
+    // Aktuell zu bearbeitende Notiz; null = nichts ausgewählt.
+    [Parameter] public NoteResponseDto? Note { get; set; }
+
+    // Nach erfolgreichem Speichern (für Listenaktualisierung beim Aufrufer).
+    [Parameter] public EventCallback<NoteResponseDto> OnSaved { get; set; }
+
+    // Nach dem Löschen.
+    [Parameter] public EventCallback<int> OnDeleted { get; set; }
+
+    private NoteResponseDto? loaded;   // Snapshot der geladenen Notiz (Save-Ziel)
+    private string title = string.Empty;
+    private string editorValue = string.Empty; // stabil an den Editor gebunden (nur bei Wechsel gesetzt)
+    private string content = string.Empty;     // laufender Bearbeitungsstand (zum Speichern)
+    private SaveState state = SaveState.Saved;
+    private CancellationTokenSource? debounceCts;
+    private bool skipNextRender;               // unterdrückt Re-Renders während des Tippens
+
+    // Zuordnung (Projekt/Task) – aus der geladenen Notiz übernommen, per Dropdown änderbar.
+    private int? selectedProjectId;
+    private int? selectedTaskId;
+    private List<ProjectOption> projectOptions = new();
+    private List<TaskOption> taskOptions = new();
+
+    // Auswahl-Einträge für die Dropdowns.
+    private record ProjectOption(int Id, string Label, string? Color);
+    private record TaskOption(int Id, string Label); // Sub-Tasks mit ↳ gekennzeichnet
+
+    private static readonly StringComparer NameComparer = StringComparer.CurrentCultureIgnoreCase;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ProjectState.EnsureLoadedAsync();
+        await WorkspaceState.EnsureLoadedAsync();
+
+        var wsNames = (WorkspaceState.Workspaces ?? [])
+            .ToDictionary(w => w.Id, w => w.Name);
+
+        // Projekte sortiert nach Arbeitsbereichsname (A-Z), dann Projektname (A-Z);
+        // Label = "Arbeitsbereich - Projekt" (ohne Arbeitsbereich nur der Projektname).
+        projectOptions = (ProjectState.Projects ?? [])
+            .Select(p => new
+            {
+                p.Id,
+                p.Name,
+                p.Color,
+                Ws = p.WorkspaceId is int wid && wsNames.TryGetValue(wid, out var wn) ? wn : string.Empty
+            })
+            .OrderBy(x => x.Ws, NameComparer)
+            .ThenBy(x => x.Name, NameComparer)
+            .Select(x => new ProjectOption(
+                x.Id,
+                string.IsNullOrEmpty(x.Ws) ? x.Name : $"{x.Ws} - {x.Name}",
+                x.Color))
+            .ToList();
+
+        // Tasks: Haupt-Tasks A-Z, ihre Sub-Tasks jeweils A-Z direkt darunter.
+        var all = await Api.GetTasksAsync() ?? new();
+        taskOptions = new();
+        foreach (var t in all.OrderBy(t => t.Title, NameComparer))
+        {
+            taskOptions.Add(new TaskOption(t.Id, t.Title));
+            if (t.SubTasks is not null)
+                foreach (var s in t.SubTasks.OrderBy(s => s.Title, NameComparer))
+                    taskOptions.Add(new TaskOption(s.Id, "↳ " + s.Title));
+        }
+    }
+
+    // Während des Tippens NICHT neu rendern – sonst schreibt Radzen den Editor-DOM neu.
+    // Beim Laden einer Notiz und bei Statuswechseln (Speichern) rendern wir normal.
+    protected override bool ShouldRender()
+    {
+        if (skipNextRender) { skipNextRender = false; return false; }
+        return true;
+    }
+
+    private enum SaveState { Saved, Pending, Saving, Error }
+
+    private string StatusText => state switch
+    {
+        SaveState.Pending => "Nicht gespeichert…",
+        SaveState.Saving  => "Speichert…",
+        SaveState.Error   => "Fehler beim Speichern",
+        _                 => "Gespeichert"
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Note is null) { loaded = null; return; }
+        if (loaded?.Id == Note.Id) return;
+
+        // Wechsel auf eine andere Notiz: ausstehende Änderungen der alten sichern.
+        await FlushAsync();
+
+        loaded            = Note;
+        title             = Note.Title;
+        content           = Note.Content ?? string.Empty;
+        editorValue       = content; // nur hier setzen → Editor schreibt den DOM nur beim Wechsel
+        selectedProjectId = Note.ProjectId;
+        selectedTaskId    = Note.TaskItemId;
+        state             = SaveState.Saved;
+    }
+
+    // Die RadzenDropDowns aktualisieren selectedProjectId/selectedTaskId über @bind-Value;
+    // hier nur den Auto-Save anstoßen.
+    private void OnAssignmentChanged(object value) => ScheduleSave();
+
+    private void OnTitleInput(ChangeEventArgs e)
+    {
+        title = e.Value?.ToString() ?? string.Empty;
+        skipNextRender = true;
+        ScheduleSave();
+    }
+
+    // Neuer HTML-Inhalt aus dem Editor (Input = beim Tippen, Change = bei Blur/Befehl).
+    // editorValue bleibt bewusst unverändert, damit Radzen den DOM nicht neu schreibt.
+    private void OnContentInput(string html)
+    {
+        content = html;
+        skipNextRender = true;
+        ScheduleSave();
+    }
+
+    private void ScheduleSave()
+    {
+        state = SaveState.Pending;
+        debounceCts?.Cancel();
+        debounceCts = new CancellationTokenSource();
+        _ = DebouncedSaveAsync(debounceCts.Token);
+    }
+
+    private async Task DebouncedSaveAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(2000, token);
+            await SaveAsync();
+        }
+        catch (TaskCanceledException) { /* durch neue Eingabe ersetzt */ }
+    }
+
+    // Speichert ausstehende Änderungen sofort (z. B. vor Notiz-Wechsel / Verlassen).
+    public async Task FlushAsync()
+    {
+        if (loaded is not null && state is SaveState.Pending or SaveState.Error)
+            await SaveAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (loaded is null) return;
+
+        debounceCts?.Cancel();
+        state = SaveState.Saving;
+        await InvokeAsync(StateHasChanged);
+
+        var dto = new NoteUpdateDto(title.Trim(), content, selectedTaskId, selectedProjectId);
+        var updated = await Api.UpdateNoteAsync(loaded.Id, dto);
+
+        if (updated is null)
+        {
+            state = SaveState.Error;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        loaded = updated;
+        state  = SaveState.Saved;
+        await OnSaved.InvokeAsync(updated);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (loaded is null) return;
+
+        debounceCts?.Cancel();
+        var id = loaded.Id;
+        var ok = await Api.DeleteNoteAsync(id);
+        if (!ok) return;
+
+        loaded = null;
+        await OnDeleted.InvokeAsync(id);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        debounceCts?.Cancel();
+        await FlushAsync();
+        debounceCts?.Dispose();
+    }
+}

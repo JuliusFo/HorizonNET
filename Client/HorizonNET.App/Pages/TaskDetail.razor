@@ -1,0 +1,322 @@
+@page "/tasks/{Id:int}"
+@inject ApiService Api
+@inject NavigationManager Nav
+@inject IStringLocalizer<Enums> EnumL
+
+<PageTitle>@(task?.Title ?? "Task") – HorizonNET</PageTitle>
+
+@if (loading)
+{
+    <p>Wird geladen…</p>
+}
+else if (task is null)
+{
+    <p class="text-muted">Task nicht gefunden.</p>
+    <a href="" class="btn btn-outline-secondary btn-sm">Zur Übersicht</a>
+}
+else
+{
+    @if (task.ParentTaskId is int parentId)
+    {
+        <a href="@($"tasks/{parentId}")" class="d-inline-block mb-2 text-decoration-none">← Zum Eltern-Task</a>
+    }
+
+    @* Hauptfelder + Sidebar in einem Formular. Gespeichert wird über den Button
+       (kein Submit-Button im Formular) – dadurch löst Enter in Textfeldern, auch
+       im Sub-Task-Feld, keine implizite Formularabsendung aus. *@
+    <EditForm Model="editModel">
+        <DataAnnotationsValidator />
+        <div class="row g-4">
+            @* Hauptbereich *@
+            <div class="col-lg-8">
+                <InputText class="form-control form-control-lg fw-semibold mb-1 task-detail-title"
+                           @bind-Value="editModel.Title" />
+                <ValidationMessage For="() => editModel.Title" />
+
+                <label class="form-label text-muted small mt-3 mb-1">Beschreibung</label>
+                <InputTextArea class="form-control" rows="3" @bind-Value="editModel.Description"
+                               placeholder="Beschreibung…" />
+
+                @* Sub-Tasks direkt unter der Beschreibung – nur bei Haupt-Tasks. *@
+                @if (task.ParentTaskId is null)
+                {
+                    <hr class="my-3" />
+                    <SubTaskList ParentTaskId="task.Id" ProjectId="task.ProjectId"
+                                 SubTasks="task.SubTasks" SubTasksChanged="HandleSubTasksChanged" />
+                }
+
+                @* Notizen zu diesem Task (Phase 2b). *@
+                <hr class="my-3" />
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div class="fw-semibold">Notizen</div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="CreateNoteAsync">
+                        + Neue Notiz
+                    </button>
+                </div>
+
+                @if (notes is null)
+                {
+                    <p class="text-muted small mb-0">Wird geladen…</p>
+                }
+                else
+                {
+                    @if (notes.Count > 0)
+                    {
+                        <div class="task-notes-list border rounded mb-3">
+                            <NoteList Notes="notes" SelectedId="selectedNote?.Id" OnSelect="SelectNoteAsync" />
+                        </div>
+                    }
+                    else if (selectedNote is null)
+                    {
+                        <p class="text-muted small">Noch keine Notizen zu diesem Task.</p>
+                    }
+
+                    @if (selectedNote is not null)
+                    {
+                        <div class="task-note-editor border rounded p-2">
+                            <NoteEditor @ref="noteEditor" Note="selectedNote"
+                                        OnSaved="HandleNoteSaved" OnDeleted="HandleNoteDeleted" />
+                        </div>
+                    }
+                }
+            </div>
+
+            @* Sidebar *@
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-body d-flex flex-column gap-3">
+                        <div>
+                            <label class="form-label small text-muted mb-1">Status</label>
+                            <InputSelect class="form-select form-select-sm" @bind-Value="editModel.Status">
+                                @foreach (var s in Enum.GetValues<WorkStatus>())
+                                {
+                                    <option value="@s">@EnumL[$"WorkStatus_{s}"]</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div>
+                            <label class="form-label small text-muted mb-1">Priorität</label>
+                            <InputSelect class="form-select form-select-sm" @bind-Value="editModel.Priority">
+                                @foreach (var p in Enum.GetValues<Priority>())
+                                {
+                                    <option value="@p">@PriorityDisplay.Symbol(p) @EnumL[$"Priority_{p}"]</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div>
+                            <label class="form-label small text-muted mb-1">Projekt</label>
+                            <div>@(task.ProjectName ?? "—")</div>
+                        </div>
+                        <div>
+                            <label class="form-label small text-muted mb-1">Fällig</label>
+                            <InputDate class="form-control form-control-sm" @bind-Value="editModel.DueDate" />
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label small text-muted mb-1">Von</label>
+                                <InputDate Type="InputDateType.Time" class="form-control form-control-sm"
+                                           @bind-Value="editModel.StartTime" disabled="@(editModel.DueDate is null)" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small text-muted mb-1">Bis</label>
+                                <InputDate Type="InputDateType.Time" class="form-control form-control-sm"
+                                           @bind-Value="editModel.EndTime" disabled="@(editModel.DueDate is null)" />
+                            </div>
+                        </div>
+                        <div>
+                            <label class="form-label small text-muted mb-1">Google-Kalender</label>
+                            <div>
+                                @if (task.IsSyncedToGoogle)
+                                {
+                                    <span class="badge" style="background-color:#4285F4;">Im Google-Kalender</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">Nicht synchronisiert</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="border-top pt-2 small text-muted">
+                            <div>Erstellt: @task.CreatedAt.ToString("dd.MM.yyyy HH:mm")</div>
+                            <div>Geändert: @task.UpdatedAt.ToString("dd.MM.yyyy HH:mm")</div>
+                        </div>
+                    </div>
+                </div>
+
+                @if (saveError is not null)
+                {
+                    <div class="alert alert-danger py-1 mt-3 mb-0">@saveError</div>
+                }
+
+                <div class="d-flex gap-2 mt-3">
+                    <button type="button" class="btn btn-primary flex-grow-1" @onclick="SaveAsync"
+                            disabled="@isSaving">
+                        @(isSaving ? "Speichert…" : "Speichern")
+                    </button>
+                    <button type="button" class="btn btn-outline-danger" @onclick="DeleteAsync"
+                            disabled="@isSaving">Löschen</button>
+                </div>
+            </div>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private TaskResponseDto? task;
+    private TaskEditModel editModel = new();
+    private bool loading = true;
+    private bool isSaving;
+    private string? saveError;
+    private int? loadedId;
+
+    // Notizen zu diesem Task
+    private List<NoteResponseDto>? notes;
+    private NoteResponseDto? selectedNote;
+    private NoteEditor? noteEditor;
+
+    // OnParametersSetAsync statt OnInitializedAsync: lädt neu, wenn zwischen zwei
+    // Tasks navigiert wird (gleiche Komponenteninstanz, nur anderer Parameter).
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loadedId == Id) return;
+
+        // Vor dem Wechsel offene Notiz-Änderungen des bisherigen Tasks sichern.
+        if (noteEditor is not null) await noteEditor.FlushAsync();
+
+        loadedId     = Id;
+        loading      = true;
+        saveError    = null;
+        notes        = null;
+        selectedNote = null;
+
+        task = await Api.GetTaskAsync(Id);
+        if (task is not null)
+        {
+            editModel = new TaskEditModel
+            {
+                Title       = task.Title,
+                Description = task.Description,
+                DueDate     = task.DueDate,
+                StartTime   = task.StartTime,
+                EndTime     = task.EndTime,
+                Priority    = Enum.Parse<Priority>(task.Priority),
+                Status      = task.Status
+            };
+            notes = await Api.GetNotesByTaskAsync(Id) ?? new();
+        }
+
+        loading = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (task is null) return;
+
+        if (string.IsNullOrWhiteSpace(editModel.Title))
+        {
+            saveError = "Titel ist erforderlich.";
+            return;
+        }
+
+        isSaving  = true;
+        saveError = null;
+
+        var dto = new TaskUpdateDto(
+            editModel.Title,
+            string.IsNullOrWhiteSpace(editModel.Description) ? null : editModel.Description,
+            editModel.DueDate, editModel.StartTime, editModel.EndTime,
+            editModel.Status, editModel.Priority, task.ProjectId);
+
+        var updated = await Api.UpdateTaskAsync(task.Id, dto);
+        isSaving = false;
+
+        if (updated is null)
+        {
+            saveError = "Speichern fehlgeschlagen.";
+            return;
+        }
+
+        // Die API liefert beim Update keine Sub-Tasks/Projektnamen mit – lokal erhalten.
+        task = updated with { SubTasks = task.SubTasks, ProjectName = task.ProjectName };
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (task is null) return;
+
+        var ok = await Api.DeleteTaskAsync(task.Id);
+        if (!ok)
+        {
+            saveError = "Löschen fehlgeschlagen.";
+            return;
+        }
+
+        Nav.NavigateTo(task.ProjectId is int pid ? $"projects/{pid}" : "");
+    }
+
+    // Live-Aktualisierung aus der SubTaskList (wirkt sofort über die API).
+    private void HandleSubTasksChanged(List<TaskResponseDto> updated) =>
+        task = task is null ? null : task with { SubTasks = updated.Count > 0 ? updated : null };
+
+    // ── Notizen ──────────────────────────────────────────────────────────────
+
+    private async Task CreateNoteAsync()
+    {
+        if (noteEditor is not null) await noteEditor.FlushAsync();
+
+        // Neue Notiz direkt mit diesem Task verknüpft anlegen.
+        var created = await Api.CreateNoteAsync(new NoteCreateDto("Neue Notiz", null, TaskItemId: Id));
+        if (created is null || notes is null) return;
+
+        notes.Insert(0, created);
+        selectedNote = created;
+    }
+
+    private async Task SelectNoteAsync(NoteResponseDto note)
+    {
+        if (selectedNote?.Id == note.Id) return;
+        if (noteEditor is not null) await noteEditor.FlushAsync(); // offene Änderungen sichern
+        selectedNote = note;
+    }
+
+    private void HandleNoteSaved(NoteResponseDto updated)
+    {
+        if (notes is null) return;
+        var idx = notes.FindIndex(n => n.Id == updated.Id);
+        if (idx >= 0) notes[idx] = updated;
+        if (selectedNote?.Id == updated.Id) selectedNote = updated;
+    }
+
+    private void HandleNoteDeleted(int id)
+    {
+        notes?.RemoveAll(n => n.Id == id);
+        if (selectedNote?.Id == id) selectedNote = null;
+    }
+
+    private class TaskEditModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Titel ist erforderlich.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(300)]
+        public string Title { get; set; } = string.Empty;
+        public string? Description { get; set; }
+
+        private DateTime? dueDate;
+        public DateTime? DueDate
+        {
+            get => dueDate;
+            set
+            {
+                dueDate = value;
+                // Ohne Fälligkeitsdatum ergibt eine Uhrzeit keinen Sinn → mitlöschen.
+                if (value is null) { StartTime = null; EndTime = null; }
+            }
+        }
+
+        public DateTime? StartTime { get; set; }
+        public DateTime? EndTime { get; set; }
+        public Priority Priority { get; set; } = Priority.Medium;
+        public WorkStatus Status { get; set; } = WorkStatus.Planned;
+    }
+}

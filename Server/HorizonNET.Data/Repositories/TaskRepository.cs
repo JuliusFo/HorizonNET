@@ -34,6 +34,9 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
 
     public async Task<TaskItem> CreateAsync(TaskItem task)
     {
+        var now = DateTime.Now;
+        task.CreatedAt = now;
+        task.UpdatedAt = now;
         context.Tasks.Add(task);
         await context.SaveChangesAsync();
         return task;
@@ -52,6 +55,7 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         existing.Status = updated.Status;
         existing.Priority = updated.Priority;
         existing.ProjectId = updated.ProjectId;
+        existing.UpdatedAt = DateTime.Now;
         await context.SaveChangesAsync();
         return existing;
     }

@@ -1,0 +1,49 @@
+/* Master-Detail: Liste links (feste Breite), Editor rechts. */
+.notes-layout {
+    display: flex;
+    gap: 1rem;
+    align-items: stretch;
+    height: calc(100vh - 8rem);
+}
+
+.notes-sidebar {
+    flex: 0 0 20rem;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background-color: #fff;
+}
+
+.notes-sidebar-header {
+    padding: 0.75rem;
+    border-bottom: 1px solid #dee2e6;
+}
+
+/* Liste scrollt innerhalb der Seitenleiste. */
+.notes-sidebar ::deep .note-list {
+    overflow-y: auto;
+}
+
+.notes-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    background-color: #fff;
+    overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+    .notes-layout {
+        flex-direction: column;
+        height: auto;
+    }
+
+    .notes-sidebar {
+        flex-basis: auto;
+        max-height: 40vh;
+    }
+}

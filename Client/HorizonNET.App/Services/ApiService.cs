@@ -114,6 +114,39 @@ public class ApiService(HttpClient http)
         return response.IsSuccessStatusCode;
     }
 
+    // ── Notizen ────────────────────────────────────────────────────────────────
+
+    public Task<List<NoteResponseDto>?> GetNotesAsync() =>
+        http.GetFromJsonAsync<List<NoteResponseDto>>("api/notes");
+
+    public Task<List<NoteResponseDto>?> GetNotesByTaskAsync(int taskId) =>
+        http.GetFromJsonAsync<List<NoteResponseDto>>($"api/notes/task/{taskId}");
+
+    public Task<List<NoteResponseDto>?> GetNotesByProjectAsync(int projectId) =>
+        http.GetFromJsonAsync<List<NoteResponseDto>>($"api/notes/project/{projectId}");
+
+    public async Task<NoteResponseDto?> CreateNoteAsync(NoteCreateDto dto)
+    {
+        var response = await http.PostAsJsonAsync("api/notes", dto);
+        return response.IsSuccessStatusCode
+            ? await response.Content.ReadFromJsonAsync<NoteResponseDto>()
+            : null;
+    }
+
+    public async Task<NoteResponseDto?> UpdateNoteAsync(int id, NoteUpdateDto dto)
+    {
+        var response = await http.PutAsJsonAsync($"api/notes/{id}", dto);
+        return response.IsSuccessStatusCode
+            ? await response.Content.ReadFromJsonAsync<NoteResponseDto>()
+            : null;
+    }
+
+    public async Task<bool> DeleteNoteAsync(int id)
+    {
+        var response = await http.DeleteAsync($"api/notes/{id}");
+        return response.IsSuccessStatusCode;
+    }
+
     // ── Google-Kalender ────────────────────────────────────────────────────────
 
     public Task<GoogleStatusDto?> GetGoogleStatusAsync() =>

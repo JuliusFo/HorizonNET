@@ -38,7 +38,12 @@ public record TaskResponseDto(
     string? ProjectName,
     int SortOrder = 0,
     int? ParentTaskId = null,
-    List<TaskResponseDto>? SubTasks = null
+    List<TaskResponseDto>? SubTasks = null,
+    DateTime CreatedAt = default,
+    DateTime UpdatedAt = default,
+    // Ist der Task aktuell in den Google-Kalender gespiegelt? (Server leitet es aus
+    // dem Vorhandensein einer GoogleEventId ab; nur Lese-Richtung.)
+    bool IsSyncedToGoogle = false
 )
 {
     public bool IsCompleted => Status == WorkStatus.Done || Status == WorkStatus.Abandoned;

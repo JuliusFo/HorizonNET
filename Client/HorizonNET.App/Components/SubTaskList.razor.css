@@ -1,0 +1,14 @@
+/* Sub-Task-Sortierung: Anfasser + Einfügemarke */
+.subtask-handle {
+    cursor: grab;
+    color: #adb5bd;
+    user-select: none;
+}
+
+.subtask-handle:active {
+    cursor: grabbing;
+}
+
+.subtask-drop-before {
+    box-shadow: 0 -2px 0 -1px var(--bs-primary, #0d6efd);
+}

@@ -3,6 +3,7 @@ using System;
 using HorizonNET.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace HorizonNET.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260712190211_AddTaskTimestamps")]
+    partial class AddTaskTimestamps
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.9");
@@ -37,42 +40,6 @@ namespace HorizonNET.Data.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("GoogleConnections");
-                });
-
-            modelBuilder.Entity("HorizonNET.Domain.Entities.Note", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Content")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("ProjectId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("TaskItemId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProjectId");
-
-                    b.HasIndex("TaskItemId");
-
-                    b.ToTable("Notes");
                 });
 
             modelBuilder.Entity("HorizonNET.Domain.Entities.Project", b =>
@@ -197,23 +164,6 @@ namespace HorizonNET.Data.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Workspaces");
-                });
-
-            modelBuilder.Entity("HorizonNET.Domain.Entities.Note", b =>
-                {
-                    b.HasOne("HorizonNET.Domain.Entities.Project", "Project")
-                        .WithMany()
-                        .HasForeignKey("ProjectId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("HorizonNET.Domain.Entities.TaskItem", "TaskItem")
-                        .WithMany()
-                        .HasForeignKey("TaskItemId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Project");
-
-                    b.Navigation("TaskItem");
                 });
 
             modelBuilder.Entity("HorizonNET.Domain.Entities.Project", b =>

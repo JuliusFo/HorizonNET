@@ -94,7 +94,10 @@ else
                                      @ondragover:stopPropagation="true"
                                      @ondragover="() => { if (draggedTask is not null) { dragOverStatus = status; dragOverTaskId = task.Id; } }">
                                     <div class="kanban-card-title">
-                                        <PriorityIndicator Value="@task.Priority" /> @task.Title
+                                        <PriorityIndicator Value="@task.Priority" />
+                                        <a href="@($"tasks/{task.Id}")" class="kanban-card-link"
+                                           @onclick:stopPropagation="true"
+                                           title="Zur Detailseite">@task.Title</a>
                                     </div>
                                     @if (task.ProjectName is not null)
                                     {

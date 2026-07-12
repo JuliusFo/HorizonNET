@@ -1,0 +1,15 @@
+/* Titel wirkt wie eine Überschrift, wird aber beim Hover/Fokus als Eingabefeld erkennbar. */
+.task-detail-title {
+    border-color: transparent;
+    background-color: transparent;
+    padding-left: 0.25rem;
+}
+
+.task-detail-title:hover {
+    border-color: #dee2e6;
+}
+
+.task-detail-title:focus {
+    border-color: #86b7fe;
+    background-color: #fff;
+}

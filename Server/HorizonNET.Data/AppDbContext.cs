@@ -58,6 +58,25 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(c => c.RefreshToken).IsRequired();
             e.Property(c => c.Email).HasMaxLength(320);
         });
+
+        modelBuilder.Entity<Note>(e =>
+        {
+            e.HasKey(n => n.Id);
+            e.Property(n => n.Title).IsRequired().HasMaxLength(300);
+            // Content ist HTML und kann lang werden – bewusst ohne MaxLength.
+
+            // Beim Löschen eines Tasks bzw. Projekts bleibt die Notiz erhalten;
+            // die jeweilige Zuordnung wird auf null gesetzt.
+            e.HasOne(n => n.TaskItem)
+                .WithMany()
+                .HasForeignKey(n => n.TaskItemId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(n => n.Project)
+                .WithMany()
+                .HasForeignKey(n => n.ProjectId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
     }
 
     #endregion
@@ -71,6 +90,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
 
     public DbSet<GoogleConnection> GoogleConnections => Set<GoogleConnection>();
+
+    public DbSet<Note> Notes => Set<Note>();
 
     #endregion
 }

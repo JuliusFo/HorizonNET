@@ -15,7 +15,8 @@ public class TasksController(ITaskRepository repo, GoogleCalendarService google)
             t.Status, t.Priority.ToString(), t.ProjectId, t.Project?.Name,
             t.SortOrder,
             t.ParentTaskId,
-            t.SubTasks.Count > 0 ? t.SubTasks.OrderBy(s => s.SortOrder).Select(s => ToDto(s)).ToList() : null);
+            t.SubTasks.Count > 0 ? t.SubTasks.OrderBy(s => s.SortOrder).Select(s => ToDto(s)).ToList() : null,
+            t.CreatedAt, t.UpdatedAt, t.GoogleEventId != null);
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
