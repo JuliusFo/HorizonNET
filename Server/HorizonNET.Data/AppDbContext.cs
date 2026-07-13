@@ -77,6 +77,34 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasForeignKey(n => n.ProjectId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
+
+        modelBuilder.Entity<DailyTask>(e =>
+        {
+            e.HasKey(t => t.Id);
+            e.Property(t => t.Title).IsRequired().HasMaxLength(300);
+            // Bestehende Dailies bleiben "täglich" (127), wenn die Spalte hinzukommt.
+            e.Property(t => t.WeekdayMask).HasDefaultValue((byte)127);
+
+            // Projektzuordnung optional; beim Löschen des Projekts bleibt der Daily erhalten.
+            e.HasOne(t => t.Project)
+                .WithMany()
+                .HasForeignKey(t => t.ProjectId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<DailyTaskCompletion>(e =>
+        {
+            e.HasKey(c => c.Id);
+
+            // Häkchen gehören zum Daily und werden mit ihm gelöscht.
+            e.HasOne(c => c.DailyTask)
+                .WithMany(t => t.Completions)
+                .HasForeignKey(c => c.DailyTaskId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Höchstens ein Häkchen pro Daily und Tag.
+            e.HasIndex(c => new { c.DailyTaskId, c.Date }).IsUnique();
+        });
     }
 
     #endregion
@@ -92,6 +120,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<GoogleConnection> GoogleConnections => Set<GoogleConnection>();
 
     public DbSet<Note> Notes => Set<Note>();
+
+    public DbSet<DailyTask> DailyTasks => Set<DailyTask>();
+
+    public DbSet<DailyTaskCompletion> DailyTaskCompletions => Set<DailyTaskCompletion>();
 
     #endregion
 }

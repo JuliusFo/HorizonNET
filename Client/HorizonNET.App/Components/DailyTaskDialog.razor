@@ -1,0 +1,215 @@
+@inject ApiService Api
+
+@* Verwaltung der Daily Tasks: anlegen, umbenennen, pausieren/aktivieren, löschen,
+   per Drag&Drop sortieren. Sichtbarkeit steuert der Aufrufer über Visible. *@
+@if (Visible)
+{
+    <div class="task-dialog-backdrop" @onclick="CloseAsync"></div>
+    <div class="task-dialog">
+        <div class="task-dialog-content" @onclick:stopPropagation="true">
+            <div class="task-dialog-header">
+                <h5 class="mb-0">Daily Tasks verwalten</h5>
+                <button type="button" class="btn-close" @onclick="CloseAsync" aria-label="Schließen"></button>
+            </div>
+
+            <div class="task-dialog-body">
+                @if (items.Count > 0)
+                {
+                    <ul class="list-group mb-3">
+                        @foreach (var d in items)
+                        {
+                            <li class="list-group-item py-2 px-2 @(dragOverId == d.Id ? "daily-drop-before" : "")"
+                                draggable="true"
+                                @ondragstart="() => dragged = d"
+                                @ondragend="() => { dragged = null; dragOverId = null; }"
+                                @ondragover:preventDefault="true"
+                                @ondragover="() => { if (dragged is not null) dragOverId = d.Id; }"
+                                @ondrop="() => DropAsync(d)">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="daily-handle" title="Zum Sortieren ziehen">⠿</span>
+
+                                    @if (editingId == d.Id)
+                                    {
+                                        <input class="form-control form-control-sm" @bind="editTitle" @bind:event="oninput"
+                                               @onkeydown="@(e => { if (e.Key == "Enter") { _ = SaveRenameAsync(d); } })" />
+                                        <button type="button" class="btn btn-sm btn-primary"
+                                                @onclick="() => SaveRenameAsync(d)"
+                                                disabled="@string.IsNullOrWhiteSpace(editTitle)">OK</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                @onclick="() => editingId = null">✕</button>
+                                    }
+                                    else
+                                    {
+                                        <span class="flex-grow-1 @(d.IsActive ? "" : "text-muted text-decoration-line-through")">@d.Title</span>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary border-0"
+                                                @onclick="() => StartRename(d)" title="Umbenennen">✎</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary border-0"
+                                                @onclick="() => ToggleActiveAsync(d)"
+                                                title="@(d.IsActive ? "Pausieren" : "Aktivieren")">@(d.IsActive ? "⏸" : "▶")</button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger border-0"
+                                                @onclick="() => DeleteAsync(d)" title="Löschen">🗑</button>
+                                    }
+                                </div>
+
+                                @* Wochentags-Muster: 7 Chips (Mo–So) + Schnellwahl *@
+                                <div class="daily-weekdays d-flex flex-wrap align-items-center gap-1">
+                                    @foreach (var (day, sh) in Weekdays.Order)
+                                    {
+                                        <button type="button" title="@sh"
+                                                class="daily-chip @(Weekdays.IsSet(d.WeekdayMask, day) ? "active" : "")"
+                                                @onclick="() => ToggleWeekdayAsync(d, day)">@sh</button>
+                                    }
+                                    <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-decoration-none"
+                                            @onclick="() => SetMaskAsync(d, Weekdays.Daily)">Täglich</button>
+                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none"
+                                            @onclick="() => SetMaskAsync(d, Weekdays.MonToFri)">Mo–Fr</button>
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                }
+                else
+                {
+                    <p class="text-muted small">Noch keine Daily Tasks.</p>
+                }
+
+                <div class="d-flex gap-2">
+                    <input class="form-control form-control-sm" placeholder="Neuer Daily Task…"
+                           @bind="newTitle" @bind:event="oninput"
+                           @onkeydown="HandleAddKeyAsync" />
+                    <button type="button" class="btn btn-sm btn-primary text-nowrap"
+                            @onclick="AddAsync" disabled="@string.IsNullOrWhiteSpace(newTitle)">Hinzufügen</button>
+                </div>
+            </div>
+
+            <div class="task-dialog-footer">
+                <span></span>
+                <button type="button" class="btn btn-outline-secondary" @onclick="CloseAsync">Schließen</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+
+    // Dialog schließen (X / Backdrop / Schließen).
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    // Wird nach jeder Änderung ausgelöst, damit der Aufrufer (Heute-Seite) neu lädt.
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private List<DailyTaskResponseDto> items = new();
+    private string newTitle = string.Empty;
+    private int? editingId;
+    private string editTitle = string.Empty;
+    private DailyTaskResponseDto? dragged;
+    private int? dragOverId;
+    private bool loaded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Beim Öffnen frisch laden; beim Schließen für das nächste Mal zurücksetzen.
+        if (Visible && !loaded)
+        {
+            items = await Api.GetDailyTasksAsync() ?? new();
+            editingId = null;
+            newTitle = string.Empty;
+            loaded = true;
+        }
+        else if (!Visible)
+        {
+            loaded = false;
+        }
+    }
+
+    private async Task AddAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newTitle)) return;
+
+        var created = await Api.CreateDailyTaskAsync(new DailyTaskCreateDto(newTitle.Trim()));
+        if (created is null) return;
+
+        items.Add(created);
+        newTitle = string.Empty;
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task HandleAddKeyAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await AddAsync();
+    }
+
+    private void StartRename(DailyTaskResponseDto d)
+    {
+        editingId = d.Id;
+        editTitle = d.Title;
+    }
+
+    private async Task SaveRenameAsync(DailyTaskResponseDto d)
+    {
+        if (string.IsNullOrWhiteSpace(editTitle)) return;
+
+        var updated = await Api.UpdateDailyTaskAsync(d.Id, new DailyTaskUpdateDto(editTitle.Trim(), d.IsActive, d.ProjectId, d.WeekdayMask));
+        if (updated is null) return;
+
+        var i = items.FindIndex(x => x.Id == d.Id);
+        if (i >= 0) items[i] = updated;
+        editingId = null;
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task ToggleActiveAsync(DailyTaskResponseDto d)
+    {
+        var updated = await Api.UpdateDailyTaskAsync(d.Id, new DailyTaskUpdateDto(d.Title, !d.IsActive, d.ProjectId, d.WeekdayMask));
+        if (updated is null) return;
+
+        var i = items.FindIndex(x => x.Id == d.Id);
+        if (i >= 0) items[i] = updated;
+        await OnChanged.InvokeAsync();
+    }
+
+    private Task ToggleWeekdayAsync(DailyTaskResponseDto d, DayOfWeek day) =>
+        SetMaskAsync(d, Weekdays.Toggle(d.WeekdayMask, day));
+
+    // Setzt das Wochentags-Muster. Mindestens ein Tag muss aktiv bleiben (Maske 0 wird ignoriert).
+    private async Task SetMaskAsync(DailyTaskResponseDto d, byte mask)
+    {
+        if (mask == 0) return;
+
+        var updated = await Api.UpdateDailyTaskAsync(d.Id, new DailyTaskUpdateDto(d.Title, d.IsActive, d.ProjectId, mask));
+        if (updated is null) return;
+
+        var i = items.FindIndex(x => x.Id == d.Id);
+        if (i >= 0) items[i] = updated;
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task DeleteAsync(DailyTaskResponseDto d)
+    {
+        var ok = await Api.DeleteDailyTaskAsync(d.Id);
+        if (!ok) return;
+
+        items.RemoveAll(x => x.Id == d.Id);
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task DropAsync(DailyTaskResponseDto target)
+    {
+        var dr = dragged;
+        dragged = null;
+        dragOverId = null;
+
+        if (dr is null || dr.Id == target.Id) return;
+
+        items.RemoveAll(x => x.Id == dr.Id);
+        var idx = items.FindIndex(x => x.Id == target.Id);
+        if (idx < 0) idx = items.Count;
+        items.Insert(idx, dr);
+
+        await Api.ReorderDailyTasksAsync(items.Select(x => x.Id).ToList());
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task CloseAsync() => await OnClose.InvokeAsync();
+}

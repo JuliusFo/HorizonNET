@@ -34,6 +34,7 @@ builder.Services.AddScoped<IProjectRepository, ProjectRepository>();
 builder.Services.AddScoped<ITaskRepository, TaskRepository>();
 builder.Services.AddScoped<IGoogleConnectionRepository, GoogleConnectionRepository>();
 builder.Services.AddScoped<INoteRepository, NoteRepository>();
+builder.Services.AddScoped<IDailyTaskRepository, DailyTaskRepository>();
 
 // Google-Kalender-Anbindung (OAuth + späterer Calendar-Zugriff)
 builder.Services.AddScoped<GoogleCalendarService>();

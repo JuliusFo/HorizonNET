@@ -6,6 +6,54 @@
 
 <h1 class="mb-3">Heute</h1>
 
+@* ── Daily Tasks: wiederkehrende Gewohnheiten pro Tag abhaken ───────────────── *@
+<div class="card mb-3 overflow-hidden">
+    <div class="card-header d-flex align-items-center justify-content-between">
+        <span class="fw-semibold">Daily Tasks</span>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="() => showDailyDialog = true">Verwalten</button>
+    </div>
+    <div class="card-body">
+        @if (dailyTasks is null)
+        {
+            <p class="text-muted small mb-0">Wird geladen…</p>
+        }
+        else if (dailyTasks.Count == 0)
+        {
+            <p class="text-muted small mb-0">Noch keine Daily Tasks. Über „Verwalten" anlegen.</p>
+        }
+        else
+        {
+            var done = dailyTasks.Count(d => d.CompletedToday);
+            var pct = (int)Math.Round(done * 100.0 / dailyTasks.Count);
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <div class="progress flex-grow-1" style="height: 6px;">
+                    <div class="progress-bar" role="progressbar" style="width: @pct%;"
+                         aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+                <span class="small text-muted text-nowrap">@done / @dailyTasks.Count erledigt</span>
+            </div>
+            <ul class="list-group">
+                @foreach (var d in dailyTasks)
+                {
+                    <li class="list-group-item d-flex align-items-center gap-2">
+                        <input type="checkbox" class="form-check-input mt-0" checked="@d.CompletedToday"
+                               @onchange="() => ToggleDailyAsync(d)" />
+                        <span class="flex-grow-1 @(d.CompletedToday ? "text-decoration-line-through text-muted" : "")">@d.Title</span>
+                        @if (d.WeekdayMask != Weekdays.Daily)
+                        {
+                            <span class="small text-muted text-nowrap" title="Wochentags-Muster">@Weekdays.Format(d.WeekdayMask)</span>
+                        }
+                        @if (d.CurrentStreak > 0)
+                        {
+                            <span class="small text-nowrap" title="@d.CurrentStreak Tage in Folge">🔥 @d.CurrentStreak</span>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+</div>
+
 @* ── Inbox: Aufgaben ohne Projektbezug schnell erfassen und zuordnen ────────── *@
 <div class="card mb-3 overflow-hidden">
     <div class="card-header d-flex align-items-center">
@@ -49,16 +97,155 @@
     </div>
 </div>
 
+@* ── Heute: Tasks mit Fälligkeit heute ─────────────────────────────────────── *@
+<div class="card mb-3 overflow-hidden">
+    <div class="card-header d-flex align-items-center">
+        <span class="badge bg-secondary me-2">@DueToday.Count()</span>
+        <span class="fw-semibold">Heute</span>
+    </div>
+    <div class="card-body">
+        @if (allTasks is null)
+        {
+            <p class="text-muted small mb-0">Wird geladen…</p>
+        }
+        else if (!DueToday.Any())
+        {
+            <p class="text-muted small mb-0">Für heute nichts fällig. 🎉</p>
+        }
+        else
+        {
+            <ul class="list-group">
+                @foreach (var task in DueToday)
+                {
+                    <li class="list-group-item d-flex align-items-center gap-2">
+                        <input type="checkbox" class="form-check-input mt-0"
+                               @onchange="() => CompleteTaskAsync(task)" title="Als erledigt markieren" />
+                        <a href="tasks/@task.Id" class="text-decoration-none text-body flex-grow-1">@task.Title</a>
+                        @if (task.StartTime is not null && task.EndTime is not null)
+                        {
+                            <span class="small text-muted text-nowrap">@task.StartTime.Value.ToString("HH:mm")–@task.EndTime.Value.ToString("HH:mm")</span>
+                        }
+                        @if (task.ProjectName is not null)
+                        {
+                            <span class="badge bg-light text-dark">@task.ProjectName</span>
+                        }
+                        <PriorityIndicator Value="@task.Priority" />
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+</div>
+
+@* ── Überfällig: Fälligkeit in der Vergangenheit, noch offen (nur wenn vorhanden) ── *@
+@if (allTasks is not null && Overdue.Any())
+{
+    <div class="card mb-3 overflow-hidden border-warning">
+        <div class="card-header d-flex align-items-center">
+            <span class="badge bg-warning text-dark me-2">@Overdue.Count()</span>
+            <span class="fw-semibold">Überfällig</span>
+        </div>
+        <div class="card-body">
+            <ul class="list-group">
+                @foreach (var task in Overdue)
+                {
+                    <li class="list-group-item d-flex align-items-center gap-2">
+                        <input type="checkbox" class="form-check-input mt-0"
+                               @onchange="() => CompleteTaskAsync(task)" title="Als erledigt markieren" />
+                        <a href="tasks/@task.Id" class="text-decoration-none text-body flex-grow-1">@task.Title</a>
+                        <span class="small text-danger text-nowrap">📅 @task.DueDate!.Value.ToString("dd.MM.yyyy")</span>
+                        @if (task.ProjectName is not null)
+                        {
+                            <span class="badge bg-light text-dark">@task.ProjectName</span>
+                        }
+                        <PriorityIndicator Value="@task.Priority" />
+                        <button class="btn btn-sm btn-outline-primary text-nowrap" @onclick="() => MoveToTodayAsync(task)"
+                                title="Fälligkeit auf heute setzen">→ Heute</button>
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+}
+
+<DailyTaskDialog Visible="showDailyDialog"
+                 OnClose="() => showDailyDialog = false"
+                 OnChanged="ReloadDailyTasksAsync" />
+
 @code {
     private List<TaskResponseDto>? inboxTasks;
     private InboxTaskFormModel newInboxTask = new();
     private bool isSaving;
 
+    // Daily Tasks
+    private List<DailyTaskResponseDto>? dailyTasks;
+    private bool showDailyDialog;
+
+    // Alle (Haupt-)Tasks – für "Heute fällig" und "Überfällig" clientseitig gefiltert.
+    private List<TaskResponseDto>? allTasks;
+
+    private IEnumerable<TaskResponseDto> DueToday =>
+        (allTasks ?? [])
+            .Where(t => t.DueDate?.Date == DateTime.Today && !t.IsCompleted)
+            .OrderBy(t => t.StartTime ?? DateTime.MaxValue)
+            .ThenBy(t => t.Title);
+
+    private IEnumerable<TaskResponseDto> Overdue =>
+        (allTasks ?? [])
+            .Where(t => t.DueDate is not null && t.DueDate.Value.Date < DateTime.Today && !t.IsCompleted)
+            .OrderBy(t => t.DueDate);
+
     protected override async Task OnInitializedAsync()
     {
         await ProjectState.EnsureLoadedAsync();
         inboxTasks = await Api.GetInboxTasksAsync();
+        dailyTasks = await Api.GetDailyTasksTodayAsync() ?? new();
+        allTasks = await Api.GetTasksAsync() ?? new();
     }
+
+    private async Task CompleteTaskAsync(TaskResponseDto task)
+    {
+        var dto = new TaskUpdateDto(
+            task.Title, task.Description, task.DueDate, task.StartTime, task.EndTime,
+            WorkStatus.Done, Enum.Parse<Priority>(task.Priority), task.ProjectId);
+
+        var updated = await Api.UpdateTaskAsync(task.Id, dto);
+        if (updated is null || allTasks is null) return;
+
+        // Lokal ersetzen → fällt aus den Filtern (IsCompleted) heraus.
+        var idx = allTasks.FindIndex(t => t.Id == task.Id);
+        if (idx >= 0) allTasks[idx] = updated;
+    }
+
+    // Setzt die Fälligkeit eines überfälligen Tasks auf heute (wandert nach "Heute").
+    private async Task MoveToTodayAsync(TaskResponseDto task)
+    {
+        var dto = new TaskUpdateDto(
+            task.Title, task.Description, DateTime.Today, task.StartTime, task.EndTime,
+            task.Status, Enum.Parse<Priority>(task.Priority), task.ProjectId);
+
+        var updated = await Api.UpdateTaskAsync(task.Id, dto);
+        if (updated is null || allTasks is null) return;
+
+        // API liefert beim Update keinen Projektnamen mit – lokal erhalten.
+        var idx = allTasks.FindIndex(t => t.Id == task.Id);
+        if (idx >= 0) allTasks[idx] = updated with { ProjectName = task.ProjectName };
+    }
+
+    // ── Daily Tasks ──────────────────────────────────────────────────────────
+
+    private async Task ToggleDailyAsync(DailyTaskResponseDto d)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        var ok = await Api.SetDailyTaskCompletionAsync(d.Id, today, !d.CompletedToday);
+        if (!ok) return;
+
+        // Neu laden, damit CompletedToday und Streak serverseitig aktuell sind.
+        await ReloadDailyTasksAsync();
+    }
+
+    private async Task ReloadDailyTasksAsync() =>
+        dailyTasks = await Api.GetDailyTasksTodayAsync() ?? new();
 
     private async Task CreateInboxTaskAsync()
     {
