@@ -15,12 +15,9 @@
 }
 else
 {
-    @* ── Arbeitsbereiche & Inbox nebeneinander ─────────────────────────── *@
+    @* ── Arbeitsbereiche ───────────────────────────────────────────────── *@
     var workspacesExpanded = expandedSections["Workspaces"];
-    var inboxExpanded = expandedSections["Inbox"];
-    <div class="row g-3 mb-3">
-    <div class="col-12 col-lg-6 order-2">
-    <div class="card h-100 overflow-hidden">
+    <div class="card mb-3 overflow-hidden">
         <button class="btn btn-light w-100 d-flex justify-content-between align-items-center border-0 rounded-0 @(workspacesExpanded ? "border-bottom" : "")"
                 @onclick='() => ToggleSection("Workspaces")'>
             <span class="fw-semibold">
@@ -120,69 +117,6 @@ else
             </div>
         }
     </div>
-    </div>
-    <div class="col-12 col-lg-6 order-1">
-    <div class="card h-100 overflow-hidden">
-        <button class="btn btn-light w-100 d-flex justify-content-between align-items-center border-0 rounded-0 @(inboxExpanded ? "border-bottom" : "")"
-                @onclick='() => ToggleSection("Inbox")'>
-            <span class="fw-semibold">
-                <span class="badge bg-info me-2">@(inboxTasks?.Count ?? 0)</span>
-                @L["Inbox_Title"]
-            </span>
-            <span>@(inboxExpanded ? "▲" : "▼")</span>
-        </button>
-
-        @if (inboxExpanded)
-        {
-            <div class="card-body">
-                <!-- Schnell-Erfassung -->
-                <EditForm Model="newInboxTask" OnValidSubmit="CreateInboxTaskAsync" class="d-flex gap-2 mb-3">
-                    <DataAnnotationsValidator />
-                    <InputText class="form-control form-control-sm" @bind-Value="newInboxTask.Title" placeholder="@L["Inbox_Placeholder"]" />
-                    <button type="submit" class="btn btn-sm btn-primary text-nowrap" disabled="@isSaving">@L["Inbox_Add"]</button>
-                </EditForm>
-
-                @if (inboxTasks is null)
-                {
-                    <p class="text-muted small mb-0">@L["Loading"]</p>
-                }
-                else if (!inboxTasks.Any())
-                {
-                    <p class="text-muted small mb-0">@L["Inbox_Empty"]</p>
-                }
-                else
-                {
-                    <ul class="list-group">
-                        @foreach (var task in inboxTasks)
-                        {
-                            <li class="list-group-item d-flex justify-content-between align-items-center inbox-task @(task.IsCompleted ? "task-completed" : "")"
-                                draggable="true"
-                                @ondragstart="() => draggedTask = task"
-                                @ondragend="() => { draggedTask = null; dragOverProjectId = null; }">
-                                <span class="@(task.IsCompleted ? "text-decoration-line-through text-muted" : "")">
-                                    <span class="text-muted me-1" title="@L["Inbox_DragHint"]">⠿</span>@task.Title
-                                </span>
-                                <div class="d-flex align-items-center gap-2">
-                                    <PriorityIndicator Value="@task.Priority" />
-                                    <select class="form-select form-select-sm w-auto"
-                                            @onchange="e => AssignTaskToProjectAsync(task, e.Value?.ToString())">
-                                        <option value="">@L["Inbox_AssignTo"]</option>
-                                        @foreach (var p in projects)
-                                        {
-                                            <option value="@p.Id">@p.Name</option>
-                                        }
-                                    </select>
-                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteInboxTaskAsync(task)" title="@L["Button_Delete_Title"]">🗑</button>
-                                </div>
-                            </li>
-                        }
-                    </ul>
-                }
-            </div>
-        }
-    </div>
-    </div>
-    </div>
 
     @foreach (var section in Sections)
     {
@@ -212,11 +146,8 @@ else
                         @foreach (var project in sectionProjects)
                         {
                             <div class="col">
-                                <div class="card h-100 @(dragOverProjectId == project.Id ? "drop-target-active" : "")"
-                                     style="@(project.Color is not null ? $"background-color: {project.Color}1A; border-color: {project.Color};" : "")"
-                                     @ondragover:preventDefault="true"
-                                     @ondragover="() => { if (draggedTask is not null) dragOverProjectId = project.Id; }"
-                                     @ondrop="() => DropOnProjectAsync(project)">
+                                <div class="card h-100"
+                                     style="@(project.Color is not null ? $"background-color: {project.Color}1A; border-color: {project.Color};" : "")">
                                     @if (editingProjectId == project.Id)
                                     {
                                         <div class="card-body">
@@ -442,20 +373,11 @@ else
     private Dictionary<string, bool> expandedSections = new()
     {
         ["Workspaces"] = true,
-        ["Inbox"]      = true,
         ["Active"]     = true,
         ["Paused"]     = false,
         ["Archived"]   = false,
     };
     private void ToggleSection(string key) => expandedSections[key] = !expandedSections[key];
-
-    // Inbox (Tasks ohne Projektbezug)
-    private List<TaskResponseDto>? inboxTasks;
-    private InboxTaskFormModel newInboxTask = new();
-
-    // Drag&Drop: Task aus der Inbox auf ein Projekt ziehen
-    private TaskResponseDto? draggedTask;
-    private int? dragOverProjectId;
 
     // Erstellen
     private ProjectCreateFormModel newProject = new();
@@ -479,73 +401,6 @@ else
     {
         await ProjectState.EnsureLoadedAsync();
         await WorkspaceState.EnsureLoadedAsync();
-        inboxTasks = await Api.GetInboxTasksAsync();
-    }
-
-    // ── Inbox ────────────────────────────────────────────────────────────────
-
-    private async Task CreateInboxTaskAsync()
-    {
-        if (string.IsNullOrWhiteSpace(newInboxTask.Title)) return;
-
-        isSaving = true;
-
-        var dto = new TaskCreateDto(
-            newInboxTask.Title,
-            Description: null,
-            DueDate: null, StartTime: null, EndTime: null,
-            Priority: Priority.Medium,
-            ProjectId: null);
-
-        var created = await Api.CreateTaskAsync(dto);
-        if (created is not null)
-        {
-            inboxTasks ??= [];
-            inboxTasks.Add(created);
-            newInboxTask = new();
-        }
-
-        isSaving = false;
-    }
-
-    private async Task AssignTaskToProjectAsync(TaskResponseDto task, string? projectIdValue)
-    {
-        if (!int.TryParse(projectIdValue, out var projectId)) return;
-
-        var dto = new TaskUpdateDto(
-            task.Title, task.Description, task.DueDate,
-            task.StartTime, task.EndTime, task.Status,
-            Enum.Parse<Priority>(task.Priority), projectId);
-
-        var updated = await Api.UpdateTaskAsync(task.Id, dto);
-        if (updated is null || inboxTasks is null) return;
-
-        // Aus der Inbox entfernen und Task-Zähler des Zielprojekts erhöhen
-        inboxTasks.Remove(task);
-
-        var target = projects?.FirstOrDefault(p => p.Id == projectId);
-        if (target is not null)
-        {
-            var idx = projects!.IndexOf(target);
-            projects[idx] = target with { TaskCount = target.TaskCount + 1 };
-        }
-    }
-
-    private async Task DeleteInboxTaskAsync(TaskResponseDto task)
-    {
-        var success = await Api.DeleteTaskAsync(task.Id);
-        if (success)
-            inboxTasks?.Remove(task);
-    }
-
-    private async Task DropOnProjectAsync(ProjectResponseDto project)
-    {
-        var task = draggedTask;
-        draggedTask       = null;
-        dragOverProjectId = null;
-
-        if (task is not null)
-            await AssignTaskToProjectAsync(task, project.Id.ToString());
     }
 
     // ── Bearbeiten ───────────────────────────────────────────────────────────
@@ -804,12 +659,5 @@ else
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
         public string? Color { get; set; }
-    }
-
-    private class InboxTaskFormModel
-    {
-        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Titel ist erforderlich.")]
-        [System.ComponentModel.DataAnnotations.MaxLength(300)]
-        public string Title { get; set; } = string.Empty;
     }
 }

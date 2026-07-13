@@ -49,22 +49,10 @@
     margin-bottom: 0.5rem;
 }
 
-/* Radzen-Dropdowns auf handliche Breite begrenzen. */
-.note-assign-project,
+/* Task-Dropdown auf handliche Breite begrenzen. */
 .note-assign-task {
     min-width: 12rem;
     max-width: 18rem;
-}
-
-/* Farbpunkt hinter dem Projektnamen im Dropdown. */
-.note-project-dot {
-    display: inline-block;
-    width: 0.7rem;
-    height: 0.7rem;
-    border-radius: 50%;
-    margin-left: 0.4rem;
-    vertical-align: middle;
-    flex-shrink: 0;
 }
 
 /* Editor füllt den restlichen Platz; Radzen setzt eine eigene Mindesthöhe. */

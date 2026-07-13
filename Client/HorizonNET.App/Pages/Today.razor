@@ -1,7 +1,124 @@
 @page "/today"
+@inject ApiService Api
+@inject ProjectState ProjectState
 
 <PageTitle>Heute – HorizonNET</PageTitle>
 
-<h1>Heute</h1>
+<h1 class="mb-3">Heute</h1>
 
-<p class="text-muted">Diese Ansicht befindet sich noch im Aufbau.</p>
+@* ── Inbox: Aufgaben ohne Projektbezug schnell erfassen und zuordnen ────────── *@
+<div class="card mb-3 overflow-hidden">
+    <div class="card-header d-flex align-items-center">
+        <span class="badge bg-info me-2">@(inboxTasks?.Count ?? 0)</span>
+        <span class="fw-semibold">Inbox</span>
+    </div>
+    <div class="card-body">
+        <EditForm Model="newInboxTask" OnValidSubmit="CreateInboxTaskAsync" class="d-flex gap-2 mb-3">
+            <DataAnnotationsValidator />
+            <InputText class="form-control form-control-sm" @bind-Value="newInboxTask.Title"
+                       placeholder="Neue Aufgabe…" />
+            <button type="submit" class="btn btn-sm btn-primary text-nowrap" disabled="@isSaving">Hinzufügen</button>
+        </EditForm>
+
+        @if (inboxTasks is null)
+        {
+            <p class="text-muted small mb-0">Wird geladen…</p>
+        }
+        else if (!inboxTasks.Any())
+        {
+            <p class="text-muted small mb-0">Die Inbox ist leer.</p>
+        }
+        else
+        {
+            <ul class="list-group">
+                @foreach (var task in inboxTasks)
+                {
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <a href="tasks/@task.Id" class="text-decoration-none text-body">@task.Title</a>
+                        <div class="d-flex align-items-center gap-2">
+                            <PriorityIndicator Value="@task.Priority" />
+                            <ProjectSelect Change="v => AssignTaskToProjectAsync(task, v)"
+                                           Placeholder="Projekt zuweisen…" AllowClear="false" />
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteInboxTaskAsync(task)"
+                                    title="Löschen">🗑</button>
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+</div>
+
+@code {
+    private List<TaskResponseDto>? inboxTasks;
+    private InboxTaskFormModel newInboxTask = new();
+    private bool isSaving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ProjectState.EnsureLoadedAsync();
+        inboxTasks = await Api.GetInboxTasksAsync();
+    }
+
+    private async Task CreateInboxTaskAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newInboxTask.Title)) return;
+
+        isSaving = true;
+
+        var dto = new TaskCreateDto(
+            newInboxTask.Title,
+            Description: null,
+            DueDate: null, StartTime: null, EndTime: null,
+            Priority: Priority.Medium,
+            ProjectId: null);
+
+        var created = await Api.CreateTaskAsync(dto);
+        if (created is not null)
+        {
+            inboxTasks ??= [];
+            inboxTasks.Add(created);
+            newInboxTask = new();
+        }
+
+        isSaving = false;
+    }
+
+    private async Task AssignTaskToProjectAsync(TaskResponseDto task, int? projectId)
+    {
+        if (projectId is null) return;
+
+        var dto = new TaskUpdateDto(
+            task.Title, task.Description, task.DueDate,
+            task.StartTime, task.EndTime, task.Status,
+            Enum.Parse<Priority>(task.Priority), projectId);
+
+        var updated = await Api.UpdateTaskAsync(task.Id, dto);
+        if (updated is null || inboxTasks is null) return;
+
+        inboxTasks.Remove(task);
+
+        // Task-Zähler des Zielprojekts im geteilten State fortschreiben.
+        var target = ProjectState.Projects?.FirstOrDefault(p => p.Id == projectId);
+        if (target is not null)
+        {
+            var idx = ProjectState.Projects!.IndexOf(target);
+            ProjectState.Projects[idx] = target with { TaskCount = target.TaskCount + 1 };
+            ProjectState.NotifyChanged();
+        }
+    }
+
+    private async Task DeleteInboxTaskAsync(TaskResponseDto task)
+    {
+        var success = await Api.DeleteTaskAsync(task.Id);
+        if (success)
+            inboxTasks?.Remove(task);
+    }
+
+    private class InboxTaskFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Titel ist erforderlich.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(300)]
+        public string Title { get; set; } = string.Empty;
+    }
+}

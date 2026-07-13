@@ -1,3 +1,16 @@
+/* Radzen 11.0.4 deklariert die Icon-Schrift (Material Symbols) mit format()-Hinweisen
+   ("woff2 supports variations" / "woff2-variations"), die aktuelle Browser nicht mehr
+   erkennen (woff2-variations wurde aus Chrome entfernt). Dadurch wird die Schrift beim
+   Rendern NICHT geladen und Radzen-Icons erscheinen als Ligatur-Text ("search",
+   "arrow_drop_down"). Erneute Deklaration mit format("woff2") – da app.css nach
+   standard.css geladen wird, gewinnt sie, und der Browser lädt die Schrift wirklich. */
+@font-face {
+    font-family: "Material Symbols";
+    src: url("/_content/Radzen.Blazor/fonts/MaterialSymbolsOutlined.woff2") format("woff2");
+    font-style: normal;
+    font-weight: 100 700;
+}
+
 /* Das Radzen "Standard"-Theme setzt auf <body> eine helle Hintergrundfarbe
    UND ein dekoratives Mesh-SVG als background-image (unten/rechts). Beides
    neutralisieren, damit die App ihren weißen Bootstrap-Look behält. */

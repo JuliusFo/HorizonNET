@@ -1,0 +1,15 @@
+.project-select {
+    min-width: 12rem;
+    max-width: 18rem;
+}
+
+/* Farbpunkt hinter dem Projektnamen im Dropdown. */
+.project-select-dot {
+    display: inline-block;
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 50%;
+    margin-left: 0.4rem;
+    vertical-align: middle;
+    flex-shrink: 0;
+}

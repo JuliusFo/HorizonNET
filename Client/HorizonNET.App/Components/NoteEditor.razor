@@ -1,6 +1,4 @@
 @inject ApiService Api
-@inject ProjectState ProjectState
-@inject WorkspaceState WorkspaceState
 @implements IAsyncDisposable
 
 @* Editor für eine einzelne Notiz mit debounced Auto-Save (2 s nach letzter Änderung).
@@ -22,17 +20,7 @@ else
         </div>
 
         <div class="note-editor-meta">
-            <RadzenDropDown TValue="int?" Data="projectOptions" TextProperty="Label" ValueProperty="Id"
-                            @bind-Value="selectedProjectId" Change="OnAssignmentChanged"
-                            AllowFiltering="true" AllowClear="true"
-                            FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
-                            Placeholder="— kein Projekt —" class="note-assign-project">
-                <Template Context="opt">
-                    @{ var po = (ProjectOption)opt; }
-                    <span>@po.Label</span>
-                    <span class="note-project-dot" style="background-color:@(po.Color ?? "#6c757d");"></span>
-                </Template>
-            </RadzenDropDown>
+            <ProjectSelect @bind-Value="selectedProjectId" Change="OnAssignmentChanged" />
 
             <RadzenDropDown TValue="int?" Data="taskOptions" TextProperty="Label" ValueProperty="Id"
                             @bind-Value="selectedTaskId" Change="OnAssignmentChanged"
@@ -72,41 +60,15 @@ else
     // Zuordnung (Projekt/Task) – aus der geladenen Notiz übernommen, per Dropdown änderbar.
     private int? selectedProjectId;
     private int? selectedTaskId;
-    private List<ProjectOption> projectOptions = new();
     private List<TaskOption> taskOptions = new();
 
-    // Auswahl-Einträge für die Dropdowns.
-    private record ProjectOption(int Id, string Label, string? Color);
-    private record TaskOption(int Id, string Label); // Sub-Tasks mit ↳ gekennzeichnet
+    // Auswahl-Eintrag für das Task-Dropdown (Sub-Tasks mit ↳ gekennzeichnet).
+    private record TaskOption(int Id, string Label);
 
     private static readonly StringComparer NameComparer = StringComparer.CurrentCultureIgnoreCase;
 
     protected override async Task OnInitializedAsync()
     {
-        await ProjectState.EnsureLoadedAsync();
-        await WorkspaceState.EnsureLoadedAsync();
-
-        var wsNames = (WorkspaceState.Workspaces ?? [])
-            .ToDictionary(w => w.Id, w => w.Name);
-
-        // Projekte sortiert nach Arbeitsbereichsname (A-Z), dann Projektname (A-Z);
-        // Label = "Arbeitsbereich - Projekt" (ohne Arbeitsbereich nur der Projektname).
-        projectOptions = (ProjectState.Projects ?? [])
-            .Select(p => new
-            {
-                p.Id,
-                p.Name,
-                p.Color,
-                Ws = p.WorkspaceId is int wid && wsNames.TryGetValue(wid, out var wn) ? wn : string.Empty
-            })
-            .OrderBy(x => x.Ws, NameComparer)
-            .ThenBy(x => x.Name, NameComparer)
-            .Select(x => new ProjectOption(
-                x.Id,
-                string.IsNullOrEmpty(x.Ws) ? x.Name : $"{x.Ws} - {x.Name}",
-                x.Color))
-            .ToList();
-
         // Tasks: Haupt-Tasks A-Z, ihre Sub-Tasks jeweils A-Z direkt darunter.
         var all = await Api.GetTasksAsync() ?? new();
         taskOptions = new();
@@ -154,9 +116,9 @@ else
         state             = SaveState.Saved;
     }
 
-    // Die RadzenDropDowns aktualisieren selectedProjectId/selectedTaskId über @bind-Value;
-    // hier nur den Auto-Save anstoßen.
-    private void OnAssignmentChanged(object value) => ScheduleSave();
+    // ProjectSelect/Task-Dropdown aktualisieren selectedProjectId/selectedTaskId über
+    // @bind-Value; hier nur den Auto-Save anstoßen (parameterlos → bindet an beide Events).
+    private void OnAssignmentChanged() => ScheduleSave();
 
     private void OnTitleInput(ChangeEventArgs e)
     {

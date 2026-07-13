@@ -87,13 +87,28 @@
     padding-bottom: 0.25rem;
 }
 
+/* Vertikaler Abstand vom oberen Rand bis zur Mitte der ersten Textzeile bzw.
+   des Punktes. Wird für den Punkt-Offset und die Baum-Ticks geteilt, damit
+   auch bei mehrzeiligen (umbrechenden) Projektnamen alles auf der ersten
+   Zeile ausgerichtet bleibt. */
+.nav-subitems {
+    --nav-sublink-tick-top: 1rem;
+}
+
 .nav-subitems ::deep a.nav-sublink {
     position: relative;
-    height: 2.25rem;
-    line-height: 2.25rem;
+    align-items: flex-start;
+    height: auto;
+    min-height: 2.25rem;
+    line-height: 1.3;
     font-size: 0.85rem;
-    padding-left: 2.5rem;
+    padding: 0.45rem 0.6rem 0.45rem 2.5rem;
     color: #b9b9b9;
+}
+
+/* Punkt an der ersten Textzeile ausrichten statt vertikal zentriert */
+.nav-subitems ::deep a.nav-sublink .nav-project-dot {
+    margin-top: 0.25rem;
 }
 
 /* Baum-Verbindungslinie: senkrechter Strich (├ / └) */
@@ -107,9 +122,10 @@
     background-color: rgba(255, 255, 255, 0.25);
 }
 
-/* Beim letzten Eintrag endet der senkrechte Strich auf halber Höhe (└) */
+/* Beim letzten Eintrag endet der senkrechte Strich an der ersten Zeile (└) */
 .nav-subitems ::deep a.nav-sublink:last-child::before {
-    bottom: 50%;
+    bottom: auto;
+    height: var(--nav-sublink-tick-top);
 }
 
 /* Baum-Verbindungslinie: waagerechter Strich zum Eintrag */
@@ -117,7 +133,7 @@
     content: "";
     position: absolute;
     left: 1.1rem;
-    top: 50%;
+    top: var(--nav-sublink-tick-top);
     width: 0.7rem;
     height: 1px;
     background-color: rgba(255, 255, 255, 0.25);

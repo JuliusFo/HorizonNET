@@ -1,0 +1,73 @@
+@inject ProjectState ProjectState
+@inject WorkspaceState WorkspaceState
+
+@* Wiederverwendbare Projekt-Auswahl: suchbares RadzenDropDown mit Beschriftung
+   „Arbeitsbereich - Projekt" + Farbpunkt, sortiert nach Arbeitsbereich (A-Z),
+   dann Projekt (A-Z). Genutzt im NoteEditor und in der Inbox (Heute-Seite). *@
+<RadzenDropDown TValue="int?" Data="options" TextProperty="Label" ValueProperty="Id"
+                @bind-Value="currentValue" Change="OnDropDownChange"
+                AllowFiltering="true" AllowClear="AllowClear"
+                FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                Placeholder="@Placeholder" class="@CssClass">
+    <Template Context="opt">
+        @{ var po = (ProjectOption)opt; }
+        <span>@po.Label</span>
+        <span class="project-select-dot" style="background-color:@(po.Color ?? "#6c757d");"></span>
+    </Template>
+</RadzenDropDown>
+
+@code {
+    // Ausgewählte Projekt-Id (für @bind-Value beim Aufrufer).
+    [Parameter] public int? Value { get; set; }
+    [Parameter] public EventCallback<int?> ValueChanged { get; set; }
+
+    // Zusätzliches Signal nach jeder Auswahländerung (z. B. für Auto-Save/Zuweisen).
+    [Parameter] public EventCallback<int?> Change { get; set; }
+
+    [Parameter] public string Placeholder { get; set; } = "— kein Projekt —";
+    [Parameter] public bool AllowClear { get; set; } = true;
+    [Parameter] public string? Class { get; set; }
+
+    private string CssClass => string.IsNullOrEmpty(Class) ? "project-select" : $"project-select {Class}";
+
+    private int? currentValue;
+    private List<ProjectOption> options = new();
+    private record ProjectOption(int Id, string Label, string? Color);
+    private static readonly StringComparer NameComparer = StringComparer.CurrentCultureIgnoreCase;
+
+    protected override void OnParametersSet() => currentValue = Value;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ProjectState.EnsureLoadedAsync();
+        await WorkspaceState.EnsureLoadedAsync();
+
+        var wsNames = (WorkspaceState.Workspaces ?? [])
+            .ToDictionary(w => w.Id, w => w.Name);
+
+        // Sortiert nach Arbeitsbereichsname (A-Z), dann Projektname (A-Z);
+        // Label = „Arbeitsbereich - Projekt" (ohne Arbeitsbereich nur der Projektname).
+        options = (ProjectState.Projects ?? [])
+            .Select(p => new
+            {
+                p.Id,
+                p.Name,
+                p.Color,
+                Ws = p.WorkspaceId is int wid && wsNames.TryGetValue(wid, out var wn) ? wn : string.Empty
+            })
+            .OrderBy(x => x.Ws, NameComparer)
+            .ThenBy(x => x.Name, NameComparer)
+            .Select(x => new ProjectOption(
+                x.Id,
+                string.IsNullOrEmpty(x.Ws) ? x.Name : $"{x.Ws} - {x.Name}",
+                x.Color))
+            .ToList();
+    }
+
+    private async Task OnDropDownChange(object value)
+    {
+        // currentValue ist über @bind-Value bereits aktualisiert.
+        await ValueChanged.InvokeAsync(currentValue);
+        await Change.InvokeAsync(currentValue);
+    }
+}
