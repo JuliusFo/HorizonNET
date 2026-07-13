@@ -1,0 +1,57 @@
+@implements IDisposable
+@inject ToastService Toasts
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1090;">
+    @foreach (var toast in Toasts.Toasts)
+    {
+        <div class="toast show align-items-center border-0 mb-2 @LevelClass(toast.Level)"
+             role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body d-flex align-items-center gap-2">
+                    <span aria-hidden="true">@Icon(toast.Level)</span>
+                    <span>@toast.Text</span>
+                    @if (toast.ActionLabel is not null && toast.Action is not null)
+                    {
+                        <button type="button" class="btn btn-sm btn-light ms-2 py-0"
+                                @onclick="() => InvokeActionAsync(toast)">@toast.ActionLabel</button>
+                    }
+                </div>
+                <button type="button" class="btn-close @CloseClass(toast.Level) me-2 m-auto"
+                        aria-label="Schließen" @onclick="() => Toasts.Remove(toast.Id)"></button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    protected override void OnInitialized() => Toasts.OnChange += HandleChange;
+
+    private void HandleChange() => InvokeAsync(StateHasChanged);
+
+    private async Task InvokeActionAsync(ToastMessage toast)
+    {
+        Toasts.Remove(toast.Id);
+        if (toast.Action is not null)
+            await toast.Action();
+    }
+
+    private static string Icon(ToastLevel level) => level switch
+    {
+        ToastLevel.Success => "✓",
+        ToastLevel.Error   => "⚠",
+        _                  => "ℹ",
+    };
+
+    private static string LevelClass(ToastLevel level) => level switch
+    {
+        ToastLevel.Success => "text-bg-success",
+        ToastLevel.Error   => "text-bg-danger",
+        _                  => "text-bg-light",
+    };
+
+    // Auf farbigem Hintergrund braucht das Schließen-Kreuz die weiße Variante.
+    private static string CloseClass(ToastLevel level) =>
+        level == ToastLevel.Info ? "" : "btn-close-white";
+
+    public void Dispose() => Toasts.OnChange -= HandleChange;
+}

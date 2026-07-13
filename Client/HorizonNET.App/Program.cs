@@ -13,8 +13,19 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 var apiBaseUrl = builder.Configuration["ApiSettings:BaseUrl"]
     ?? throw new InvalidOperationException("ApiSettings:BaseUrl ist nicht konfiguriert.");
 
-// HttpClient für den ApiService mit der konfigurierten Server-URL registrieren
-builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(apiBaseUrl) });
+// Toast-Benachrichtigungen (Netzwerkfehler-Feedback, später Undo)
+builder.Services.AddScoped<ToastService>();
+
+// HttpClient für den ApiService mit der konfigurierten Server-URL registrieren.
+// Ein DelegatingHandler meldet fehlgeschlagene Aufrufe zentral als Toast.
+builder.Services.AddScoped(sp =>
+{
+    var handler = new ApiErrorHandler(sp.GetRequiredService<ToastService>())
+    {
+        InnerHandler = new HttpClientHandler()
+    };
+    return new HttpClient(handler) { BaseAddress = new Uri(apiBaseUrl) };
+});
 
 // ApiService für Dependency Injection registrieren
 builder.Services.AddScoped<ApiService>();
