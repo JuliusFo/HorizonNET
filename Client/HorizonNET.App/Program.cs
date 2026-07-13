@@ -31,6 +31,9 @@ builder.Services.AddScoped<WorkspaceState>();
 // Lokale UI-Einstellungen (localStorage)
 builder.Services.AddScoped<SettingsState>();
 
+// UI-Sounds (Web Audio via JS-Interop)
+builder.Services.AddScoped<SoundService>();
+
 // Lokalisierung registrieren
 builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
 

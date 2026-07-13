@@ -1,5 +1,6 @@
 @inject ApiService Api
 @inject IStringLocalizer<Enums> EnumL
+@inject SoundService Sound
 
 @* Wiederverwendbarer Bearbeiten-Dialog für Tasks (leichtgewichtiges Overlay,
    kein JS-Interop). Die Sichtbarkeit steuert der Aufrufer über den Task-Parameter. *@
@@ -154,14 +155,21 @@
             editModel.DueDate, editModel.StartTime, editModel.EndTime,
             editModel.Status, editModel.Priority, Task.ProjectId);
 
+        var wasDone = Task.Status == WorkStatus.Done;
+
         var updated = await Api.UpdateTaskAsync(Task.Id, dto);
         isSaving = false;
 
         if (updated is null)
         {
             editError = "Speichern fehlgeschlagen.";
+            await Sound.ErrorAsync();
             return;
         }
+
+        // Frisch auf "erledigt" gesetzt → Erfolgs-Ton.
+        if (editModel.Status == WorkStatus.Done && !wasDone)
+            await Sound.SuccessAsync();
 
         // Die API liefert beim Update keine Sub-Tasks mit – lokalen Stand erhalten.
         updated = updated with { SubTasks = subTasks.Count > 0 ? subTasks.ToList() : null };
@@ -177,6 +185,7 @@
         if (!ok)
         {
             editError = "Löschen fehlgeschlagen.";
+            await Sound.ErrorAsync();
             return;
         }
 

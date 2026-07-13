@@ -1,6 +1,7 @@
 @page "/today"
 @inject ApiService Api
 @inject ProjectState ProjectState
+@inject SoundService Sound
 
 <PageTitle>Heute – HorizonNET</PageTitle>
 
@@ -210,11 +211,18 @@
             WorkStatus.Done, Enum.Parse<Priority>(task.Priority), task.ProjectId);
 
         var updated = await Api.UpdateTaskAsync(task.Id, dto);
-        if (updated is null || allTasks is null) return;
+        if (updated is null)
+        {
+            await Sound.ErrorAsync();
+            return;
+        }
+        if (allTasks is null) return;
 
         // Lokal ersetzen → fällt aus den Filtern (IsCompleted) heraus.
         var idx = allTasks.FindIndex(t => t.Id == task.Id);
         if (idx >= 0) allTasks[idx] = updated;
+
+        await Sound.SuccessAsync();
     }
 
     // Setzt die Fälligkeit eines überfälligen Tasks auf heute (wandert nach "Heute").
@@ -236,12 +244,26 @@
 
     private async Task ToggleDailyAsync(DailyTaskResponseDto d)
     {
+        var wasChecking = !d.CompletedToday;
         var today = DateOnly.FromDateTime(DateTime.Now);
-        var ok = await Api.SetDailyTaskCompletionAsync(d.Id, today, !d.CompletedToday);
-        if (!ok) return;
+        var ok = await Api.SetDailyTaskCompletionAsync(d.Id, today, wasChecking);
+        if (!ok)
+        {
+            await Sound.ErrorAsync();
+            return;
+        }
 
         // Neu laden, damit CompletedToday und Streak serverseitig aktuell sind.
         await ReloadDailyTasksAsync();
+
+        if (wasChecking)
+        {
+            // Alles geschafft → Fanfare, sonst kurzer Abhak-Ton.
+            if (dailyTasks is { Count: > 0 } && dailyTasks.All(x => x.CompletedToday))
+                await Sound.CelebrateAsync();
+            else
+                await Sound.DailyAsync();
+        }
     }
 
     private async Task ReloadDailyTasksAsync() =>

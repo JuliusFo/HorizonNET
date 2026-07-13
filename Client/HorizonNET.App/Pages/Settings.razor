@@ -19,6 +19,13 @@
             <option value="2">Monat</option>
         </select>
         <div class="form-text">Wird beim Öffnen des Kalenders vorausgewählt.</div>
+
+        <div class="form-check form-switch mt-3">
+            <input class="form-check-input" type="checkbox" id="soundsToggle"
+                   checked="@AppSettings.SoundsEnabled" @onchange="OnSoundsChanged" />
+            <label class="form-check-label" for="soundsToggle">Sound-Effekte</label>
+        </div>
+        <div class="form-text">Kurze Töne bei erledigten Tasks und Daily Tasks.</div>
     </div>
 </div>
 
@@ -94,6 +101,12 @@
     {
         if (int.TryParse(e.Value?.ToString(), out var index))
             await AppSettings.SetCalendarDefaultViewAsync(index);
+    }
+
+    private async Task OnSoundsChanged(ChangeEventArgs e)
+    {
+        if (e.Value is bool enabled)
+            await AppSettings.SetSoundsEnabledAsync(enabled);
     }
 
     private async Task DisconnectAsync()
