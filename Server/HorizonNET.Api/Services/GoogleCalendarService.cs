@@ -77,6 +77,16 @@ public class GoogleCalendarService
             throw new InvalidOperationException(
                 "Kein Refresh-Token von Google erhalten. Bitte erneut verbinden und den Zugriff bestätigen.");
 
+        // Googles granulare Zustimmung erlaubt es, einzelne Berechtigungen abzuwählen.
+        // Ohne den Kalender-Scope käme später bei jedem Kalender-Zugriff ein 403
+        // "insufficient scopes" – deshalb schon hier ablehnen, statt eine halbgare
+        // Verbindung zu speichern.
+        if (!string.IsNullOrEmpty(token.Scope) && !GrantedIncludesCalendar(token.Scope))
+        {
+            await repo.DeleteAsync();
+            throw new GoogleScopeNotGrantedException();
+        }
+
         string? email = null;
         if (!string.IsNullOrEmpty(token.IdToken))
             email = (await GoogleJsonWebSignature.ValidateAsync(token.IdToken)).Email;
@@ -108,15 +118,27 @@ public class GoogleCalendarService
         return new UserCredential(CreateFlow(), UserKey, token);
     }
 
+    // Prüft, ob die erteilten Scopes den Kalender-Schreib-/Lese-Scope enthalten.
+    private static bool GrantedIncludesCalendar(string grantedScopes) =>
+        grantedScopes.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                     .Contains(CalendarService.Scope.CalendarEvents);
+
     // Erkennt einen von Google widerrufenen oder abgelaufenen Refresh-Token.
     // Tritt im Testing-Modus zwangsläufig nach 7 Tagen auf.
     private static bool IsRevokedToken(TokenResponseException ex) =>
         ex.Error?.Error == "invalid_grant";
 
-    // Verwirft die gespeicherte Verbindung, wenn Google den Refresh-Token nicht mehr
-    // akzeptiert. Danach zeigt die App wieder "nicht verbunden" (statt bei jedem Aufruf
-    // zu scheitern) und signalisiert dem Nutzer, dass er neu verbinden muss.
-    private Task HandleRevokedTokenAsync() => repo.DeleteAsync();
+    // Erkennt einen 403, weil die Kalender-Berechtigung fehlt (Scope nicht erteilt).
+    private static bool IsInsufficientScopes(GoogleApiException ex) =>
+        ex.HttpStatusCode == HttpStatusCode.Forbidden &&
+        (ex.Error?.Errors?.Any(e =>
+             e.Reason is "ACCESS_TOKEN_SCOPE_INSUFFICIENT" or "insufficientPermissions") == true
+         || ex.Message.Contains("insufficient authentication scopes", StringComparison.OrdinalIgnoreCase));
+
+    // Verwirft die gespeicherte Verbindung, wenn Google sie nicht mehr akzeptiert
+    // (Refresh-Token widerrufen/abgelaufen ODER Kalender-Scope fehlt). Danach zeigt die
+    // App wieder "nicht verbunden" und signalisiert dem Nutzer, dass er neu verbinden muss.
+    private Task InvalidateConnectionAsync() => repo.DeleteAsync();
 
     // Liest die Termine des primären Kalenders im angegebenen (UTC-)Zeitraum.
     // Leere Liste, wenn nicht verbunden.
@@ -154,7 +176,14 @@ public class GoogleCalendarService
         {
             // Refresh-Token widerrufen/abgelaufen: Verbindung verwerfen und leer liefern,
             // statt den Kalender-Load serverseitig mit 500 scheitern zu lassen.
-            await HandleRevokedTokenAsync();
+            await InvalidateConnectionAsync();
+            return [];
+        }
+        catch (GoogleApiException ex) when (IsInsufficientScopes(ex))
+        {
+            // Kalender-Berechtigung fehlt: Verbindung verwerfen und leer liefern (statt 500).
+            // Der Nutzer muss neu verbinden und den Kalenderzugriff bestätigen.
+            await InvalidateConnectionAsync();
             return [];
         }
     }
@@ -241,7 +270,12 @@ public class GoogleCalendarService
         {
             // Refresh-Token widerrufen/abgelaufen: Verbindung verwerfen, damit die App
             // wieder "nicht verbunden" zeigt. Lokale Speicherung bleibt unberührt.
-            await HandleRevokedTokenAsync();
+            await InvalidateConnectionAsync();
+        }
+        catch (GoogleApiException ex) when (IsInsufficientScopes(ex))
+        {
+            // Kalender-Berechtigung fehlt: Verbindung verwerfen (Nutzer muss neu verbinden).
+            await InvalidateConnectionAsync();
         }
         catch
         {
@@ -262,7 +296,11 @@ public class GoogleCalendarService
         }
         catch (TokenResponseException ex) when (IsRevokedToken(ex))
         {
-            await HandleRevokedTokenAsync();
+            await InvalidateConnectionAsync();
+        }
+        catch (GoogleApiException ex) when (IsInsufficientScopes(ex))
+        {
+            await InvalidateConnectionAsync();
         }
         catch
         {
@@ -307,4 +345,11 @@ public class GoogleCalendarService
 
         return ev;
     }
+}
+
+// Wird beim Verbinden ausgelöst, wenn die Kalender-Berechtigung nicht erteilt wurde.
+public class GoogleScopeNotGrantedException : Exception
+{
+    public GoogleScopeNotGrantedException()
+        : base("Kalenderzugriff wurde nicht erteilt.") { }
 }

@@ -34,6 +34,13 @@
         {
             <div class="alert alert-success py-2">Google-Konto erfolgreich verbunden.</div>
         }
+        else if (GoogleResult == "noscope")
+        {
+            <div class="alert alert-warning py-2">
+                Der <strong>Kalenderzugriff</strong> wurde nicht erteilt. Bitte erneut verbinden und
+                auf dem Google-Zustimmungsbildschirm die <strong>Kalender-Berechtigung</strong> ankreuzen.
+            </div>
+        }
         else if (GoogleResult == "error")
         {
             <div class="alert alert-danger py-2">Verbindung fehlgeschlagen. Bitte erneut versuchen.</div>

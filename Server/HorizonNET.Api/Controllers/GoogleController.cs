@@ -23,6 +23,12 @@ public class GoogleController(GoogleCalendarService google, IConfiguration confi
             await google.HandleCallbackAsync(code, RedirectUri());
             return Redirect(ClientReturnUrl("connected"));
         }
+        catch (GoogleScopeNotGrantedException)
+        {
+            // Kalender-Berechtigung wurde nicht erteilt – eigener Status für eine
+            // klare Meldung auf der Einstellungsseite.
+            return Redirect(ClientReturnUrl("noscope"));
+        }
         catch
         {
             return Redirect(ClientReturnUrl("error"));
