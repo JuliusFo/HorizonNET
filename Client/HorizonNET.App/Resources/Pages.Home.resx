@@ -107,6 +107,15 @@
   <data name="Workspace_None" xml:space="preserve">
     <value>Kein Arbeitsbereich</value>
   </data>
+  <data name="Filter_Workspace_Title" xml:space="preserve">
+    <value>Nur diesen Arbeitsbereich anzeigen</value>
+  </data>
+  <data name="Filter_Active" xml:space="preserve">
+    <value>Gefiltert nach Arbeitsbereich: {0}</value>
+  </data>
+  <data name="Filter_ShowAll" xml:space="preserve">
+    <value>Alle anzeigen</value>
+  </data>
 
   <!-- Felder -->
   <data name="Field_Name" xml:space="preserve">
