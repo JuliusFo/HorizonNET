@@ -1,5 +1,6 @@
 @page "/projects/{Id:int}"
 @inject ApiService Api
+@inject ProjectState ProjectState
 @inject IStringLocalizer<ProjectDetail> L
 @inject IStringLocalizer<Enums> EnumL
 @inject ToastService Toast
@@ -13,7 +14,11 @@
 }
 else
 {
-    <h1>@project.Name</h1>
+    <div class="d-flex justify-content-between align-items-start gap-2">
+        <h1>@project.Name</h1>
+        <button class="btn btn-sm btn-outline-primary btn-icon flex-shrink-0"
+                @onclick="() => showProjectDialog = true" title="@L["Button_Edit_Title"]">✎</button>
+    </div>
 
     <div class="mb-3">
         @if (project.Description is not null)
@@ -142,6 +147,42 @@ else
             </button>
         </EditForm>
     }
+
+    @* ── Notizen zum Projekt (Muster wie auf der Task-Detailseite) ───────────── *@
+    <hr class="my-4" />
+
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h2 class="h5 mb-0">Notizen</h2>
+        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="CreateNoteAsync">
+            + Neue Notiz
+        </button>
+    </div>
+
+    @if (notes is null)
+    {
+        <p class="text-muted small mb-0">@L["Loading"]</p>
+    }
+    else
+    {
+        @if (notes.Count > 0)
+        {
+            <div class="border rounded mb-3">
+                <NoteList Notes="notes" SelectedId="selectedNote?.Id" OnSelect="SelectNoteAsync" />
+            </div>
+        }
+        else if (selectedNote is null)
+        {
+            <p class="text-muted small">Noch keine Notizen zu diesem Projekt.</p>
+        }
+
+        @if (selectedNote is not null)
+        {
+            <div class="border rounded p-2 mb-4">
+                <NoteEditor @ref="noteEditor" Note="selectedNote"
+                            OnSaved="HandleNoteSaved" OnDeleted="HandleNoteDeleted" />
+            </div>
+        }
+    }
 }
 
 <TaskEditDialog Task="selectedTask"
@@ -150,12 +191,25 @@ else
                 OnTaskUpdated="HandleTaskUpdated"
                 OnClose="@(() => selectedTask = null)" />
 
+<ProjectEditDialog Visible="showProjectDialog"
+                   Project="project"
+                   OnSaved="HandleProjectSavedAsync"
+                   OnClose="@(() => showProjectDialog = false)" />
+
 @code {
     [Parameter] public int Id { get; set; }
 
     private ProjectResponseDto? project;
     private List<TaskResponseDto>? tasks;
     private int? loadedId;
+
+    // Notizen zum Projekt (Muster wie TaskDetail)
+    private List<NoteResponseDto>? notes;
+    private NoteResponseDto? selectedNote;
+    private NoteEditor? noteEditor;
+
+    // Projekt bearbeiten (geteilter Dialog)
+    private bool showProjectDialog;
 
     // Neuer Task
     private TaskCreateFormModel newTask = new();
@@ -176,17 +230,25 @@ else
     protected override async Task OnParametersSetAsync()
     {
         if (loadedId == Id) return;
+
+        // Der NoteEditor wird beim Projektwechsel nicht disposed (nur Note = null),
+        // deshalb greift der Dispose-Flush nicht – offene Änderungen hier sichern.
+        if (noteEditor is not null) await noteEditor.FlushAsync();
+
         loadedId = Id;
 
         // Beim Projektwechsel Daten und transienten UI-Zustand zurücksetzen.
         project            = null;
         tasks              = null;
+        notes              = null;
+        selectedNote       = null;
         selectedTask       = null;
         showForm           = false;
         addingSubTaskForId = null;
 
         project = await Api.GetProjectAsync(Id);
         tasks   = await Api.GetTasksByProjectAsync(Id);
+        notes   = await Api.GetNotesByProjectAsync(Id) ?? new();
     }
 
     // ── Render-Helfer ────────────────────────────────────────────────────────
@@ -464,6 +526,68 @@ else
         }
 
         isSaving = false;
+    }
+
+    // ── Notizen ──────────────────────────────────────────────────────────────
+
+    private async Task CreateNoteAsync()
+    {
+        if (noteEditor is not null) await noteEditor.FlushAsync();
+
+        var created = await Api.CreateNoteAsync(new NoteCreateDto("Neue Notiz", null, ProjectId: Id));
+        if (created is null || notes is null) return;
+
+        notes.Insert(0, created);
+        selectedNote = created;
+    }
+
+    private async Task SelectNoteAsync(NoteResponseDto note)
+    {
+        if (selectedNote?.Id == note.Id) return;
+        if (noteEditor is not null) await noteEditor.FlushAsync(); // offene Änderungen sichern
+        selectedNote = note;
+    }
+
+    private void HandleNoteSaved(NoteResponseDto updated)
+    {
+        if (notes is null) return;
+
+        var idx = notes.FindIndex(n => n.Id == updated.Id);
+        if (idx >= 0) notes[idx] = updated;
+        if (selectedNote?.Id == updated.Id) selectedNote = updated;
+
+        StateHasChanged();
+    }
+
+    private void HandleNoteDeleted(int id)
+    {
+        var title = notes?.FirstOrDefault(n => n.Id == id)?.Title;
+        notes?.RemoveAll(n => n.Id == id);
+        if (selectedNote?.Id == id) selectedNote = null;
+
+        Toast.ShowUndo(string.IsNullOrWhiteSpace(title) ? "Notiz gelöscht" : $"{title} gelöscht", async () =>
+        {
+            if (!await Api.RestoreNoteAsync(id)) return;
+            notes = await Api.GetNotesByProjectAsync(Id) ?? notes;
+            await InvokeAsync(StateHasChanged);
+        });
+    }
+
+    // ── Projekt bearbeiten (ProjectEditDialog) ───────────────────────────────
+
+    private void HandleProjectSavedAsync(ProjectResponseDto saved)
+    {
+        project           = saved;
+        showProjectDialog = false;
+
+        // Geteilten State mitziehen, damit Navigation/Übersicht nicht veralten.
+        var all = ProjectState.Projects;
+        if (all is not null)
+        {
+            var idx = all.FindIndex(p => p.Id == saved.Id);
+            if (idx >= 0) all[idx] = saved;
+            ProjectState.NotifyChanged();
+        }
     }
 
     // ── Formularmodelle ──────────────────────────────────────────────────────
