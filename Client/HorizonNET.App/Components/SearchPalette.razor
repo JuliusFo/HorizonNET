@@ -1,0 +1,210 @@
+@implements IAsyncDisposable
+@inject ApiService Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+@if (visible)
+{
+    <div class="search-backdrop" @onclick="Close"></div>
+    <div class="search-palette" role="dialog" aria-modal="true">
+        <input @ref="inputRef" class="form-control search-input"
+               placeholder="Projekte, Tasks, Notizen durchsuchen…"
+               value="@query"
+               @oninput="OnInputAsync"
+               @onkeydown="OnKeyDownAsync" />
+
+        @if (searching)
+        {
+            <div class="search-hint">Suche…</div>
+        }
+        else if (results.Count > 0)
+        {
+            <ul class="search-results">
+                @for (var i = 0; i < results.Count; i++)
+                {
+                    var idx = i;
+                    var hit = results[i];
+                    <li class="search-result @(idx == selected ? "active" : "")"
+                        @onclick="() => OpenAsync(hit)"
+                        @onmouseover="() => selected = idx">
+                        <span class="search-icon" aria-hidden="true">@Icon(hit.Type)</span>
+                        <span class="search-title">@hit.Title</span>
+                        @if (!string.IsNullOrWhiteSpace(hit.Context))
+                        {
+                            <span class="search-context">@hit.Context</span>
+                        }
+                        <span class="search-type">@Label(hit.Type)</span>
+                    </li>
+                }
+            </ul>
+        }
+        else if (!string.IsNullOrWhiteSpace(query))
+        {
+            <div class="search-hint">Keine Treffer.</div>
+        }
+        else
+        {
+            <div class="search-hint">↑↓ auswählen · Enter öffnen · Esc schließen</div>
+        }
+    </div>
+}
+
+@code {
+    private bool visible;
+    private string query = string.Empty;
+    private List<SearchHitDto> results = new();
+    private int selected;
+    private bool searching;
+    private bool focusPending;
+
+    private ElementReference inputRef;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<SearchPalette>? selfRef;
+    private CancellationTokenSource? debounceCts;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            module  = await JS.InvokeAsync<IJSObjectReference>("import", "./js/shortcuts.js");
+            selfRef = DotNetObjectReference.Create(this);
+            await module.InvokeVoidAsync("registerSearchHotkey", selfRef);
+        }
+
+        // Fokus erst setzen, wenn das Eingabefeld tatsächlich gerendert ist.
+        if (focusPending && visible && module is not null)
+        {
+            focusPending = false;
+            await module.InvokeVoidAsync("focusElement", inputRef);
+        }
+    }
+
+    // Wird aus shortcuts.js bei Strg+K aufgerufen.
+    [JSInvokable]
+    public Task OpenFromHotkey() => OpenAsync();
+
+    // Auch vom Such-Button im Layout aufrufbar.
+    public async Task OpenAsync()
+    {
+        visible      = true;
+        query        = string.Empty;
+        results      = new();
+        selected     = 0;
+        searching    = false;
+        focusPending = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void Close()
+    {
+        visible = false;
+        debounceCts?.Cancel();
+    }
+
+    private async Task OnInputAsync(ChangeEventArgs e)
+    {
+        query    = e.Value?.ToString() ?? string.Empty;
+        selected = 0;
+
+        // Vorherigen (noch wartenden) Lauf verwerfen.
+        debounceCts?.Cancel();
+
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            results   = new();
+            searching = false;
+            return;
+        }
+
+        debounceCts = new CancellationTokenSource();
+        var token   = debounceCts.Token;
+        searching   = true;
+
+        try
+        {
+            await Task.Delay(200, token); // Tippen abwarten
+            var hits = await Api.SearchAsync(query);
+            if (token.IsCancellationRequested) return;
+
+            results   = hits ?? new();
+            searching = false;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException)
+        {
+            // Nächster Tastendruck hat diesen Lauf überholt.
+        }
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "Escape":
+                Close();
+                break;
+            case "ArrowDown":
+                if (results.Count > 0) selected = (selected + 1) % results.Count;
+                break;
+            case "ArrowUp":
+                if (results.Count > 0) selected = (selected - 1 + results.Count) % results.Count;
+                break;
+            case "Enter":
+                if (selected >= 0 && selected < results.Count)
+                    await OpenAsync(results[selected]);
+                break;
+        }
+    }
+
+    private async Task OpenAsync(SearchHitDto hit)
+    {
+        Close();
+        await InvokeAsync(StateHasChanged);
+        Nav.NavigateTo(Route(hit));
+    }
+
+    private static string Route(SearchHitDto hit) => hit.Type switch
+    {
+        SearchHitTypes.Project => $"projects/{hit.Id}",
+        SearchHitTypes.Task    => $"tasks/{hit.Id}",
+        SearchHitTypes.Note    => $"notes/{hit.Id}",
+        _                      => string.Empty,
+    };
+
+    private static string Icon(string type) => type switch
+    {
+        SearchHitTypes.Project => "📁",
+        SearchHitTypes.Task    => "☑",
+        SearchHitTypes.Note    => "📝",
+        _                      => string.Empty,
+    };
+
+    private static string Label(string type) => type switch
+    {
+        SearchHitTypes.Project => "Projekt",
+        SearchHitTypes.Task    => "Task",
+        SearchHitTypes.Note    => "Notiz",
+        _                      => string.Empty,
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        debounceCts?.Cancel();
+        debounceCts?.Dispose();
+
+        if (module is not null)
+        {
+            try
+            {
+                await module.InvokeVoidAsync("unregisterSearchHotkey");
+                await module.DisposeAsync();
+            }
+            catch
+            {
+                // Beim Seiten-Verlassen kann der JS-Kontext schon weg sein – egal.
+            }
+        }
+
+        selfRef?.Dispose();
+    }
+}

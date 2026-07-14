@@ -1,4 +1,4 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 <div class="page">
     <div class="sidebar">
         <NavMenu />
@@ -6,6 +6,10 @@
 
     <main>
         <div class="top-row px-4">
+            <button class="btn btn-sm btn-outline-secondary me-auto search-btn" @onclick="OpenSearchAsync"
+                    title="Globale Suche (Strg+K)">
+                🔍 Suchen <kbd>Strg</kbd><span class="kbd-plus">+</span><kbd>K</kbd>
+            </button>
             <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
         </div>
 
@@ -17,3 +21,14 @@
 
 <ToastHost />
 <ConfirmDialogHost />
+<SearchPalette @ref="searchPalette" />
+
+@code {
+    private SearchPalette? searchPalette;
+
+    private async Task OpenSearchAsync()
+    {
+        if (searchPalette is not null)
+            await searchPalette.OpenAsync();
+    }
+}

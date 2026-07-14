@@ -1,4 +1,5 @@
 @page "/notes"
+@page "/notes/{Id:int}"
 @inject ApiService Api
 @inject ToastService Toast
 
@@ -38,15 +39,29 @@
 </div>
 
 @code {
+    // Optionale Route /notes/{id} – z. B. aus der globalen Suche (Strg+K).
+    [Parameter] public int? Id { get; set; }
+
     private List<NoteResponseDto>? notes;
     private NoteResponseDto? selected;
     private NoteEditor? editor;
     private string search = string.Empty;
     private string filter = "all";
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        notes = await Api.GetNotesAsync() ?? new();
+        notes ??= await Api.GetNotesAsync() ?? new();
+
+        // Beim Aufruf mit Id die passende Notiz vorauswählen.
+        if (Id is int id && selected?.Id != id)
+        {
+            var match = notes.FirstOrDefault(n => n.Id == id);
+            if (match is not null)
+            {
+                if (editor is not null) await editor.FlushAsync(); // offene Änderungen sichern
+                selected = match;
+            }
+        }
     }
 
     private List<NoteResponseDto> Filtered => (notes ?? new())

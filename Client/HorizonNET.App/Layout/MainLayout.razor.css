@@ -27,6 +27,46 @@ main {
         text-decoration: none;
     }
 
+/* Such-Button: Tastenkombination als dezente "Key-Caps" statt Bootstraps
+   fast schwarzem <kbd>-Default (das stach im Outline-Button zu stark hervor). */
+.search-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+    .search-btn kbd {
+        background-color: #f1f3f5;
+        color: #495057;
+        border: 1px solid #d0d5da;
+        border-bottom-width: 2px; /* leichter Tasten-/Tiefen-Effekt */
+        border-radius: 0.25rem;
+        padding: 0.05rem 0.35rem;
+        font-family: inherit;
+        font-size: 0.72rem;
+        font-weight: 600;
+        line-height: 1.4;
+        box-shadow: none;
+    }
+
+    .search-btn .kbd-plus {
+        color: #adb5bd;
+        font-size: 0.72rem;
+    }
+
+    /* Beim Hover färbt Bootstrap den Outline-Button grau – Key-Caps dann
+       aufhellen, damit sie nicht im Hintergrund untergehen. */
+    .search-btn:hover kbd,
+    .search-btn:focus kbd {
+        background-color: #fff;
+        border-color: #ced4da;
+    }
+
+    .search-btn:hover .kbd-plus,
+    .search-btn:focus .kbd-plus {
+        color: rgba(255, 255, 255, 0.85);
+    }
+
     .top-row ::deep a:hover, .top-row ::deep .btn-link:hover {
         text-decoration: underline;
     }

@@ -36,4 +36,7 @@ public interface ITaskRepository
 
     // Macht ein Soft-Delete rückgängig (Task + im selben Vorgang gelöschte Sub-Tasks).
     Task<bool> RestoreAsync(int id);
+
+    // Globale Suche über Titel und Beschreibung (für die Kommandopalette).
+    Task<IEnumerable<TaskItem>> SearchAsync(string query, int limit);
 }

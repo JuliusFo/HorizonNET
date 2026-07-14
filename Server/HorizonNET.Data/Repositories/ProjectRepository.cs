@@ -50,6 +50,19 @@ public class ProjectRepository(AppDbContext context) : IProjectRepository
         return true;
     }
 
+    public async Task<IEnumerable<Project>> SearchAsync(string query, int limit)
+    {
+        var pattern = SearchPattern.For(query);
+        return await context.Projects
+            .Include(p => p.Workspace)
+            .Where(p => EF.Functions.Like(p.Name, pattern, SearchPattern.Escape)
+                     || (p.Description != null
+                         && EF.Functions.Like(p.Description, pattern, SearchPattern.Escape)))
+            .OrderBy(p => p.Name)
+            .Take(limit)
+            .ToListAsync();
+    }
+
     public async Task<bool> RestoreAsync(int id)
     {
         var existing = await context.Projects

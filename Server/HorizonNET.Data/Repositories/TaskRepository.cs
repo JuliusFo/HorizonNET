@@ -122,6 +122,19 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         return true;
     }
 
+    public async Task<IEnumerable<TaskItem>> SearchAsync(string query, int limit)
+    {
+        var pattern = SearchPattern.For(query);
+        return await context.Tasks
+            .Include(t => t.Project)
+            .Where(t => EF.Functions.Like(t.Title, pattern, SearchPattern.Escape)
+                     || (t.Description != null
+                         && EF.Functions.Like(t.Description, pattern, SearchPattern.Escape)))
+            .OrderByDescending(t => t.UpdatedAt)
+            .Take(limit)
+            .ToListAsync();
+    }
+
     public async Task<bool> RestoreAsync(int id)
     {
         var existing = await context.Tasks

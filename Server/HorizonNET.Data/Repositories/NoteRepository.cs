@@ -64,6 +64,17 @@ public class NoteRepository(AppDbContext context) : INoteRepository
         return true;
     }
 
+    public async Task<IEnumerable<Note>> SearchAsync(string query, int limit)
+    {
+        var pattern = SearchPattern.For(query);
+        return await WithIncludes()
+            .Where(n => EF.Functions.Like(n.Title, pattern, SearchPattern.Escape)
+                     || EF.Functions.Like(n.Content, pattern, SearchPattern.Escape))
+            .OrderByDescending(n => n.UpdatedAt)
+            .Take(limit)
+            .ToListAsync();
+    }
+
     public async Task<bool> RestoreAsync(int id)
     {
         var existing = await context.Notes

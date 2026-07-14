@@ -19,4 +19,7 @@ public interface INoteRepository
     Task<bool> DeleteAsync(int id);
 
     Task<bool> RestoreAsync(int id);
+
+    // Globale Suche über Titel und Inhalt (für die Kommandopalette).
+    Task<IEnumerable<Note>> SearchAsync(string query, int limit);
 }

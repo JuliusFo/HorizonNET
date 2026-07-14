@@ -221,6 +221,11 @@ public class ApiService(HttpClient http)
         return response.IsSuccessStatusCode;
     }
 
+    // ── Globale Suche ──────────────────────────────────────────────────────────
+
+    public Task<List<SearchHitDto>?> SearchAsync(string query) =>
+        http.GetFromJsonAsync<List<SearchHitDto>>($"api/search?q={Uri.EscapeDataString(query)}");
+
     // ── Google-Kalender ────────────────────────────────────────────────────────
 
     public Task<GoogleStatusDto?> GetGoogleStatusAsync() =>
