@@ -27,12 +27,60 @@
     background-color: #cfe2ff;
 }
 
-.cal-dot {
+/* Ungeplante Tasks nach Arbeitsbereich gruppiert: umrandete Box je Bereich,
+   Kopfzeile in der Bereichsfarbe. Der frühere Projekt-Farbpunkt vor den Tasks
+   ist dadurch entfallen. */
+.cal-ws-group {
+    border: 1px solid;
+    border-radius: 0.375rem;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+    background-color: #fff;
+}
+
+.cal-ws-name {
+    padding: 0.15rem 0.5rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Projektzeile innerhalb einer Arbeitsbereichs-Box: steht einmal je Projekt
+   (nicht an jedem Task), damit die Seitenleiste schlank bleibt. */
+.cal-project-label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.5rem 0.1rem;
+    font-size: 0.7rem;
+    color: #6c757d;
+}
+
+/* Ab dem zweiten Projekt eine feine Trennlinie. */
+.cal-project-label:not(:first-of-type) {
+    border-top: 1px solid #e9ecef;
+    margin-top: 0.15rem;
+}
+
+.cal-project-dot {
     display: inline-block;
-    width: 0.7rem;
-    height: 0.7rem;
-    border-radius: 3px;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 2px;
     flex-shrink: 0;
+}
+
+/* Tasks sitzen direkt in der Box – etwas enger als zuvor. */
+.cal-ws-group .calendar-unscheduled-item {
+    border-radius: 0;
+    padding-left: 0.55rem;
+}
+
+.cal-ws-group .calendar-unscheduled-item:hover {
+    background-color: #f1f3f5;
 }
 
 /* Filter-Legende über dem Kalender */

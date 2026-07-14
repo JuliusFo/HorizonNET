@@ -1,6 +1,7 @@
 @page "/calendar"
 @inject ApiService Api
 @inject ProjectState ProjectState
+@inject WorkspaceState WorkspaceState
 @inject SettingsState Settings
 @inject ToastService Toast
 
@@ -53,6 +54,14 @@ else
             @{
                 // Erledigte/abgebrochene Tasks gehören nicht in die Planungs-Seitenleiste.
                 var unscheduled = tasks.Where(t => t.DueDate is null && !t.IsCompleted).ToList();
+
+                // Nach Arbeitsbereich gruppieren; Tasks ohne (Projekt bzw. Arbeitsbereich)
+                // landen in einer Sammelgruppe ganz unten.
+                var groups = unscheduled
+                    .GroupBy(t => WorkspaceOf(t.ProjectId))
+                    .OrderBy(g => g.Key is null ? 1 : 0)
+                    .ThenBy(g => g.Key?.Name, StringComparer.CurrentCultureIgnoreCase)
+                    .ToList();
             }
             @if (unscheduled.Count == 0)
             {
@@ -60,13 +69,43 @@ else
             }
             else
             {
-                @foreach (var t in unscheduled)
+                @foreach (var group in groups)
                 {
-                    <div class="calendar-unscheduled-item @(armedTask?.Id == t.Id ? "armed" : "")"
-                         @onclick="() => ToggleArm(t)">
-                        <span class="cal-dot" style="background-color:@(ProjectColor(t.ProjectId) ?? "#6c757d");"></span>
-                        <PriorityIndicator Value="@t.Priority" />
-                        <span class="text-truncate">@t.Title</span>
+                    var color = group.Key?.Color ?? "#6c757d";
+
+                    // Innerhalb des Arbeitsbereichs nochmal nach Projekt gruppieren – so
+                    // steht der Projektname einmal je Projekt statt an jedem Task.
+                    var byProject = group
+                        .GroupBy(t => t.ProjectId)
+                        .OrderBy(pg => pg.Key is null ? 1 : 0)
+                        .ThenBy(pg => ProjectName(pg.Key), StringComparer.CurrentCultureIgnoreCase)
+                        .ToList();
+
+                    <div class="cal-ws-group" style="border-color:@color;">
+                        <div class="cal-ws-name" style="background-color:@color; color:@TextColorFor(color);">
+                            @(group.Key?.Name ?? "Ohne Arbeitsbereich")
+                        </div>
+
+                        @foreach (var projectGroup in byProject)
+                        {
+                            @if (projectGroup.Key is int projectId)
+                            {
+                                <div class="cal-project-label">
+                                    <span class="cal-project-dot"
+                                          style="background-color:@(ProjectColor(projectId) ?? "#6c757d");"></span>
+                                    <span class="text-truncate">@ProjectName(projectId)</span>
+                                </div>
+                            }
+
+                            @foreach (var t in projectGroup)
+                            {
+                                <div class="calendar-unscheduled-item @(armedTask?.Id == t.Id ? "armed" : "")"
+                                     @onclick="() => ToggleArm(t)">
+                                    <PriorityIndicator Value="@t.Priority" />
+                                    <span class="text-truncate">@t.Title</span>
+                                </div>
+                            }
+                        }
                     </div>
                 }
             }
@@ -149,6 +188,7 @@ else
     private List<CalendarAppointment> appointments = new();      // an den Scheduler gebunden (gefiltert)
     private Dictionary<int, string?> projectColors = new();
     private Dictionary<int, string> projectNames = new();
+    private Dictionary<int, int?> projectWorkspaces = new();   // ProjektId → ArbeitsbereichId
     private TaskResponseDto? selectedTask;   // für den Edit-Dialog
     private TaskResponseDto? armedTask;      // in der Seitenleiste „aufgenommener" Task
 
@@ -162,9 +202,14 @@ else
     protected override async Task OnInitializedAsync()
     {
         await ProjectState.EnsureLoadedAsync();
+        await WorkspaceState.EnsureLoadedAsync(); // für die Gruppierung der Seitenleiste
         await Settings.EnsureLoadedAsync();
         projectColors = (ProjectState.Projects ?? []).ToDictionary(p => p.Id, p => p.Color);
         projectNames = (ProjectState.Projects ?? []).ToDictionary(p => p.Id, p => p.Name);
+
+        // ProjektId → Arbeitsbereich (für die Gruppierung der ungeplanten Tasks).
+        projectWorkspaces = (ProjectState.Projects ?? [])
+            .ToDictionary(p => p.Id, p => p.WorkspaceId);
 
         // Anfangsansicht aus der gespeicherten Default-Ansicht (0=Tag/1=Woche/2=Monat).
         selectedViewIndex = Settings.CalendarDefaultView;
@@ -271,6 +316,38 @@ else
 
     private string? ProjectColor(int? projectId)
         => projectId is not null && projectColors.TryGetValue(projectId.Value, out var c) ? c : null;
+
+    private string ProjectName(int? projectId)
+        => projectId is int id && projectNames.TryGetValue(id, out var n) ? n : string.Empty;
+
+    // Arbeitsbereich eines Tasks über sein Projekt. null = kein Projekt bzw.
+    // Projekt ohne Arbeitsbereich → Sammelgruppe "Ohne Arbeitsbereich".
+    private WorkspaceResponseDto? WorkspaceOf(int? projectId)
+    {
+        if (projectId is not int id) return null;
+        if (!projectWorkspaces.TryGetValue(id, out var workspaceId) || workspaceId is not int wsId) return null;
+        return WorkspaceState.Workspaces?.FirstOrDefault(w => w.Id == wsId);
+    }
+
+    // Lesbare Schriftfarbe auf der Arbeitsbereichsfarbe: helle Flächen brauchen
+    // dunkle Schrift (wahrgenommene Helligkeit nach ITU-R BT.601).
+    private static string TextColorFor(string? hex)
+    {
+        if (string.IsNullOrWhiteSpace(hex) || hex.Length < 7 || hex[0] != '#') return "#fff";
+
+        try
+        {
+            var r = Convert.ToInt32(hex.Substring(1, 2), 16);
+            var g = Convert.ToInt32(hex.Substring(3, 2), 16);
+            var b = Convert.ToInt32(hex.Substring(5, 2), 16);
+            var luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
+            return luminance > 0.6 ? "#212529" : "#fff";
+        }
+        catch
+        {
+            return "#fff";
+        }
+    }
 
     // ── Seitenleiste: Task „aufnehmen" und per Slot-Klick platzieren ───────────
 
