@@ -138,6 +138,42 @@ else
                                 }
                             </div>
                         </div>
+                        @* Zeiterfassung: Start/Stop plus die einzelnen Intervalle. *@
+                        <div class="border-top pt-3">
+                            <label class="form-label small text-muted mb-1">Zeiterfassung</label>
+                            <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+                                <TaskTimerButton Task="task" OnChanged="HandleTimerChangedAsync" />
+                                <span class="fw-semibold" title="Gesamte erfasste Zeit">
+                                    @TimeDisplay.Short(task.TrackedTotal(DateTime.Now))
+                                </span>
+                            </div>
+
+                            @if (timeEntries is { Count: > 0 })
+                            {
+                                <ul class="list-unstyled small text-muted mb-0 task-time-entries">
+                                    @foreach (var entry in timeEntries)
+                                    {
+                                        <li class="d-flex justify-content-between gap-2">
+                                            <span>
+                                                @entry.StartedAt.ToString("dd.MM. HH:mm")
+                                                –
+                                                @(entry.EndedAt?.ToString("HH:mm") ?? "läuft")
+                                            </span>
+                                            <span>
+                                                @(entry.EndedAt is null
+                                                    ? TimeDisplay.Clock(DateTime.Now - entry.StartedAt)
+                                                    : TimeDisplay.Clock(TimeSpan.FromSeconds(entry.Seconds)))
+                                            </span>
+                                        </li>
+                                    }
+                                </ul>
+                            }
+                            else
+                            {
+                                <div class="small text-muted">Noch keine Zeit erfasst.</div>
+                            }
+                        </div>
+
                         <div class="border-top pt-2 small text-muted">
                             <div>Erstellt: @task.CreatedAt.ToString("dd.MM.yyyy HH:mm")</div>
                             <div>Geändert: @task.UpdatedAt.ToString("dd.MM.yyyy HH:mm")</div>
@@ -178,6 +214,9 @@ else
     private NoteResponseDto? selectedNote;
     private NoteEditor? noteEditor;
 
+    // Zeiterfassung: die einzelnen Intervalle (neueste zuerst).
+    private List<TimeEntryResponseDto>? timeEntries;
+
     // OnParametersSetAsync statt OnInitializedAsync: lädt neu, wenn zwischen zwei
     // Tasks navigiert wird (gleiche Komponenteninstanz, nur anderer Parameter).
     protected override async Task OnParametersSetAsync()
@@ -192,6 +231,7 @@ else
         saveError    = null;
         notes        = null;
         selectedNote = null;
+        timeEntries  = null;
 
         task = await Api.GetTaskAsync(Id);
         if (task is not null)
@@ -206,10 +246,20 @@ else
                 Priority    = Enum.Parse<Priority>(task.Priority),
                 Status      = task.Status
             };
-            notes = await Api.GetNotesByTaskAsync(Id) ?? new();
+            notes       = await Api.GetNotesByTaskAsync(Id) ?? new();
+            timeEntries = await Api.GetTimeEntriesAsync(Id) ?? new();
         }
 
         loading = false;
+    }
+
+    // Nach Start/Stop: Task und Intervalle frisch holen. Der Status hat sich
+    // mitgeändert („In Arbeit" bzw. „Pausiert") – auch das Formular nachziehen.
+    private async Task HandleTimerChangedAsync(TaskResponseDto updated)
+    {
+        task            = updated;
+        editModel.Status = updated.Status;
+        timeEntries     = await Api.GetTimeEntriesAsync(Id) ?? new();
     }
 
     private async Task SaveAsync()

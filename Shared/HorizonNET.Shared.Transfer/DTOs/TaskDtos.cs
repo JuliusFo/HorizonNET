@@ -43,10 +43,20 @@ public record TaskResponseDto(
     DateTime UpdatedAt = default,
     // Ist der Task aktuell in den Google-Kalender gespiegelt? (Server leitet es aus
     // dem Vorhandensein einer GoogleEventId ab; nur Lese-Richtung.)
-    bool IsSyncedToGoogle = false
+    bool IsSyncedToGoogle = false,
+    // Zeiterfassung: Summe der abgeschlossenen Intervalle in Sekunden.
+    int TrackedSeconds = 0,
+    // Startzeitpunkt des laufenden Intervalls; null = Timer läuft nicht.
+    DateTime? RunningSince = null
 )
 {
     public bool IsCompleted => Status == WorkStatus.Done || Status == WorkStatus.Abandoned;
+
+    public bool IsTimerRunning => RunningSince is not null;
+
+    // Gesamtzeit inkl. des noch laufenden Intervalls (für die tickende Anzeige).
+    public TimeSpan TrackedTotal(DateTime now) => TimeSpan.FromSeconds(TrackedSeconds)
+        + (RunningSince is DateTime since ? now - since : TimeSpan.Zero);
 }
 
 // Neue Reihenfolge einer Kanban-Spalte: die Task-Ids in gewünschter

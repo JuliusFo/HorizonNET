@@ -48,4 +48,7 @@ public class TaskItem
     public DateTime? DeletedAt { get; set; }
 
     public ICollection<TaskItem> SubTasks { get; set; } = [];
+
+    // Erfasste Zeit-Intervalle (Start/Stop). Summe = verbrauchte Zeit.
+    public ICollection<TimeEntry> TimeEntries { get; set; } = [];
 }

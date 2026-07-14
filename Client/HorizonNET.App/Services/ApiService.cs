@@ -6,6 +6,13 @@ namespace HorizonNET.App.Services;
 // Kapselt alle HTTP-Aufrufe an die HorizonNET-API
 public class ApiService(HttpClient http)
 {
+    // Wird nach jeder Änderung an einem Task ausgelöst. Der TimerState hängt sich hier
+    // ein: Ein Statuswechsel startet oder stoppt serverseitig die Zeiterfassung (auch
+    // an einem anderen Task), und das erfährt der Client sonst nirgends zentral.
+    public event Func<Task>? TaskChanged;
+
+    private Task NotifyTaskChangedAsync() => TaskChanged?.Invoke() ?? Task.CompletedTask;
+
     // ── Arbeitsbereiche ───────────────────────────────────────────────────────
 
     public Task<List<WorkspaceResponseDto>?> GetWorkspacesAsync() =>
@@ -103,14 +110,17 @@ public class ApiService(HttpClient http)
     public async Task<TaskResponseDto?> UpdateTaskAsync(int id, TaskUpdateDto dto)
     {
         var response = await http.PutAsJsonAsync($"api/tasks/{id}", dto);
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<TaskResponseDto>()
-            : null;
+        if (!response.IsSuccessStatusCode) return null;
+
+        var updated = await response.Content.ReadFromJsonAsync<TaskResponseDto>();
+        await NotifyTaskChangedAsync(); // Status kann den Timer gestartet/gestoppt haben
+        return updated;
     }
 
     public async Task<bool> DeleteTaskAsync(int id)
     {
         var response = await http.DeleteAsync($"api/tasks/{id}");
+        if (response.IsSuccessStatusCode) await NotifyTaskChangedAsync();
         return response.IsSuccessStatusCode;
     }
 
@@ -123,6 +133,8 @@ public class ApiService(HttpClient http)
     public async Task<bool> ReorderTasksAsync(TaskReorderDto dto)
     {
         var response = await http.PutAsJsonAsync("api/tasks/reorder", dto);
+        // Im Kanban-Board ist das Verschieben in eine Spalte ein Statuswechsel.
+        if (response.IsSuccessStatusCode) await NotifyTaskChangedAsync();
         return response.IsSuccessStatusCode;
     }
 
@@ -223,6 +235,44 @@ public class ApiService(HttpClient http)
         var response = completed ? await http.PostAsync(url, null) : await http.DeleteAsync(url);
         return response.IsSuccessStatusCode;
     }
+
+    // ── Zeiterfassung ────────────────────────────────────────────────────────────
+
+    // Start/Stop liefern den aktualisierten Task zurück (Status und Zeiten inklusive).
+    public async Task<TaskResponseDto?> StartTimerAsync(int taskId)
+    {
+        var response = await http.PostAsync($"api/tasks/{taskId}/timer/start", null);
+        if (!response.IsSuccessStatusCode) return null;
+
+        var updated = await response.Content.ReadFromJsonAsync<TaskResponseDto>();
+        await NotifyTaskChangedAsync();
+        return updated;
+    }
+
+    public async Task<TaskResponseDto?> StopTimerAsync(int taskId)
+    {
+        var response = await http.PostAsync($"api/tasks/{taskId}/timer/stop", null);
+        if (!response.IsSuccessStatusCode) return null;
+
+        var updated = await response.Content.ReadFromJsonAsync<TaskResponseDto>();
+        await NotifyTaskChangedAsync();
+        return updated;
+    }
+
+    // Läuft kein Timer, antwortet die API mit 204 (leerer Body) – GetFromJsonAsync
+    // würde daran scheitern, deshalb der Umweg über GetAsync.
+    public async Task<RunningTimerDto?> GetRunningTimerAsync()
+    {
+        var response = await http.GetAsync("api/tasks/timer/running");
+        if (!response.IsSuccessStatusCode) return null;
+        if (response.StatusCode == System.Net.HttpStatusCode.NoContent) return null;
+        if (response.Content.Headers.ContentLength is 0 or null) return null;
+
+        return await response.Content.ReadFromJsonAsync<RunningTimerDto>();
+    }
+
+    public Task<List<TimeEntryResponseDto>?> GetTimeEntriesAsync(int taskId) =>
+        http.GetFromJsonAsync<List<TimeEntryResponseDto>>($"api/tasks/{taskId}/timeentries");
 
     // ── Task-Vorlagen ────────────────────────────────────────────────────────────
 

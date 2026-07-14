@@ -42,6 +42,9 @@ builder.Services.AddScoped<ProjectState>();
 // Gemeinsamer Arbeitsbereich-State
 builder.Services.AddScoped<WorkspaceState>();
 
+// Laufender Timer der Zeiterfassung (geteilt zwischen Navigation und Seiten)
+builder.Services.AddScoped<TimerState>();
+
 // Lokale UI-Einstellungen (localStorage)
 builder.Services.AddScoped<SettingsState>();
 

@@ -1,0 +1,95 @@
+@inject ApiService Api
+@inject ToastService Toast
+@implements IDisposable
+
+@* Start/Stop der Zeiterfassung an einem Task. Der Server koppelt das an den Status
+   ("In Arbeit" läuft, alles andere pausiert) und stoppt einen woanders laufenden
+   Timer – deshalb meldet die Komponente den aktualisierten Task an den Aufrufer
+   zurück und lässt den TimerState neu laden. *@
+<span class="task-timer d-inline-flex align-items-center gap-1">
+    @if (Task.IsTimerRunning)
+    {
+        <button type="button" class="btn btn-sm btn-warning btn-icon" @onclick="StopAsync"
+                disabled="@busy" title="Zeiterfassung stoppen (setzt den Task auf „Pausiert")">⏸</button>
+        <span class="task-timer-clock text-danger fw-semibold"
+              title="Läuft seit @Task.RunningSince!.Value.ToString("HH:mm")">
+            @TimeDisplay.Clock(Task.TrackedTotal(DateTime.Now))
+        </span>
+    }
+    else
+    {
+        <button type="button" class="btn btn-sm btn-outline-success btn-icon" @onclick="StartAsync"
+                disabled="@busy" title="Zeiterfassung starten (setzt den Task auf „In Arbeit")">▶</button>
+        @if (Task.TrackedSeconds > 0)
+        {
+            <span class="task-timer-clock text-muted" title="Bereits erfasste Zeit">
+                @TimeDisplay.Short(TimeSpan.FromSeconds(Task.TrackedSeconds))
+            </span>
+        }
+    }
+</span>
+
+@code {
+    [Parameter, EditorRequired] public TaskResponseDto Task { get; set; } = default!;
+
+    // Liefert den vom Server aktualisierten Task (Status + Zeiten) zurück.
+    [Parameter] public EventCallback<TaskResponseDto> OnChanged { get; set; }
+
+    private bool busy;
+    private System.Timers.Timer? ticker;
+
+    // Die laufende Uhr tickt sekündlich – nur solange dieser Task läuft.
+    protected override void OnParametersSet()
+    {
+        if (Task.IsTimerRunning && ticker is null)
+        {
+            ticker = new System.Timers.Timer(1000);
+            ticker.Elapsed += (_, _) => InvokeAsync(StateHasChanged);
+            ticker.Start();
+        }
+        else if (!Task.IsTimerRunning)
+        {
+            StopTicker();
+        }
+    }
+
+    private async Task StartAsync()
+    {
+        busy = true;
+        var updated = await Api.StartTimerAsync(Task.Id);
+        busy = false;
+
+        if (updated is null)
+        {
+            Toast.ShowError("Zeiterfassung konnte nicht gestartet werden.");
+            return;
+        }
+
+        // Den TimerState (Navigation) zieht ApiService.TaskChanged nach.
+        await OnChanged.InvokeAsync(updated);
+    }
+
+    private async Task StopAsync()
+    {
+        busy = true;
+        var updated = await Api.StopTimerAsync(Task.Id);
+        busy = false;
+
+        if (updated is null)
+        {
+            Toast.ShowError("Zeiterfassung konnte nicht gestoppt werden.");
+            return;
+        }
+
+        await OnChanged.InvokeAsync(updated);
+    }
+
+    private void StopTicker()
+    {
+        ticker?.Stop();
+        ticker?.Dispose();
+        ticker = null;
+    }
+
+    public void Dispose() => StopTicker();
+}

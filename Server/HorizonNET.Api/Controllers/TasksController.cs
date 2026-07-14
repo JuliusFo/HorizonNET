@@ -2,13 +2,17 @@ using HorizonNET.Api.Services;
 using HorizonNET.Domain.Entities;
 using HorizonNET.Domain.Interfaces;
 using HorizonNET.Shared.Transfer.DTOs;
+using HorizonNET.Shared.Transfer.Enums;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HorizonNET.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class TasksController(ITaskRepository repo, GoogleCalendarService google) : ControllerBase
+public class TasksController(
+    ITaskRepository repo,
+    ITimeEntryRepository timeEntries,
+    GoogleCalendarService google) : ControllerBase
 {
     private static TaskResponseDto ToDto(TaskItem t) =>
         new(t.Id, t.Title, t.Description, t.DueDate, t.StartTime, t.EndTime,
@@ -16,7 +20,13 @@ public class TasksController(ITaskRepository repo, GoogleCalendarService google)
             t.SortOrder,
             t.ParentTaskId,
             t.SubTasks.Count > 0 ? t.SubTasks.OrderBy(s => s.SortOrder).Select(s => ToDto(s)).ToList() : null,
-            t.CreatedAt, t.UpdatedAt, t.GoogleEventId != null);
+            t.CreatedAt, t.UpdatedAt, t.GoogleEventId != null,
+            // Nur abgeschlossene Intervalle summieren; das laufende meldet RunningSince,
+            // damit der Client die Uhr selbst weiterzählen kann.
+            TrackedSeconds: (int)t.TimeEntries
+                .Where(e => e.EndedAt != null)
+                .Sum(e => (e.EndedAt!.Value - e.StartedAt).TotalSeconds),
+            RunningSince: t.TimeEntries.FirstOrDefault(e => e.EndedAt == null)?.StartedAt);
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
@@ -100,6 +110,79 @@ public class TasksController(ITaskRepository repo, GoogleCalendarService google)
         if (updated is null) return NotFound();
         await google.SyncTaskAsync(updated); // Änderung nach Google spiegeln (best-effort)
         return Ok(ToDto(updated));
+    }
+
+    // ── Zeiterfassung ────────────────────────────────────────────────────────────
+    // Start/Stop laufen über den Status: "In Arbeit" startet den Timer, jeder Wechsel
+    // weg davon stoppt ihn (siehe TaskRepository). Damit bleibt die Kopplung an genau
+    // einer Stelle, egal ob der Nutzer den Status ändert oder den Timer-Knopf drückt.
+
+    [HttpPost("{id:int}/timer/start")]
+    public async Task<IActionResult> StartTimer(int id)
+    {
+        var task = await repo.GetByIdAsync(id);
+        if (task is null) return NotFound();
+
+        var updated = await SetStatusAsync(task, WorkStatus.InProgress);
+        return Ok(ToDto(updated));
+    }
+
+    // Stoppen setzt den Task auf "Pausiert" – der Status spiegelt die Uhr wider.
+    // Ein bereits abgeschlossener Task (Fertig/Abgebrochen) behält seinen Status.
+    [HttpPost("{id:int}/timer/stop")]
+    public async Task<IActionResult> StopTimer(int id)
+    {
+        var task = await repo.GetByIdAsync(id);
+        if (task is null) return NotFound();
+
+        if (task.Status != WorkStatus.InProgress)
+        {
+            // Kein laufender Timer über den Status – trotzdem sicherheitshalber stoppen
+            // (z. B. wenn der Status außerhalb der Kopplung verändert wurde).
+            await timeEntries.StopAsync(id);
+            var reloaded = await repo.GetByIdAsync(id);
+            return Ok(ToDto(reloaded!));
+        }
+
+        var updated = await SetStatusAsync(task, WorkStatus.Paused);
+        return Ok(ToDto(updated));
+    }
+
+    // Der aktuell laufende Timer (systemweit höchstens einer) – für die Navigation.
+    [HttpGet("timer/running")]
+    public async Task<IActionResult> GetRunningTimer()
+    {
+        var running = await timeEntries.GetRunningAsync();
+        if (running is null) return Ok(null);
+
+        return Ok(new RunningTimerDto(running.TaskItemId, running.TaskItem.Title, running.StartedAt));
+    }
+
+    // Alle Intervalle eines Tasks (Detailseite).
+    [HttpGet("{id:int}/timeentries")]
+    public async Task<IActionResult> GetTimeEntries(int id)
+    {
+        var entries = await timeEntries.GetByTaskAsync(id);
+        return Ok(entries.Select(e => new TimeEntryResponseDto(
+            e.Id, e.TaskItemId, e.StartedAt, e.EndedAt,
+            (int)(e.EndedAt is null ? 0 : (e.EndedAt.Value - e.StartedAt).TotalSeconds))));
+    }
+
+    // Statuswechsel über das Repository – dort hängt die Timer-Kopplung dran.
+    private async Task<TaskItem> SetStatusAsync(TaskItem task, WorkStatus status)
+    {
+        var updated = await repo.UpdateAsync(task.Id, new TaskItem
+        {
+            Title = task.Title,
+            Description = task.Description,
+            DueDate = task.DueDate,
+            StartTime = task.StartTime,
+            EndTime = task.EndTime,
+            Status = status,
+            Priority = task.Priority,
+            ProjectId = task.ProjectId
+        });
+        return updated!;
     }
 
     [HttpDelete("{id:int}")]

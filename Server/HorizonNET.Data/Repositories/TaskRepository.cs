@@ -7,29 +7,35 @@ namespace HorizonNET.Data.Repositories;
 
 public class TaskRepository(AppDbContext context) : ITaskRepository
 {
+    // Zeiten werden überall mitgeladen: die Antwort-DTOs melden erfasste und laufende
+    // Zeit an jedem Task (inkl. Sub-Tasks), damit jede Ansicht die Uhr zeigen kann.
     public async Task<IEnumerable<TaskItem>> GetAllAsync() =>
         await context.Tasks
             .Include(t => t.Project)
             .Where(t => t.ParentTaskId == null)
-            .Include(t => t.SubTasks)
+            .Include(t => t.TimeEntries)
+            .Include(t => t.SubTasks).ThenInclude(s => s.TimeEntries)
             .ToListAsync();
 
     public async Task<IEnumerable<TaskItem>> GetByProjectIdAsync(int projectId) =>
         await context.Tasks
             .Where(t => t.ProjectId == projectId && t.ParentTaskId == null)
-            .Include(t => t.SubTasks)
+            .Include(t => t.TimeEntries)
+            .Include(t => t.SubTasks).ThenInclude(s => s.TimeEntries)
             .ToListAsync();
 
     public async Task<IEnumerable<TaskItem>> GetInboxAsync() =>
         await context.Tasks
             .Where(t => t.ProjectId == null && t.ParentTaskId == null)
-            .Include(t => t.SubTasks)
+            .Include(t => t.TimeEntries)
+            .Include(t => t.SubTasks).ThenInclude(s => s.TimeEntries)
             .ToListAsync();
 
     public async Task<TaskItem?> GetByIdAsync(int id) =>
         await context.Tasks
             .Include(t => t.Project)
-            .Include(t => t.SubTasks)
+            .Include(t => t.TimeEntries)
+            .Include(t => t.SubTasks).ThenInclude(s => s.TimeEntries)
             .FirstOrDefaultAsync(t => t.Id == id);
 
     public async Task<TaskItem> CreateAsync(TaskItem task)
@@ -47,6 +53,8 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         var existing = await context.Tasks.FindAsync(id);
         if (existing is null) return null;
 
+        var previousStatus = existing.Status;
+
         existing.Title = updated.Title;
         existing.Description = updated.Description;
         existing.DueDate = updated.DueDate;
@@ -56,8 +64,49 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         existing.Priority = updated.Priority;
         existing.ProjectId = updated.ProjectId;
         existing.UpdatedAt = DateTime.Now;
+
+        await ApplyTimerForStatusChangeAsync(id, previousStatus, updated.Status);
+
         await context.SaveChangesAsync();
-        return existing;
+        return await GetByIdAsync(id) ?? existing;
+    }
+
+    // Der Status steuert die Zeiterfassung: "In Arbeit" startet den Timer, jeder
+    // Wechsel weg davon (Pausiert, Fertig, Abgebrochen, zurück auf Geplant) stoppt ihn.
+    // Bewusst hier und nicht im Client, damit es für Liste, Kanban-Board, Dialog und
+    // Detailseite gleichermaßen gilt. Gespeichert wird vom Aufrufer.
+    private async Task ApplyTimerForStatusChangeAsync(int taskId, WorkStatus previous, WorkStatus current)
+    {
+        if (previous == current) return;
+
+        if (current == WorkStatus.InProgress)
+        {
+            // Höchstens ein laufender Timer: einen woanders laufenden zuerst stoppen.
+            var now = DateTime.Now;
+            var running = await context.TimeEntries.FirstOrDefaultAsync(t => t.EndedAt == null);
+            if (running is not null)
+            {
+                if (running.TaskItemId == taskId) return; // läuft bereits
+                running.EndedAt = now;
+
+                // Der verdrängte Task ist nicht mehr in Arbeit – sein Status muss das
+                // spiegeln, sonst stünden zwei Tasks auf "In Arbeit" und nur einer liefe.
+                var displaced = await context.Tasks.FindAsync(running.TaskItemId);
+                if (displaced is not null && displaced.Status == WorkStatus.InProgress)
+                {
+                    displaced.Status = WorkStatus.Paused;
+                    displaced.UpdatedAt = now;
+                }
+            }
+
+            context.TimeEntries.Add(new TimeEntry { TaskItemId = taskId, StartedAt = now });
+        }
+        else if (previous == WorkStatus.InProgress)
+        {
+            var running = await context.TimeEntries
+                .FirstOrDefaultAsync(t => t.TaskItemId == taskId && t.EndedAt == null);
+            if (running is not null) running.EndedAt = DateTime.Now;
+        }
     }
 
     public async Task SetGoogleEventIdAsync(int taskId, string? googleEventId)
@@ -87,6 +136,10 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         foreach (var t in tasks)
         {
             t.SortOrder = orderedTaskIds.IndexOf(t.Id);
+
+            // Auch das Verschieben im Kanban-Board ist ein Statuswechsel und steuert
+            // damit den Timer (Spalte "In Arbeit" startet, jede andere stoppt).
+            await ApplyTimerForStatusChangeAsync(t.Id, t.Status, status);
             t.Status = status;
         }
         await context.SaveChangesAsync();
@@ -118,6 +171,16 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         existing.DeletedAt = now;
         foreach (var sub in existing.SubTasks)
             sub.DeletedAt = now;
+
+        // Ein laufender Timer am gelöschten Task (oder Sub-Task) würde sonst ewig
+        // weiterlaufen und jeden weiteren Start blockieren.
+        var affectedIds = existing.SubTasks.Select(s => s.Id).Append(id).ToList();
+        var runningEntries = await context.TimeEntries
+            .Where(t => t.EndedAt == null && affectedIds.Contains(t.TaskItemId))
+            .ToListAsync();
+        foreach (var entry in runningEntries)
+            entry.EndedAt = now;
+
         await context.SaveChangesAsync();
         return true;
     }

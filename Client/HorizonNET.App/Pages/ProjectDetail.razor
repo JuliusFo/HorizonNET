@@ -306,6 +306,11 @@ else
                 </div>
             </div>
             <div class="d-flex align-items-center gap-2">
+                @* Erledigte Tasks brauchen keinen Start-Knopf mehr. *@
+                @if (!task.IsCompleted)
+                {
+                    <TaskTimerButton Task="task" OnChanged="HandleTimerChanged" />
+                }
                 <PriorityIndicator Value="@task.Priority" />
                 @if (!isSubTask)
                 {
@@ -318,6 +323,11 @@ else
             </div>
         </div>
     };
+
+    // Ein Start stoppt ggf. den Timer eines anderen Tasks dieser Liste und ändert
+    // dessen Status mit – deshalb die ganze Liste neu laden statt nur den einen Task.
+    private async Task HandleTimerChanged(TaskResponseDto _) =>
+        tasks = await Api.GetTasksByProjectAsync(Id);
 
     // ── Abschließen / Zurücksetzen ───────────────────────────────────────────
 

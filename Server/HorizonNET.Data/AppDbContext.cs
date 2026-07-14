@@ -102,6 +102,24 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasQueryFilter(t => t.DeletedAt == null);
         });
 
+        modelBuilder.Entity<TimeEntry>(e =>
+        {
+            e.HasKey(t => t.Id);
+
+            // Zeiten gehören zum Task und werden mit ihm gelöscht.
+            e.HasOne(t => t.TaskItem)
+                .WithMany(t => t.TimeEntries)
+                .HasForeignKey(t => t.TaskItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Laufendes Intervall (EndedAt == null) wird häufig gesucht.
+            e.HasIndex(t => t.EndedAt);
+
+            // Passender Filter zum Soft-Delete des Tasks (blendet Zeiten gelöschter
+            // Tasks mit aus – vermeidet die EF-Filter-Warnung, siehe DailyTaskCompletion).
+            e.HasQueryFilter(t => t.DeletedAt == null && t.TaskItem!.DeletedAt == null);
+        });
+
         modelBuilder.Entity<TaskTemplate>(e =>
         {
             e.HasKey(t => t.Id);
@@ -156,6 +174,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<DailyTaskCompletion> DailyTaskCompletions => Set<DailyTaskCompletion>();
 
     public DbSet<TaskTemplate> TaskTemplates => Set<TaskTemplate>();
+
+    public DbSet<TimeEntry> TimeEntries => Set<TimeEntry>();
 
     #endregion
 }
