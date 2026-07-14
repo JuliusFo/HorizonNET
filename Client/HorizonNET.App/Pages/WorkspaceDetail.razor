@@ -19,23 +19,101 @@ else
     <div class="d-flex align-items-center flex-wrap gap-2 mb-3">
         <span class="d-inline-block" style="width:0.9rem;height:0.9rem;border-radius:3px;background-color:@(workspace.Color ?? "#6c757d");"></span>
         <h1 class="mb-0 me-2">@workspace.Name</h1>
-        @if (projects.Count > 0)
-        {
-            <div class="kanban-legend">
-                <span class="kanban-legend-label">Projekte</span>
-                @foreach (var p in projects)
-                {
-                    <button type="button"
-                            class="kanban-legend-item @(projectFilter.Count > 0 ? (projectFilter.Contains(p.Id) ? "is-active" : "is-inactive") : "")"
-                            @onclick="() => ToggleProjectFilter(p.Id)"
-                            title="@(projectFilter.Contains(p.Id) ? "Filter entfernen" : "Nur dieses Projekt anzeigen")">
-                        <span class="kanban-legend-dot" style="background-color:@(p.Color ?? "#6c757d");"></span>
-                        @p.Name
-                    </button>
-                }
-            </div>
-        }
     </div>
+
+    @* Übersicht der aktiven Projekte. Die Karten sind zugleich der Board-Filter –
+       deshalb gibt es keine separate Projekt-Legende mehr. *@
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h2 class="h6 mb-0 text-muted">Projekte</h2>
+        <div class="d-flex align-items-center gap-2">
+            @if (projectFilter.Count > 0)
+            {
+                <button class="btn btn-sm btn-outline-secondary" @onclick="ClearProjectFilter">Alle anzeigen</button>
+            }
+            <button class="btn btn-sm btn-outline-primary" @onclick="OpenNewProject">+ Neues Projekt</button>
+        </div>
+    </div>
+
+    @if (!ActiveProjects.Any())
+    {
+        <p class="text-muted small">Keine aktiven Projekte in diesem Arbeitsbereich.</p>
+    }
+    else
+    {
+        <div class="row row-cols-1 row-cols-md-2 row-cols-xl-4 g-2 mb-2">
+            @foreach (var p in ActiveProjects)
+            {
+                <div class="col">
+                    <div class="card h-100 ws-project-card @FilterClass(p.Id)"
+                         style="@(p.Color is not null ? $"background-color: {p.Color}1A; border-color: {p.Color};" : "")">
+                        <div class="card-body py-2 px-3">
+                            <div class="d-flex justify-content-between align-items-center gap-2">
+                                <a href="/projects/@p.Id" class="text-decoration-none fw-semibold text-dark text-truncate">@p.Name</a>
+                                <div class="d-flex align-items-center gap-1 flex-shrink-0">
+                                    <PriorityIndicator Value="@p.Priority" />
+                                    <FilterToggleButton Active="@projectFilter.Contains(p.Id)"
+                                                        OnClick="() => ToggleProjectFilter(p.Id)"
+                                                        Title="Board auf dieses Projekt filtern" />
+                                    <button class="btn btn-sm btn-outline-primary btn-icon"
+                                            @onclick="() => OpenEditProject(p)" title="Bearbeiten">✎</button>
+                                </div>
+                            </div>
+
+                            @{
+                                var openTasks = p.TaskCount - p.DoneTaskCount;
+                                var pct = p.TaskCount > 0
+                                    ? (int)Math.Round(p.DoneTaskCount * 100.0 / p.TaskCount)
+                                    : 0;
+                            }
+                            @if (p.TaskCount > 0)
+                            {
+                                <div class="progress mt-2" style="height: 4px;">
+                                    <div class="progress-bar" role="progressbar" style="width: @pct%;"
+                                         aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                                <div class="small text-muted mt-1">@pct% erledigt · @openTasks offen</div>
+                            }
+                            else
+                            {
+                                <div class="small text-muted mt-2">Keine Tasks</div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    @* Pausierte/archivierte Projekte haben weiterhin Tasks auf dem Board – ohne diese
+       Zeile wären sie nach dem Wegfall der Legende nicht mehr filterbar. *@
+    @if (InactiveProjects.Any())
+    {
+        <div class="ws-inactive-row mb-4">
+            <span class="text-muted small">Inaktiv:</span>
+            @foreach (var p in InactiveProjects)
+            {
+                @* Der Chip IST der Filter-Button (ein <button> lässt sich nicht verschachteln),
+                   deshalb hier der Trichter als Symbol statt der FilterToggleButton-Komponente. *@
+                <button type="button" class="ws-inactive-chip @FilterClass(p.Id)"
+                        @onclick="() => ToggleProjectFilter(p.Id)"
+                        title="@(projectFilter.Contains(p.Id) ? "Filter entfernen" : "Board auf dieses Projekt filtern")">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="currentColor" viewBox="0 0 16 16">
+                        @if (projectFilter.Contains(p.Id))
+                        {
+                            <path d="M1.5 1.5A.5.5 0 0 1 2 1h12a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.128.334L10 8.692V13.5a.5.5 0 0 1-.342.474l-3 1A.5.5 0 0 1 6 14.5V8.692L1.628 3.834A.5.5 0 0 1 1.5 3.5z" />
+                        }
+                        else
+                        {
+                            <path d="M1.5 1.5A.5.5 0 0 1 2 1h12a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.128.334L10 8.692V13.5a.5.5 0 0 1-.342.474l-3 1A.5.5 0 0 1 6 14.5V8.692L1.628 3.834A.5.5 0 0 1 1.5 3.5zM2 2v1.293l4.372 4.858A.5.5 0 0 1 6.5 8.5v5.306l2-.666V8.5a.5.5 0 0 1 .128-.349L13 3.293V2z" />
+                        }
+                    </svg>
+                    <span class="ws-inactive-dot" style="background-color:@(p.Color ?? "#6c757d");"></span>
+                    @p.Name
+                    <span class="text-muted">· @EnumL[$"ProjectStatus_{p.Status}"]</span>
+                </button>
+            }
+        </div>
+    }
 
     @if (tasks is null)
     {
@@ -153,6 +231,13 @@ else
                 OnTaskUpdated="HandleTaskUpdated"
                 OnClose="@(() => selectedTask = null)" />
 
+@* Anlegen legt das Projekt direkt in DIESEM Arbeitsbereich an (DefaultWorkspaceId). *@
+<ProjectEditDialog Visible="showProjectDialog"
+                   Project="dialogProject"
+                   DefaultWorkspaceId="Id"
+                   OnSaved="HandleProjectSavedAsync"
+                   OnClose="CloseProjectDialog" />
+
 @code {
     [Parameter] public int Id { get; set; }
 
@@ -178,6 +263,26 @@ else
     // Aktive Projekt-Filter (leer = alle Projekte anzeigen)
     private HashSet<int> projectFilter = new();
 
+    // Aktive Projekte = die Karten-Übersicht (zugleich der Board-Filter).
+    private IEnumerable<ProjectResponseDto> ActiveProjects =>
+        projects.Where(p => p.Status == "Active");
+
+    // Pausiert/archiviert: erscheinen nur als kompakte Chips, damit ihre Tasks
+    // auf dem Board weiterhin filterbar bleiben.
+    private IEnumerable<ProjectResponseDto> InactiveProjects =>
+        projects.Where(p => p.Status != "Active");
+
+    // Hervorhebung/Abdunkelung, solange irgendein Filter aktiv ist.
+    private string FilterClass(int projectId) =>
+        projectFilter.Count == 0 ? string.Empty
+        : projectFilter.Contains(projectId) ? "is-selected" : "is-dimmed";
+
+    private void ClearProjectFilter() => projectFilter.Clear();
+
+    // Projekt anlegen/bearbeiten – geteilter ProjectEditDialog (null = neu).
+    private bool showProjectDialog;
+    private ProjectResponseDto? dialogProject;
+
     // Spalten = alle WorkStatus-Werte in Deklarationsreihenfolge
     private static readonly WorkStatus[] Columns = Enum.GetValues<WorkStatus>();
 
@@ -201,8 +306,7 @@ else
         if (workspace is not null)
         {
             await ProjectState.EnsureLoadedAsync();
-            projects = (ProjectState.Projects ?? []).Where(p => p.WorkspaceId == Id).ToList();
-            projectColors = projects.ToDictionary(p => p.Id, p => p.Color);
+            RebuildProjects();
 
             // Tasks aller Projekte des Arbeitsbereichs einsammeln (Client-Aggregation)
             var all = new List<TaskResponseDto>();
@@ -347,5 +451,52 @@ else
         if (tasks is null) return;
         var idx = tasks.FindIndex(t => t.Id == updated.Id);
         if (idx >= 0) tasks[idx] = updated;
+    }
+
+    // ── Projekte (Übersicht + ProjectEditDialog) ─────────────────────────────
+
+    // Lokale Projektliste + Kartenfarben aus dem geteilten State ableiten.
+    private void RebuildProjects()
+    {
+        projects      = (ProjectState.Projects ?? []).Where(p => p.WorkspaceId == Id).ToList();
+        projectColors = projects.ToDictionary(p => p.Id, p => p.Color);
+    }
+
+    private void OpenNewProject()
+    {
+        dialogProject     = null; // null → Anlege-Modus, Arbeitsbereich ist vorbelegt
+        showProjectDialog = true;
+    }
+
+    private void OpenEditProject(ProjectResponseDto project)
+    {
+        dialogProject     = project;
+        showProjectDialog = true;
+    }
+
+    private void CloseProjectDialog()
+    {
+        showProjectDialog = false;
+        dialogProject     = null;
+    }
+
+    private async Task HandleProjectSavedAsync(ProjectResponseDto saved)
+    {
+        var all = ProjectState.Projects;
+        if (all is null)
+        {
+            await ProjectState.RefreshAsync();
+        }
+        else
+        {
+            var idx = all.FindIndex(p => p.Id == saved.Id);
+            if (idx >= 0) all[idx] = saved; else all.Add(saved);
+            ProjectState.NotifyChanged();
+        }
+
+        // Wurde das Projekt in einen anderen Arbeitsbereich verschoben,
+        // fällt es hier durch den Filter wieder heraus.
+        RebuildProjects();
+        CloseProjectDialog();
     }
 }
