@@ -1,0 +1,181 @@
+@inject ApiService Api
+@inject WorkspaceState WorkspaceState
+@inject IStringLocalizer<Enums> EnumL
+
+@* Dialog zum Anlegen UND Bearbeiten eines Projekts (leichtgewichtiges Overlay,
+   kein JS-Interop – Muster wie TaskEditDialog).
+   Visible steuert die Sichtbarkeit; Project = null bedeutet "neues Projekt". *@
+@if (Visible)
+{
+    <div class="project-dialog-backdrop" @onclick="CloseAsync"></div>
+    <div class="project-dialog">
+        <div class="project-dialog-content" @onclick:stopPropagation="true">
+            <div class="project-dialog-header">
+                <h5 class="mb-0">@(IsNew ? "Neues Projekt" : "Projekt bearbeiten")</h5>
+                <button type="button" class="btn-close" @onclick="CloseAsync" aria-label="Schließen"></button>
+            </div>
+
+            <div class="project-dialog-body">
+                <EditForm id="projectEditForm" Model="model" OnValidSubmit="SaveAsync">
+                    <DataAnnotationsValidator />
+
+                    <div class="mb-3">
+                        <label class="form-label">Name *</label>
+                        <InputText class="form-control" @bind-Value="model.Name" />
+                        <ValidationMessage For="() => model.Name" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Beschreibung</label>
+                        <InputTextArea class="form-control" rows="2" @bind-Value="model.Description" />
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Status</label>
+                            <InputSelect class="form-select" @bind-Value="model.Status">
+                                @foreach (var s in Enum.GetValues<ProjectStatus>())
+                                {
+                                    <option value="@s">@EnumL[$"ProjectStatus_{s}"]</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Priorität</label>
+                            <InputSelect class="form-select" @bind-Value="model.Priority">
+                                @foreach (var p in Enum.GetValues<Priority>())
+                                {
+                                    <option value="@p">@PriorityDisplay.Symbol(p) @EnumL[$"Priority_{p}"]</option>
+                                }
+                            </InputSelect>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Arbeitsbereich</label>
+                        <InputSelect class="form-select" @bind-Value="model.WorkspaceId">
+                            <option value="">Kein Arbeitsbereich</option>
+                            @foreach (var ws in Workspaces)
+                            {
+                                <option value="@ws.Id">@ws.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="form-label mb-0">Farbe</label>
+                        <input type="color" class="form-control form-control-color"
+                               value="@(model.Color ?? "#6c757d")"
+                               @oninput="e => model.Color = e.Value?.ToString()" />
+                        @if (model.Color is not null)
+                        {
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                    @onclick="() => model.Color = null">Zurücksetzen</button>
+                        }
+                    </div>
+
+                    @if (error is not null)
+                    {
+                        <div class="alert alert-danger py-1 mt-3 mb-0">@error</div>
+                    }
+                </EditForm>
+            </div>
+
+            <div class="project-dialog-footer">
+                <button type="submit" form="projectEditForm" class="btn btn-primary" disabled="@isSaving">
+                    @(isSaving ? "Speichert…" : "Speichern")
+                </button>
+                <button type="button" class="btn btn-outline-secondary" @onclick="CloseAsync">Abbrechen</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+
+    // Zu bearbeitendes Projekt; null = neues Projekt anlegen.
+    [Parameter] public ProjectResponseDto? Project { get; set; }
+
+    // Vorbelegter Arbeitsbereich beim Anlegen (z. B. von der Arbeitsbereich-Seite aus).
+    [Parameter] public int? DefaultWorkspaceId { get; set; }
+
+    // Liefert das angelegte bzw. aktualisierte Projekt (der Aufrufer schließt den Dialog).
+    [Parameter] public EventCallback<ProjectResponseDto> OnSaved { get; set; }
+
+    // Schließen ohne Speichern (X / Backdrop / Abbrechen).
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private ProjectFormModel model = new();
+    private bool isSaving;
+    private string? error;
+    private bool loaded;
+
+    private bool IsNew => Project is null;
+
+    private IEnumerable<WorkspaceResponseDto> Workspaces => WorkspaceState.Workspaces ?? [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Beim Öffnen einmalig befüllen; beim Schließen für das nächste Mal zurücksetzen.
+        if (!Visible) { loaded = false; return; }
+        if (loaded) return;
+
+        await WorkspaceState.EnsureLoadedAsync();
+
+        loaded   = true;
+        isSaving = false;
+        error    = null;
+
+        model = Project is null
+            ? new ProjectFormModel { WorkspaceId = DefaultWorkspaceId }
+            : new ProjectFormModel
+            {
+                Name        = Project.Name,
+                Description = Project.Description,
+                Status      = Enum.Parse<ProjectStatus>(Project.Status),
+                Priority    = Enum.Parse<Priority>(Project.Priority),
+                Color       = Project.Color,
+                WorkspaceId = Project.WorkspaceId
+            };
+    }
+
+    private async Task SaveAsync()
+    {
+        isSaving = true;
+        error    = null;
+
+        var description = string.IsNullOrWhiteSpace(model.Description) ? null : model.Description;
+
+        var saved = Project is null
+            ? await Api.CreateProjectAsync(new ProjectCreateDto(
+                model.Name, description, model.Status, model.Priority, model.Color, model.WorkspaceId))
+            : await Api.UpdateProjectAsync(Project.Id, new ProjectUpdateDto(
+                model.Name, description, model.Status, model.Priority, model.Color, model.WorkspaceId));
+
+        isSaving = false;
+
+        if (saved is null)
+        {
+            error = "Projekt konnte nicht gespeichert werden.";
+            return;
+        }
+
+        await OnSaved.InvokeAsync(saved);
+    }
+
+    private async Task CloseAsync() => await OnClose.InvokeAsync();
+
+    private class ProjectFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Name ist erforderlich.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(200)]
+        public string Name { get; set; } = string.Empty;
+
+        public string? Description { get; set; }
+        public ProjectStatus Status { get; set; } = ProjectStatus.Active;
+        public Priority Priority { get; set; } = Priority.Medium;
+        public string? Color { get; set; }
+        public int? WorkspaceId { get; set; }
+    }
+}
