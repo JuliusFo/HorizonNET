@@ -4,6 +4,8 @@
 @inject WorkspaceState WorkspaceState
 @inject IStringLocalizer<Home> L
 @inject IStringLocalizer<Enums> EnumL
+@inject ToastService Toast
+@inject ConfirmService Confirm
 
 <PageTitle>@L["PageTitle"]</PageTitle>
 
@@ -496,14 +498,27 @@ else
 
     private async Task DeleteProjectAsync(ProjectResponseDto project)
     {
+        if (!await Confirm.ShowAsync(
+            "Projekt löschen?",
+            $"{project.Name} und alle zugehörigen Tasks werden gelöscht. Du kannst das direkt danach rückgängig machen.",
+            "Löschen"))
+            return;
+
         var success = await Api.DeleteProjectAsync(project.Id);
-        if (success)
+        if (!success) return;
+
+        projects?.Remove(project);
+        ProjectState.NotifyChanged();
+        if (project.WorkspaceId is not null)
+            await WorkspaceState.RefreshAsync();
+
+        Toast.ShowUndo($"{project.Name} gelöscht", async () =>
         {
-            projects?.Remove(project);
-            ProjectState.NotifyChanged();
-            if (project.WorkspaceId is not null)
-                await WorkspaceState.RefreshAsync();
-        }
+            if (!await Api.RestoreProjectAsync(project.Id)) return;
+            await ProjectState.RefreshAsync();
+            await WorkspaceState.RefreshAsync();
+            await InvokeAsync(StateHasChanged);
+        });
     }
 
     // ── Erstellen ────────────────────────────────────────────────────────────
@@ -638,6 +653,12 @@ else
 
     private async Task DeleteWorkspaceAsync(WorkspaceResponseDto ws)
     {
+        if (!await Confirm.ShowAsync(
+            "Arbeitsbereich löschen?",
+            $"{ws.Name} wird gelöscht. Zugeordnete Projekte bleiben erhalten und erscheinen ohne Arbeitsbereich.",
+            "Löschen"))
+            return;
+
         var success = await Api.DeleteWorkspaceAsync(ws.Id);
         if (!success) return;
 
@@ -648,17 +669,17 @@ else
         if (workspaceFilter == ws.Id)
             workspaceFilter = null;
 
-        // Projekte dieses Bereichs verlieren serverseitig ihre Zuordnung
-        // (ON DELETE SET NULL) – lokalen Projekt-State entsprechend angleichen.
-        if (projects is not null)
+        // Beim Soft-Delete behalten die Projekte ihre WorkspaceId (Undo-fähig);
+        // sie erscheinen bis zur Wiederherstellung ungruppiert (siehe NavMenu).
+        ProjectState.NotifyChanged();
+
+        Toast.ShowUndo($"{ws.Name} gelöscht", async () =>
         {
-            for (var i = 0; i < projects.Count; i++)
-            {
-                if (projects[i].WorkspaceId == ws.Id)
-                    projects[i] = projects[i] with { WorkspaceId = null };
-            }
-            ProjectState.NotifyChanged();
-        }
+            if (!await Api.RestoreWorkspaceAsync(ws.Id)) return;
+            await WorkspaceState.RefreshAsync();
+            await ProjectState.RefreshAsync();
+            await InvokeAsync(StateHasChanged);
+        });
     }
 
     // ── Formularmodelle ──────────────────────────────────────────────────────

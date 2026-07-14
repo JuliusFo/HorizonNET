@@ -108,6 +108,14 @@ public class DailyTasksController(IDailyTaskRepository repo) : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("{id:int}/restore")]
+    public async Task<IActionResult> Restore(int id)
+    {
+        var restored = await repo.RestoreAsync(id);
+        if (!restored) return NotFound();
+        return NoContent();
+    }
+
     [HttpPut("reorder")]
     public async Task<IActionResult> Reorder([FromBody] List<int> orderedIds)
     {

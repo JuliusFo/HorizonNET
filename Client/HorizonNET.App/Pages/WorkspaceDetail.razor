@@ -2,6 +2,7 @@
 @inject ApiService Api
 @inject ProjectState ProjectState
 @inject IStringLocalizer<Enums> EnumL
+@inject ToastService Toast
 
 <PageTitle>@(workspace?.Name ?? "Arbeitsbereich") – HorizonNET</PageTitle>
 
@@ -326,8 +327,18 @@ else
 
     private void HandleTaskDeleted(int id)
     {
+        var title = tasks?.FirstOrDefault(t => t.Id == id)?.Title;
         tasks?.RemoveAll(t => t.Id == id);
         selectedTask = null;
+
+        Toast.ShowUndo(string.IsNullOrWhiteSpace(title) ? "Task gelöscht" : $"{title} gelöscht", async () =>
+        {
+            if (!await Api.RestoreTaskAsync(id)) return;
+            var restored = await Api.GetTaskAsync(id);
+            if (restored is not null && tasks is not null && !tasks.Any(t => t.Id == id))
+                tasks.Add(restored);
+            await InvokeAsync(StateHasChanged);
+        });
     }
 
     // Live-Aktualisierung (Sub-Tasks geändert) – Dialog bleibt offen.

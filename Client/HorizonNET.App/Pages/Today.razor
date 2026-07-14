@@ -2,6 +2,7 @@
 @inject ApiService Api
 @inject ProjectState ProjectState
 @inject SoundService Sound
+@inject ToastService Toast
 
 <PageTitle>Heute – HorizonNET</PageTitle>
 
@@ -320,8 +321,16 @@
     private async Task DeleteInboxTaskAsync(TaskResponseDto task)
     {
         var success = await Api.DeleteTaskAsync(task.Id);
-        if (success)
-            inboxTasks?.Remove(task);
+        if (!success) return;
+
+        inboxTasks?.Remove(task);
+
+        Toast.ShowUndo($"{task.Title} gelöscht", async () =>
+        {
+            if (!await Api.RestoreTaskAsync(task.Id)) return;
+            inboxTasks = await Api.GetInboxTasksAsync();
+            await InvokeAsync(StateHasChanged);
+        });
     }
 
     private class InboxTaskFormModel

@@ -23,5 +23,9 @@ public class DailyTask
 
     public Project? Project { get; set; }
 
+    // Soft-Delete: null = aktiv (siehe TaskItem.DeletedAt). Nicht zu verwechseln
+    // mit IsActive (Pausieren) – gelöschte Dailies sind komplett ausgeblendet.
+    public DateTime? DeletedAt { get; set; }
+
     public ICollection<DailyTaskCompletion> Completions { get; set; } = [];
 }

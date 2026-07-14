@@ -13,4 +13,7 @@ public interface IProjectRepository
     Task<Project?> UpdateAsync(int id, Project project);
 
     Task<bool> DeleteAsync(int id);
+
+    // Macht ein Soft-Delete rückgängig (Projekt + im selben Vorgang gelöschte Tasks).
+    Task<bool> RestoreAsync(int id);
 }

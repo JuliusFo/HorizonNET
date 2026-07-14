@@ -1,4 +1,5 @@
 @inject ApiService Api
+@inject ToastService Toast
 
 @* Wiederverwendbare Sub-Task-Liste: Hinzufügen, Abhaken, Löschen und Sortieren
    per Drag&Drop. Wirkt sofort über die API und meldet jede Änderung über
@@ -109,6 +110,18 @@
 
         items.RemoveAll(s => s.Id == sub.Id);
         await NotifyChangedAsync();
+
+        Toast.ShowUndo($"{sub.Title} gelöscht", async () =>
+        {
+            if (!await Api.RestoreTaskAsync(sub.Id)) return;
+            if (!items.Any(s => s.Id == sub.Id))
+            {
+                items.Add(sub);
+                items = items.OrderBy(s => s.SortOrder).ToList();
+            }
+            await NotifyChangedAsync();
+            await InvokeAsync(StateHasChanged);
+        });
     }
 
     private async Task HandleSubTaskKeyAsync(KeyboardEventArgs e)

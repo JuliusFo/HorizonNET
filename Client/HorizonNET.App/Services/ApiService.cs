@@ -36,6 +36,12 @@ public class ApiService(HttpClient http)
         return response.IsSuccessStatusCode;
     }
 
+    public async Task<bool> RestoreWorkspaceAsync(int id)
+    {
+        var response = await http.PostAsync($"api/workspaces/{id}/restore", null);
+        return response.IsSuccessStatusCode;
+    }
+
     // ── Projekte ────────────────────────────────────────────────────────────
 
     public Task<List<ProjectResponseDto>?> GetProjectsAsync() =>
@@ -63,6 +69,12 @@ public class ApiService(HttpClient http)
     public async Task<bool> DeleteProjectAsync(int id)
     {
         var response = await http.DeleteAsync($"api/projects/{id}");
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> RestoreProjectAsync(int id)
+    {
+        var response = await http.PostAsync($"api/projects/{id}/restore", null);
         return response.IsSuccessStatusCode;
     }
 
@@ -99,6 +111,12 @@ public class ApiService(HttpClient http)
     public async Task<bool> DeleteTaskAsync(int id)
     {
         var response = await http.DeleteAsync($"api/tasks/{id}");
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> RestoreTaskAsync(int id)
+    {
+        var response = await http.PostAsync($"api/tasks/{id}/restore", null);
         return response.IsSuccessStatusCode;
     }
 
@@ -147,6 +165,12 @@ public class ApiService(HttpClient http)
         return response.IsSuccessStatusCode;
     }
 
+    public async Task<bool> RestoreNoteAsync(int id)
+    {
+        var response = await http.PostAsync($"api/notes/{id}/restore", null);
+        return response.IsSuccessStatusCode;
+    }
+
     // ── Daily Tasks ──────────────────────────────────────────────────────────────
 
     public Task<List<DailyTaskResponseDto>?> GetDailyTasksAsync() =>
@@ -174,6 +198,12 @@ public class ApiService(HttpClient http)
     public async Task<bool> DeleteDailyTaskAsync(int id)
     {
         var response = await http.DeleteAsync($"api/dailytasks/{id}");
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> RestoreDailyTaskAsync(int id)
+    {
+        var response = await http.PostAsync($"api/dailytasks/{id}/restore", null);
         return response.IsSuccessStatusCode;
     }
 

@@ -22,5 +22,9 @@ public class Project
 
     public Workspace? Workspace { get; set; }
 
+    // Soft-Delete: null = aktiv (siehe TaskItem.DeletedAt). Beim Löschen eines
+    // Projekts werden dessen Tasks mit demselben Zeitstempel mitgestempelt.
+    public DateTime? DeletedAt { get; set; }
+
     public ICollection<TaskItem> Tasks { get; set; } = [];
 }

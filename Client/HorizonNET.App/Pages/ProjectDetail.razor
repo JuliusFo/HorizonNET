@@ -2,6 +2,7 @@
 @inject ApiService Api
 @inject IStringLocalizer<ProjectDetail> L
 @inject IStringLocalizer<Enums> EnumL
+@inject ToastService Toast
 
 <PageTitle>Projekt – HorizonNET</PageTitle>
 
@@ -290,6 +291,8 @@ else
 
     private void HandleTaskDeleted(int id)
     {
+        var title = FindTaskTitle(id);
+
         if (tasks is not null)
         {
             var parentIdx = tasks.FindIndex(t => t.Id == id);
@@ -305,6 +308,7 @@ else
         }
 
         selectedTask = null;
+        ShowTaskUndo(id, title);
     }
 
     // Live-Aktualisierung (Sub-Tasks geändert) – Dialog bleibt offen, die
@@ -332,6 +336,24 @@ else
             var parentTask = tasks.FirstOrDefault(t => t.SubTasks?.Any(s => s.Id == task.Id) == true);
             parentTask?.SubTasks?.Remove(task);
         }
+
+        ShowTaskUndo(task.Id, task.Title);
+    }
+
+    // Titel eines (Sub-)Tasks aus der aktuellen Liste ermitteln (für den Undo-Toast).
+    private string? FindTaskTitle(int id) =>
+        tasks?.FirstOrDefault(t => t.Id == id)?.Title
+        ?? tasks?.SelectMany(t => t.SubTasks ?? Enumerable.Empty<TaskResponseDto>())
+                 .FirstOrDefault(s => s.Id == id)?.Title;
+
+    private void ShowTaskUndo(int id, string? title)
+    {
+        Toast.ShowUndo(string.IsNullOrWhiteSpace(title) ? "Task gelöscht" : $"{title} gelöscht", async () =>
+        {
+            if (!await Api.RestoreTaskAsync(id)) return;
+            tasks = await Api.GetTasksByProjectAsync(Id);
+            await InvokeAsync(StateHasChanged);
+        });
     }
 
     // ── Sub-Task anlegen ─────────────────────────────────────────────────────

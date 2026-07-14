@@ -14,6 +14,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(w => w.Id);
             e.Property(w => w.Name).IsRequired().HasMaxLength(200);
             e.Property(w => w.Description).HasMaxLength(1000);
+            // Soft-Delete: gelöschte Zeilen global ausblenden.
+            e.HasQueryFilter(w => w.DeletedAt == null);
         });
 
         modelBuilder.Entity<Project>(e =>
@@ -30,6 +32,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany(w => w.Projects)
                 .HasForeignKey(p => p.WorkspaceId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasQueryFilter(p => p.DeletedAt == null);
         });
 
         modelBuilder.Entity<TaskItem>(e =>
@@ -50,6 +54,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany(t => t.SubTasks)
                 .HasForeignKey(t => t.ParentTaskId)
                 .OnDelete(DeleteBehavior.NoAction);
+
+            e.HasQueryFilter(t => t.DeletedAt == null);
         });
 
         modelBuilder.Entity<GoogleConnection>(e =>
@@ -76,6 +82,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany()
                 .HasForeignKey(n => n.ProjectId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasQueryFilter(n => n.DeletedAt == null);
         });
 
         modelBuilder.Entity<DailyTask>(e =>
@@ -90,6 +98,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany()
                 .HasForeignKey(t => t.ProjectId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasQueryFilter(t => t.DeletedAt == null);
         });
 
         modelBuilder.Entity<DailyTaskCompletion>(e =>
@@ -104,6 +114,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
             // Höchstens ein Häkchen pro Daily und Tag.
             e.HasIndex(c => new { c.DailyTaskId, c.Date }).IsUnique();
+
+            // Passender Filter zum Soft-Delete des DailyTask (blendet Häkchen
+            // gelöschter Dailies aus – vermeidet die EF-Filter-Warnung).
+            e.HasQueryFilter(c => c.DailyTask!.DeletedAt == null);
         });
     }
 

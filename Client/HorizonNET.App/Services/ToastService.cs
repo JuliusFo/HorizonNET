@@ -25,9 +25,15 @@ public class ToastService
 
     public event Action? OnChange;
 
+    private const int DefaultUndoMs = 8000;
+
     public void ShowSuccess(string text) => Show(ToastLevel.Success, text, DefaultSuccessMs);
     public void ShowError(string text)   => Show(ToastLevel.Error,   text, DefaultErrorMs);
     public void ShowInfo(string text)    => Show(ToastLevel.Info,    text, DefaultSuccessMs);
+
+    // Toast mit „Rückgängig"-Aktion (z. B. nach dem Löschen). Bleibt länger stehen.
+    public void ShowUndo(string text, Func<Task> undo) =>
+        Show(ToastLevel.Info, text, DefaultUndoMs, actionLabel: "Rückgängig", action: undo);
 
     public ToastMessage Show(
         ToastLevel level,

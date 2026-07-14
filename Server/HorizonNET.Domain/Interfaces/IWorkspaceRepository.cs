@@ -13,4 +13,6 @@ public interface IWorkspaceRepository
     Task<Workspace?> UpdateAsync(int id, Workspace workspace);
 
     Task<bool> DeleteAsync(int id);
+
+    Task<bool> RestoreAsync(int id);
 }

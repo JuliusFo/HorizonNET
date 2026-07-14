@@ -66,4 +66,13 @@ public class ProjectsController(IProjectRepository repo) : ControllerBase
         if (!deleted) return NotFound();
         return NoContent();
     }
+
+    // Macht ein Soft-Delete rückgängig (Projekt + im selben Vorgang gelöschte Tasks).
+    [HttpPost("{id:int}/restore")]
+    public async Task<IActionResult> Restore(int id)
+    {
+        var restored = await repo.RestoreAsync(id);
+        if (!restored) return NotFound();
+        return NoContent();
+    }
 }

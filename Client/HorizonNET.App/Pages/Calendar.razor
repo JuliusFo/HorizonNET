@@ -2,6 +2,7 @@
 @inject ApiService Api
 @inject ProjectState ProjectState
 @inject SettingsState Settings
+@inject ToastService Toast
 
 <PageTitle>Kalender – HorizonNET</PageTitle>
 
@@ -383,9 +384,18 @@ else
 
     private async Task HandleTaskDeleted(int id)
     {
+        var title = tasks?.FirstOrDefault(t => t.Id == id)?.Title;
         tasks?.RemoveAll(t => t.Id == id);
         selectedTask = null;
         await RefreshAsync();
+
+        Toast.ShowUndo(string.IsNullOrWhiteSpace(title) ? "Task gelöscht" : $"{title} gelöscht", async () =>
+        {
+            if (!await Api.RestoreTaskAsync(id)) return;
+            tasks = await Api.GetTasksAsync();
+            await RefreshAsync();
+            await InvokeAsync(StateHasChanged);
+        });
     }
 
     private void ReplaceTask(TaskResponseDto updated)

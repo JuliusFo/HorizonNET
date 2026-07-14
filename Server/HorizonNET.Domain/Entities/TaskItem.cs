@@ -43,5 +43,9 @@ public class TaskItem
 
     public DateTime UpdatedAt { get; set; }
 
+    // Soft-Delete: null = aktiv. Gelöschte Zeilen werden per globalem Query-Filter
+    // ausgeblendet; der Zeitstempel gruppiert einen Löschvorgang (Cascade) für Undo.
+    public DateTime? DeletedAt { get; set; }
+
     public ICollection<TaskItem> SubTasks { get; set; } = [];
 }

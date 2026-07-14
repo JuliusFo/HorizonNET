@@ -13,8 +13,11 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 var apiBaseUrl = builder.Configuration["ApiSettings:BaseUrl"]
     ?? throw new InvalidOperationException("ApiSettings:BaseUrl ist nicht konfiguriert.");
 
-// Toast-Benachrichtigungen (Netzwerkfehler-Feedback, später Undo)
+// Toast-Benachrichtigungen (Netzwerkfehler-Feedback, Undo)
 builder.Services.AddScoped<ToastService>();
+
+// Zentrale Lösch-Bestätigungen
+builder.Services.AddScoped<ConfirmService>();
 
 // HttpClient für den ApiService mit der konfigurierten Server-URL registrieren.
 // Ein DelegatingHandler meldet fehlgeschlagene Aufrufe zentral als Toast.

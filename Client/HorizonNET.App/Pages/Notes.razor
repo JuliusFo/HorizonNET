@@ -1,5 +1,6 @@
 @page "/notes"
 @inject ApiService Api
+@inject ToastService Toast
 
 <PageTitle>Notizen – HorizonNET</PageTitle>
 
@@ -90,8 +91,16 @@
 
     private void HandleDeleted(int id)
     {
+        var title = notes?.FirstOrDefault(n => n.Id == id)?.Title;
         notes?.RemoveAll(n => n.Id == id);
         if (selected?.Id == id) selected = null;
         StateHasChanged();
+
+        Toast.ShowUndo(string.IsNullOrWhiteSpace(title) ? "Notiz gelöscht" : $"{title} gelöscht", async () =>
+        {
+            if (!await Api.RestoreNoteAsync(id)) return;
+            notes = await Api.GetNotesAsync() ?? notes;
+            await InvokeAsync(StateHasChanged);
+        });
     }
 }

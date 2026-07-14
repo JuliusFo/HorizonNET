@@ -18,6 +18,8 @@ public interface IDailyTaskRepository
 
     Task<bool> DeleteAsync(int id);
 
+    Task<bool> RestoreAsync(int id);
+
     Task ReorderAsync(IList<int> orderedIds);
 
     // Setzt/entfernt das Häkchen für einen Tag (idempotent). false, wenn Daily nicht existiert.

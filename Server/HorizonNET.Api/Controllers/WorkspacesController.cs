@@ -60,4 +60,12 @@ public class WorkspacesController(IWorkspaceRepository repo) : ControllerBase
         if (!deleted) return NotFound();
         return NoContent();
     }
+
+    [HttpPost("{id:int}/restore")]
+    public async Task<IActionResult> Restore(int id)
+    {
+        var restored = await repo.RestoreAsync(id);
+        if (!restored) return NotFound();
+        return NoContent();
+    }
 }

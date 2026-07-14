@@ -57,9 +57,21 @@ public class NoteRepository(AppDbContext context) : INoteRepository
     public async Task<bool> DeleteAsync(int id)
     {
         var existing = await context.Notes.FindAsync(id);
-        if (existing is null) return false;
+        if (existing is null || existing.DeletedAt is not null) return false;
 
-        context.Notes.Remove(existing);
+        existing.DeletedAt = DateTime.Now;
+        await context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> RestoreAsync(int id)
+    {
+        var existing = await context.Notes
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(n => n.Id == id);
+        if (existing is null || existing.DeletedAt is null) return false;
+
+        existing.DeletedAt = null;
         await context.SaveChangesAsync();
         return true;
     }

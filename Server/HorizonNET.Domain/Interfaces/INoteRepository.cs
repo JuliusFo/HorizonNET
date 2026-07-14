@@ -17,4 +17,6 @@ public interface INoteRepository
     Task<Note?> UpdateAsync(int id, Note note);
 
     Task<bool> DeleteAsync(int id);
+
+    Task<bool> RestoreAsync(int id);
 }

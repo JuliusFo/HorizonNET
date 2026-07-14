@@ -112,10 +112,30 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
             .FirstOrDefaultAsync(t => t.Id == id);
         if (existing is null) return false;
 
-        // Sub-Tasks manuell entfernen, da SQLite keine Cascade-Deletes auf
-        // selbstreferenzierende Tabellen unterstützt
-        context.Tasks.RemoveRange(existing.SubTasks);
-        context.Tasks.Remove(existing);
+        // Soft-Delete: Task und seine (aktiven) Sub-Tasks mit demselben
+        // Zeitstempel stempeln, damit Undo genau diese Menge wiederherstellt.
+        var now = DateTime.Now;
+        existing.DeletedAt = now;
+        foreach (var sub in existing.SubTasks)
+            sub.DeletedAt = now;
+        await context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> RestoreAsync(int id)
+    {
+        var existing = await context.Tasks
+            .IgnoreQueryFilters()
+            .Include(t => t.SubTasks)
+            .FirstOrDefaultAsync(t => t.Id == id);
+        if (existing is null || existing.DeletedAt is null) return false;
+
+        var deletedAt = existing.DeletedAt;
+        existing.DeletedAt = null;
+        // Nur die im selben Vorgang gelöschten Sub-Tasks zurückholen (gleicher
+        // Zeitstempel) – vorher unabhängig gelöschte bleiben gelöscht.
+        foreach (var sub in existing.SubTasks.Where(s => s.DeletedAt == deletedAt))
+            sub.DeletedAt = null;
         await context.SaveChangesAsync();
         return true;
     }

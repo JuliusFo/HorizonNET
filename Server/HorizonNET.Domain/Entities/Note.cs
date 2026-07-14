@@ -24,4 +24,7 @@ public class Note
     public int? ProjectId { get; set; }
 
     public Project? Project { get; set; }
+
+    // Soft-Delete: null = aktiv (siehe TaskItem.DeletedAt).
+    public DateTime? DeletedAt { get; set; }
 }

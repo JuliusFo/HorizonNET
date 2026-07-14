@@ -84,8 +84,13 @@
     private IEnumerable<ProjectResponseDto> ActiveProjects =>
         ProjectState.Projects?.Where(p => p.Status == "Active") ?? [];
 
+    private HashSet<int> ExistingWorkspaceIds =>
+        (WorkspaceState.Workspaces ?? []).Select(w => w.Id).ToHashSet();
+
+    // Ohne Arbeitsbereich ODER dessen Arbeitsbereich existiert nicht (mehr) –
+    // z. B. nach Soft-Delete des Arbeitsbereichs behalten Projekte ihre WorkspaceId.
     private IEnumerable<ProjectResponseDto> UngroupedActiveProjects =>
-        ActiveProjects.Where(p => p.WorkspaceId is null);
+        ActiveProjects.Where(p => p.WorkspaceId is null || !ExistingWorkspaceIds.Contains(p.WorkspaceId.Value));
 
     private IEnumerable<ProjectResponseDto> ActiveProjectsIn(int workspaceId) =>
         ActiveProjects.Where(p => p.WorkspaceId == workspaceId);

@@ -1,4 +1,5 @@
 @inject ApiService Api
+@inject ToastService Toast
 
 @* Verwaltung der Daily Tasks: anlegen, umbenennen, pausieren/aktivieren, löschen,
    per Drag&Drop sortieren. Sichtbarkeit steuert der Aufrufer über Visible. *@
@@ -192,6 +193,14 @@
 
         items.RemoveAll(x => x.Id == d.Id);
         await OnChanged.InvokeAsync();
+
+        Toast.ShowUndo($"{d.Title} gelöscht", async () =>
+        {
+            if (!await Api.RestoreDailyTaskAsync(d.Id)) return;
+            items = await Api.GetDailyTasksAsync() ?? items;
+            await InvokeAsync(StateHasChanged);
+            await OnChanged.InvokeAsync();
+        });
     }
 
     private async Task DropAsync(DailyTaskResponseDto target)

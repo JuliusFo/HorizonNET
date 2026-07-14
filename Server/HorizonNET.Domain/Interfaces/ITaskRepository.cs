@@ -31,5 +31,9 @@ public interface ITaskRepository
     // Setzt nur SortOrder = Listenindex (Status bleibt unverändert) – für Sub-Tasks.
     Task ReorderSubTasksAsync(IList<int> orderedTaskIds);
 
+    // Soft-Delete: stempelt den Task (und aktive Sub-Tasks) als gelöscht.
     Task<bool> DeleteAsync(int id);
+
+    // Macht ein Soft-Delete rückgängig (Task + im selben Vorgang gelöschte Sub-Tasks).
+    Task<bool> RestoreAsync(int id);
 }

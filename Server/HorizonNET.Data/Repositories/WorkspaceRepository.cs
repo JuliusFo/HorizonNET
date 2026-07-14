@@ -34,9 +34,24 @@ public class WorkspaceRepository(AppDbContext context) : IWorkspaceRepository
     public async Task<bool> DeleteAsync(int id)
     {
         var existing = await context.Workspaces.FindAsync(id);
-        if (existing is null) return false;
+        if (existing is null || existing.DeletedAt is not null) return false;
 
-        context.Workspaces.Remove(existing);
+        // Soft-Delete: nur den Arbeitsbereich stempeln. Zugeordnete Projekte
+        // behalten ihre WorkspaceId (erscheinen ungruppiert), damit Undo die
+        // Gruppierung ohne Weiteres wiederherstellt.
+        existing.DeletedAt = DateTime.Now;
+        await context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> RestoreAsync(int id)
+    {
+        var existing = await context.Workspaces
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(w => w.Id == id);
+        if (existing is null || existing.DeletedAt is null) return false;
+
+        existing.DeletedAt = null;
         await context.SaveChangesAsync();
         return true;
     }

@@ -2,6 +2,7 @@
 @inject ApiService Api
 @inject NavigationManager Nav
 @inject IStringLocalizer<Enums> EnumL
+@inject ToastService Toast
 
 <PageTitle>@(task?.Title ?? "Task") – HorizonNET</PageTitle>
 
@@ -246,7 +247,9 @@ else
     {
         if (task is null) return;
 
-        var ok = await Api.DeleteTaskAsync(task.Id);
+        var id = task.Id;
+        var title = task.Title;
+        var ok = await Api.DeleteTaskAsync(id);
         if (!ok)
         {
             saveError = "Löschen fehlgeschlagen.";
@@ -254,6 +257,12 @@ else
         }
 
         Nav.NavigateTo(task.ProjectId is int pid ? $"projects/{pid}" : "");
+
+        Toast.ShowUndo($"{title} gelöscht", async () =>
+        {
+            if (await Api.RestoreTaskAsync(id))
+                Nav.NavigateTo($"tasks/{id}");
+        });
     }
 
     // Live-Aktualisierung aus der SubTaskList (wirkt sofort über die API).
@@ -291,8 +300,16 @@ else
 
     private void HandleNoteDeleted(int id)
     {
+        var title = notes?.FirstOrDefault(n => n.Id == id)?.Title;
         notes?.RemoveAll(n => n.Id == id);
         if (selectedNote?.Id == id) selectedNote = null;
+
+        Toast.ShowUndo(string.IsNullOrWhiteSpace(title) ? "Notiz gelöscht" : $"{title} gelöscht", async () =>
+        {
+            if (!await Api.RestoreNoteAsync(id)) return;
+            notes = await Api.GetNotesByTaskAsync(Id) ?? notes;
+            await InvokeAsync(StateHasChanged);
+        });
     }
 
     private class TaskEditModel

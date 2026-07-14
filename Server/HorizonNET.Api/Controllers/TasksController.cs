@@ -118,4 +118,19 @@ public class TasksController(ITaskRepository repo, GoogleCalendarService google)
 
         return NoContent();
     }
+
+    [HttpPost("{id:int}/restore")]
+    public async Task<IActionResult> Restore(int id)
+    {
+        var restored = await repo.RestoreAsync(id);
+        if (!restored) return NotFound();
+
+        // Wiederhergestellten Task erneut nach Google spiegeln (best-effort);
+        // SyncTaskAsync legt bei ungültiger Event-ID (404/410) einen neuen Termin an.
+        var task = await repo.GetByIdAsync(id);
+        if (task is not null)
+            await google.SyncTaskAsync(task);
+
+        return NoContent();
+    }
 }

@@ -44,10 +44,23 @@ public class DailyTaskRepository(AppDbContext context) : IDailyTaskRepository
     public async Task<bool> DeleteAsync(int id)
     {
         var existing = await context.DailyTasks.FindAsync(id);
-        if (existing is null) return false;
+        if (existing is null || existing.DeletedAt is not null) return false;
 
-        // Completions werden per Cascade mitgelöscht.
-        context.DailyTasks.Remove(existing);
+        // Soft-Delete: Completions bleiben erhalten und werden über den
+        // passenden Query-Filter mit ausgeblendet; Undo holt sie zurück.
+        existing.DeletedAt = DateTime.Now;
+        await context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> RestoreAsync(int id)
+    {
+        var existing = await context.DailyTasks
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(t => t.Id == id);
+        if (existing is null || existing.DeletedAt is null) return false;
+
+        existing.DeletedAt = null;
         await context.SaveChangesAsync();
         return true;
     }

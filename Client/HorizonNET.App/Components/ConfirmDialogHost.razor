@@ -1,0 +1,35 @@
+@implements IDisposable
+@inject ConfirmService Confirm
+
+@if (Confirm.Current is { } req)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@req.Title</h5>
+                    <button type="button" class="btn-close" aria-label="Abbrechen"
+                            @onclick="() => Confirm.Respond(false)"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">@req.Message</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary"
+                            @onclick="() => Confirm.Respond(false)">Abbrechen</button>
+                    <button type="button" class="btn @(req.Danger ? "btn-danger" : "btn-primary")"
+                            @onclick="() => Confirm.Respond(true)">@req.ConfirmLabel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    protected override void OnInitialized() => Confirm.OnChange += HandleChange;
+
+    private void HandleChange() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Confirm.OnChange -= HandleChange;
+}

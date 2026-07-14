@@ -37,9 +37,36 @@ public class ProjectRepository(AppDbContext context) : IProjectRepository
     public async Task<bool> DeleteAsync(int id)
     {
         var existing = await context.Projects.FindAsync(id);
-        if (existing is null) return false;
+        if (existing is null || existing.DeletedAt is not null) return false;
 
-        context.Projects.Remove(existing);
+        // Soft-Delete inkl. Cascade: alle (aktiven) Tasks des Projekts mit demselben
+        // Zeitstempel stempeln, damit Undo genau diese Menge wiederherstellt.
+        var now = DateTime.Now;
+        existing.DeletedAt = now;
+        var tasks = await context.Tasks.Where(t => t.ProjectId == id).ToListAsync();
+        foreach (var t in tasks)
+            t.DeletedAt = now;
+        await context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> RestoreAsync(int id)
+    {
+        var existing = await context.Projects
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(p => p.Id == id);
+        if (existing is null || existing.DeletedAt is null) return false;
+
+        var deletedAt = existing.DeletedAt;
+        existing.DeletedAt = null;
+        // Nur die im selben Vorgang mitgelöschten Tasks zurückholen (gleicher
+        // Zeitstempel). In-Memory-Vergleich, um DateTime-Genauigkeit in SQL zu meiden.
+        var tasks = await context.Tasks
+            .IgnoreQueryFilters()
+            .Where(t => t.ProjectId == id && t.DeletedAt != null)
+            .ToListAsync();
+        foreach (var t in tasks.Where(t => t.DeletedAt == deletedAt))
+            t.DeletedAt = null;
         await context.SaveChangesAsync();
         return true;
     }
