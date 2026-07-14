@@ -1,0 +1,205 @@
+@inject ApiService Api
+@inject IStringLocalizer<Enums> EnumL
+@inject ToastService Toast
+@inject ConfirmService Confirm
+
+@* Verwaltung der Task-Vorlagen (Einstellungen). Anlegen/Bearbeiten laufen über
+   dasselbe Formular; Löschen mit Bestätigung und Undo wie an anderen Stellen. *@
+@if (templates is null)
+{
+    <p class="text-muted small mb-0">Wird geladen…</p>
+}
+else
+{
+    @if (templates.Count == 0)
+    {
+        <p class="text-muted small">Noch keine Vorlagen. Vorlagen belegen beim Anlegen eines Tasks
+            Titel, Beschreibung, Priorität und Projekt vor.</p>
+    }
+    else
+    {
+        <ul class="list-group mb-3">
+            @foreach (var t in templates)
+            {
+                <li class="list-group-item d-flex justify-content-between align-items-center gap-2">
+                    <span class="d-flex align-items-center gap-2 text-truncate">
+                        <PriorityIndicator Value="@t.Priority" />
+                        <span class="fw-semibold text-truncate">@t.Title</span>
+                        @if (t.ProjectName is not null)
+                        {
+                            <span class="badge bg-light text-dark">@t.ProjectName</span>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(t.Description))
+                        {
+                            <span class="text-muted small text-truncate">@t.Description</span>
+                        }
+                    </span>
+                    <span class="d-flex gap-1 flex-shrink-0">
+                        <button class="btn btn-sm btn-outline-primary btn-icon" @onclick="() => StartEdit(t)"
+                                title="Bearbeiten">✎</button>
+                        <button class="btn btn-sm btn-outline-danger btn-icon" @onclick="() => DeleteAsync(t)"
+                                title="Löschen">🗑</button>
+                    </span>
+                </li>
+            }
+        </ul>
+    }
+
+    @if (showForm)
+    {
+        <EditForm Model="form" OnValidSubmit="SaveAsync" class="card card-body bg-light">
+            <DataAnnotationsValidator />
+
+            <div class="mb-2">
+                <label class="form-label small mb-1">Titel *</label>
+                <InputText class="form-control form-control-sm" @bind-Value="form.Title" />
+                <ValidationMessage For="() => form.Title" />
+            </div>
+            <div class="mb-2">
+                <label class="form-label small mb-1">Beschreibung</label>
+                <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="form.Description" />
+            </div>
+            <div class="row g-2 mb-3">
+                <div class="col-md-4">
+                    <label class="form-label small mb-1">Priorität</label>
+                    <InputSelect class="form-select form-select-sm" @bind-Value="form.Priority">
+                        @foreach (var p in Enum.GetValues<Priority>())
+                        {
+                            <option value="@p">@PriorityDisplay.Symbol(p) @EnumL[$"Priority_{p}"]</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-8">
+                    @* d-block: die Radzen-Auswahl ist inline-block, sonst rutscht das Label daneben. *@
+                    <label class="form-label small mb-1 d-block">Projekt</label>
+                    <ProjectSelect @bind-Value="form.ProjectId" Placeholder="— kein Projekt —" Class="project-select-block" />
+                </div>
+            </div>
+
+            @if (errorMessage is not null)
+            {
+                <div class="alert alert-danger py-1">@errorMessage</div>
+            }
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-sm btn-primary" disabled="@isSaving">
+                    @(isSaving ? "Speichert…" : "Speichern")
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelForm">Abbrechen</button>
+            </div>
+        </EditForm>
+    }
+    else
+    {
+        <button class="btn btn-sm btn-outline-primary" @onclick="StartCreate">+ Neue Vorlage</button>
+    }
+}
+
+@code {
+    private List<TaskTemplateResponseDto>? templates;
+
+    private bool showForm;
+    private bool isSaving;
+    private string? errorMessage;
+
+    // null = Anlegen, sonst die Id der bearbeiteten Vorlage.
+    private int? editingId;
+    private TemplateFormModel form = new();
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => templates = await Api.GetTaskTemplatesAsync() ?? new();
+
+    private void StartCreate()
+    {
+        editingId    = null;
+        form         = new TemplateFormModel();
+        errorMessage = null;
+        showForm     = true;
+    }
+
+    private void StartEdit(TaskTemplateResponseDto t)
+    {
+        editingId = t.Id;
+        form = new TemplateFormModel
+        {
+            Title       = t.Title,
+            Description = t.Description,
+            Priority    = Enum.Parse<Priority>(t.Priority),
+            ProjectId   = t.ProjectId
+        };
+        errorMessage = null;
+        showForm     = true;
+    }
+
+    private void CancelForm()
+    {
+        showForm     = false;
+        errorMessage = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        isSaving     = true;
+        errorMessage = null;
+
+        var description = string.IsNullOrWhiteSpace(form.Description) ? null : form.Description;
+
+        if (editingId is int id)
+        {
+            var updated = await Api.UpdateTaskTemplateAsync(
+                id, new TaskTemplateUpdateDto(form.Title, description, form.Priority, form.ProjectId));
+
+            if (updated is null)
+                errorMessage = "Vorlage konnte nicht gespeichert werden.";
+            else
+                await ReloadAsync();
+        }
+        else
+        {
+            var created = await Api.CreateTaskTemplateAsync(
+                new TaskTemplateCreateDto(form.Title, description, form.Priority, form.ProjectId));
+
+            if (created is null)
+                errorMessage = "Vorlage konnte nicht gespeichert werden.";
+            else
+                await ReloadAsync();
+        }
+
+        isSaving = false;
+        if (errorMessage is null) showForm = false;
+    }
+
+    private async Task DeleteAsync(TaskTemplateResponseDto t)
+    {
+        if (!await Confirm.ShowAsync(
+            "Vorlage löschen?",
+            $"{t.Title} wird gelöscht. Du kannst das direkt danach rückgängig machen.",
+            "Löschen"))
+            return;
+
+        if (!await Api.DeleteTaskTemplateAsync(t.Id)) return;
+
+        await ReloadAsync();
+
+        Toast.ShowUndo($"{t.Title} gelöscht", async () =>
+        {
+            if (!await Api.RestoreTaskTemplateAsync(t.Id)) return;
+            await ReloadAsync();
+            await InvokeAsync(StateHasChanged);
+        });
+    }
+
+    private class TemplateFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Titel ist erforderlich.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(300)]
+        public string Title { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.MaxLength(2000)]
+        public string? Description { get; set; }
+
+        public Priority Priority { get; set; } = Priority.Medium;
+        public int? ProjectId { get; set; }
+    }
+}

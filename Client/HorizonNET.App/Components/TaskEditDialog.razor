@@ -1,6 +1,7 @@
 @inject ApiService Api
 @inject IStringLocalizer<Enums> EnumL
 @inject SoundService Sound
+@inject ToastService Toast
 
 @* Wiederverwendbarer Bearbeiten-Dialog für Tasks (leichtgewichtiges Overlay,
    kein JS-Interop). Die Sichtbarkeit steuert der Aufrufer über den Task-Parameter. *@
@@ -86,6 +87,10 @@
             <div class="task-dialog-footer">
                 <button type="button" class="btn btn-outline-danger" @onclick="DeleteAsync" disabled="@isSaving">Löschen</button>
                 <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-secondary" @onclick="SaveAsTemplateAsync"
+                            disabled="@isSaving" title="Titel, Beschreibung, Priorität und Projekt als Vorlage sichern">
+                        Als Vorlage speichern
+                    </button>
                     <button type="submit" form="taskEditForm" class="btn btn-primary" disabled="@isSaving">
                         @(isSaving ? "Speichert…" : "Speichern")
                     </button>
@@ -174,6 +179,33 @@
         // Die API liefert beim Update keine Sub-Tasks mit – lokalen Stand erhalten.
         updated = updated with { SubTasks = subTasks.Count > 0 ? subTasks.ToList() : null };
         await OnSaved.InvokeAsync(updated);
+    }
+
+    // Sichert den aktuellen Formularstand als Vorlage (ohne Termine/Status – die
+    // sind pro Task individuell). Der Dialog bleibt offen, ungespeicherte
+    // Task-Änderungen bleiben davon unberührt.
+    private async Task SaveAsTemplateAsync()
+    {
+        if (Task is null || string.IsNullOrWhiteSpace(editModel.Title)) return;
+
+        isSaving = true;
+
+        var created = await Api.CreateTaskTemplateAsync(new TaskTemplateCreateDto(
+            editModel.Title,
+            string.IsNullOrWhiteSpace(editModel.Description) ? null : editModel.Description,
+            editModel.Priority,
+            Task.ProjectId));
+
+        isSaving = false;
+
+        if (created is null)
+        {
+            editError = "Vorlage konnte nicht gespeichert werden.";
+            await Sound.ErrorAsync();
+            return;
+        }
+
+        Toast.ShowSuccess($"Vorlage „{created.Title}\" gespeichert");
     }
 
     private async Task DeleteAsync()

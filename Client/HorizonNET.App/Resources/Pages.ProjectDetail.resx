@@ -51,6 +51,9 @@
   <data name="NewTask_Error" xml:space="preserve">
     <value>Task konnte nicht gespeichert werden.</value>
   </data>
+  <data name="Field_Template" xml:space="preserve">
+    <value>Vorlage</value>
+  </data>
   <data name="Field_Title" xml:space="preserve">
     <value>Titel *</value>
   </data>

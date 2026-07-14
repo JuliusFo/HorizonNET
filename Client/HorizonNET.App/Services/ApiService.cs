@@ -224,6 +224,39 @@ public class ApiService(HttpClient http)
         return response.IsSuccessStatusCode;
     }
 
+    // ── Task-Vorlagen ────────────────────────────────────────────────────────────
+
+    public Task<List<TaskTemplateResponseDto>?> GetTaskTemplatesAsync() =>
+        http.GetFromJsonAsync<List<TaskTemplateResponseDto>>("api/tasktemplates");
+
+    public async Task<TaskTemplateResponseDto?> CreateTaskTemplateAsync(TaskTemplateCreateDto dto)
+    {
+        var response = await http.PostAsJsonAsync("api/tasktemplates", dto);
+        return response.IsSuccessStatusCode
+            ? await response.Content.ReadFromJsonAsync<TaskTemplateResponseDto>()
+            : null;
+    }
+
+    public async Task<TaskTemplateResponseDto?> UpdateTaskTemplateAsync(int id, TaskTemplateUpdateDto dto)
+    {
+        var response = await http.PutAsJsonAsync($"api/tasktemplates/{id}", dto);
+        return response.IsSuccessStatusCode
+            ? await response.Content.ReadFromJsonAsync<TaskTemplateResponseDto>()
+            : null;
+    }
+
+    public async Task<bool> DeleteTaskTemplateAsync(int id)
+    {
+        var response = await http.DeleteAsync($"api/tasktemplates/{id}");
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> RestoreTaskTemplateAsync(int id)
+    {
+        var response = await http.PostAsync($"api/tasktemplates/{id}/restore", null);
+        return response.IsSuccessStatusCode;
+    }
+
     // ── Globale Suche ──────────────────────────────────────────────────────────
 
     public Task<List<SearchHitDto>?> SearchAsync(string query) =>

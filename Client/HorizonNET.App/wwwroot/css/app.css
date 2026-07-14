@@ -137,3 +137,9 @@ code {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+/* Projekt-Auswahl (ProjectSelect) als volle Formularspalte, z. B. im Vorlagen-Formular.
+   Bewusst global: die Wurzel des RadzenDropDown gehört zur Radzen-Komponente und wird
+   von den scoped Styles der ProjectSelect-Komponente nicht erfasst. */
+.rz-dropdown.project-select-block {
+    width: 100%;
+}

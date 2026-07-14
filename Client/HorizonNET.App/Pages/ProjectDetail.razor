@@ -108,6 +108,12 @@ else
         <EditForm Model="newTask" OnValidSubmit="CreateTaskAsync" class="card p-3 mb-4">
             <DataAnnotationsValidator />
 
+            @* Vorlage belegt Titel, Beschreibung und Priorität vor; das Projekt steht
+               auf dieser Seite ohnehin fest und wird aus der Vorlage nicht übernommen. *@
+            <div class="mb-3">
+                <label class="form-label">@L["Field_Template"]</label>
+                <TaskTemplatePicker OnSelected="ApplyTemplate" />
+            </div>
             <div class="mb-3">
                 <label class="form-label">@L["Field_Title"]</label>
                 <InputText class="form-control" @bind-Value="newTask.Title" />
@@ -501,6 +507,15 @@ else
         showForm     = !showForm;
         errorMessage = null;
         newTask      = new();
+    }
+
+    // Vorlage ins Formular übernehmen. Bereits Getipptes wird bewusst überschrieben –
+    // die Auswahl ist eine explizite Aktion des Nutzers.
+    private void ApplyTemplate(TaskTemplateResponseDto template)
+    {
+        newTask.Title       = template.Title;
+        newTask.Description = template.Description;
+        newTask.Priority    = Enum.Parse<Priority>(template.Priority);
     }
 
     private async Task CreateTaskAsync()

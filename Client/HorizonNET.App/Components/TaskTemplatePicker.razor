@@ -1,0 +1,45 @@
+@inject ApiService Api
+
+@* Auswahl einer Task-Vorlage. Meldet die gewählte Vorlage an den Aufrufer, der
+   entscheidet, was damit passiert (Formular vorbelegen bzw. Task direkt anlegen).
+   Gibt es keine Vorlagen, rendert die Komponente nichts. *@
+@if (templates is { Count: > 0 })
+{
+    <select class="form-select @CssClass" value="@selectedId" @onchange="OnSelectedAsync" disabled="@Disabled">
+        <option value="">@Placeholder</option>
+        @foreach (var t in templates)
+        {
+            <option value="@t.Id">@t.Title@(t.ProjectName is null ? "" : $" ({t.ProjectName})")</option>
+        }
+    </select>
+}
+
+@code {
+    // Die gewählte Vorlage. Die Auswahl setzt sich danach selbst zurück, damit
+    // dieselbe Vorlage direkt erneut angewendet werden kann.
+    [Parameter] public EventCallback<TaskTemplateResponseDto> OnSelected { get; set; }
+
+    [Parameter] public string Placeholder { get; set; } = "— Vorlage wählen —";
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+
+    private List<TaskTemplateResponseDto>? templates;
+
+    // Gebunden an das <select>: nach dem Anwenden wieder leer, damit dieselbe
+    // Vorlage direkt erneut gewählt werden kann.
+    private string selectedId = string.Empty;
+
+    protected override async Task OnInitializedAsync() =>
+        templates = await Api.GetTaskTemplatesAsync();
+
+    private async Task OnSelectedAsync(ChangeEventArgs e)
+    {
+        selectedId = string.Empty;
+
+        if (!int.TryParse(e.Value?.ToString(), out var id)) return;
+
+        var template = templates?.FirstOrDefault(t => t.Id == id);
+        if (template is not null)
+            await OnSelected.InvokeAsync(template);
+    }
+}

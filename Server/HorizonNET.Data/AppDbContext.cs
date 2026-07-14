@@ -102,6 +102,22 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasQueryFilter(t => t.DeletedAt == null);
         });
 
+        modelBuilder.Entity<TaskTemplate>(e =>
+        {
+            e.HasKey(t => t.Id);
+            e.Property(t => t.Title).IsRequired().HasMaxLength(300);
+            e.Property(t => t.Description).HasMaxLength(2000);
+            e.Property(t => t.Priority).HasConversion<string>();
+
+            // Projektzuordnung optional; beim Löschen des Projekts bleibt die Vorlage erhalten.
+            e.HasOne(t => t.Project)
+                .WithMany()
+                .HasForeignKey(t => t.ProjectId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasQueryFilter(t => t.DeletedAt == null);
+        });
+
         modelBuilder.Entity<DailyTaskCompletion>(e =>
         {
             e.HasKey(c => c.Id);
@@ -138,6 +154,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<DailyTask> DailyTasks => Set<DailyTask>();
 
     public DbSet<DailyTaskCompletion> DailyTaskCompletions => Set<DailyTaskCompletion>();
+
+    public DbSet<TaskTemplate> TaskTemplates => Set<TaskTemplate>();
 
     #endregion
 }

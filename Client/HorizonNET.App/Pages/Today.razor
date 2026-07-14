@@ -68,6 +68,9 @@
             <InputText class="form-control form-control-sm" @bind-Value="newInboxTask.Title"
                        placeholder="Neue Aufgabe…" />
             <button type="submit" class="btn btn-sm btn-primary text-nowrap" disabled="@isSaving">Hinzufügen</button>
+            @* Vorlage legt den Task sofort an – inklusive Projekt, falls die Vorlage eines hat. *@
+            <TaskTemplatePicker OnSelected="CreateTaskFromTemplateAsync" Disabled="@isSaving"
+                                CssClass="form-select-sm w-auto" Placeholder="— aus Vorlage —" />
         </EditForm>
 
         @if (inboxTasks is null)
@@ -289,6 +292,37 @@
             inboxTasks ??= [];
             inboxTasks.Add(created);
             newInboxTask = new();
+        }
+
+        isSaving = false;
+    }
+
+    // Vorlage in der Inbox: legt den Task direkt an. Hat die Vorlage ein Projekt,
+    // gehört der Task dorthin und erscheint deshalb nicht in der Inbox-Liste.
+    private async Task CreateTaskFromTemplateAsync(TaskTemplateResponseDto template)
+    {
+        isSaving = true;
+
+        var dto = new TaskCreateDto(
+            template.Title,
+            template.Description,
+            DueDate: null, StartTime: null, EndTime: null,
+            Priority: Enum.Parse<Priority>(template.Priority),
+            ProjectId: template.ProjectId);
+
+        var created = await Api.CreateTaskAsync(dto);
+        if (created is not null)
+        {
+            if (created.ProjectId is null)
+            {
+                inboxTasks ??= [];
+                inboxTasks.Add(created);
+            }
+            else
+            {
+                allTasks?.Add(created);
+                Toast.ShowInfo($"„{created.Title}\" in {created.ProjectName} angelegt");
+            }
         }
 
         isSaving = false;
