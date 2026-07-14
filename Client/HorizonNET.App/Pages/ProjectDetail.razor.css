@@ -23,3 +23,11 @@
     );
     background-color: #f5f5f5;
 }
+
+/* Schnell-Abschluss-Haken in der Task-Zeile: etwas größer als der Bootstrap-Default,
+   damit er als Klickziel taugt und optisch zum Status-Dropdown daneben passt. */
+.task-done-check {
+    width: 1.15rem;
+    height: 1.15rem;
+    cursor: pointer;
+}

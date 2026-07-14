@@ -3,6 +3,7 @@
 @inject IStringLocalizer<ProjectDetail> L
 @inject IStringLocalizer<Enums> EnumL
 @inject ToastService Toast
+@inject SoundService Sound
 
 <PageTitle>Projekt – HorizonNET</PageTitle>
 
@@ -194,9 +195,15 @@ else
     {
         <div class="d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center gap-3">
+                @* Schnell-Abschluss: Haken setzt auf "Fertig", Abwählen zurück auf "Geplant". *@
+                <input type="checkbox" class="form-check-input task-done-check flex-shrink-0"
+                       checked="@task.IsCompleted"
+                       @onchange="async e => await ToggleDoneAsync(task, (bool)e.Value!)"
+                       title="@(task.IsCompleted ? L["Task_Undone_Title"] : L["Task_Done_Title"])" />
+
                 <select class="form-select form-select-sm w-auto"
                         value="@task.Status"
-                        @onchange="e => ChangeStatusAsync(task, Enum.Parse<WorkStatus>(e.Value!.ToString()!))">
+                        @onchange="async e => await ChangeStatusAsync(task, Enum.Parse<WorkStatus>(e.Value!.ToString()!))">
                     @foreach (var s in Enum.GetValues<WorkStatus>())
                     {
                         <option value="@s">@EnumL[$"WorkStatus_{s}"]</option>
@@ -240,7 +247,23 @@ else
 
     // ── Abschließen / Zurücksetzen ───────────────────────────────────────────
 
-    private async Task ChangeStatusAsync(TaskResponseDto task, WorkStatus newStatus)
+    // Schnell-Abschluss über die Checkbox: an → "Fertig", aus → zurück auf "Geplant"
+    // (bewusst kein Merken des vorherigen Status – konsistent zur Heute-Seite und SubTaskList).
+    private async Task ToggleDoneAsync(TaskResponseDto task, bool done)
+    {
+        var target = done ? WorkStatus.Done : WorkStatus.Planned;
+        if (task.Status == target) return;
+
+        if (!await ChangeStatusAsync(task, target))
+        {
+            await Sound.ErrorAsync();
+            return;
+        }
+
+        if (done) await Sound.SuccessAsync();
+    }
+
+    private async Task<bool> ChangeStatusAsync(TaskResponseDto task, WorkStatus newStatus)
     {
         var dto = new TaskUpdateDto(
             task.Title, task.Description, task.DueDate,
@@ -248,12 +271,14 @@ else
             Enum.Parse<Priority>(task.Priority), task.ProjectId);
 
         var updated = await Api.UpdateTaskAsync(task.Id, dto);
-        if (updated is null || tasks is null) return;
+        if (updated is null || tasks is null) return false;
 
         var parent = tasks.FirstOrDefault(t => t.Id == task.Id);
         if (parent is not null)
         {
-            tasks[tasks.IndexOf(parent)] = updated;
+            // Die API liefert beim Update keine Sub-Tasks mit – lokalen Stand erhalten,
+            // sonst verschwinden die Sub-Task-Zeilen bis zum nächsten Laden.
+            tasks[tasks.IndexOf(parent)] = updated with { SubTasks = parent.SubTasks };
         }
         else
         {
@@ -261,6 +286,8 @@ else
             if (parentTask?.SubTasks is not null)
                 parentTask.SubTasks[parentTask.SubTasks.IndexOf(parentTask.SubTasks.First(s => s.Id == task.Id))] = updated;
         }
+
+        return true;
     }
 
     // ── Bearbeiten (geteilter Dialog) ─────────────────────────────────────────
