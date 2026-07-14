@@ -432,7 +432,11 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        await ProjectState.EnsureLoadedAsync();
+        // Bewusst RefreshAsync statt EnsureLoadedAsync: die Karten zeigen Task-Zähler
+        // (offen/erledigt), die der Server berechnet. Wird ein Task woanders (Heute,
+        // Kanban, Dialog) abgehakt, wären die zwischengespeicherten Zähler sonst
+        // veraltet, bis der Browser neu geladen wird.
+        await ProjectState.RefreshAsync();
         await WorkspaceState.EnsureLoadedAsync();
     }
 

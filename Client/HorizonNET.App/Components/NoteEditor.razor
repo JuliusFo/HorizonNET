@@ -20,7 +20,7 @@ else
         </div>
 
         <div class="note-editor-meta">
-            <ProjectSelect @bind-Value="selectedProjectId" Change="OnAssignmentChanged" />
+            <ProjectSelect @bind-Value="selectedProjectId" Change="OnProjectChanged" />
 
             <RadzenDropDown TValue="int?" Data="taskOptions" TextProperty="Label" ValueProperty="Id"
                             @bind-Value="selectedTaskId" Change="OnAssignmentChanged"
@@ -60,6 +60,7 @@ else
     // Zuordnung (Projekt/Task) – aus der geladenen Notiz übernommen, per Dropdown änderbar.
     private int? selectedProjectId;
     private int? selectedTaskId;
+    private List<TaskResponseDto> allTasks = new();
     private List<TaskOption> taskOptions = new();
 
     // Auswahl-Eintrag für das Task-Dropdown (Sub-Tasks mit ↳ gekennzeichnet).
@@ -69,10 +70,20 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        // Tasks: Haupt-Tasks A-Z, ihre Sub-Tasks jeweils A-Z direkt darunter.
-        var all = await Api.GetTasksAsync() ?? new();
+        allTasks = await Api.GetTasksAsync() ?? new();
+        RebuildTaskOptions();
+    }
+
+    // Ist ein Projekt gewählt, nur dessen Tasks anbieten – sonst alle.
+    // Sortierung: Haupt-Tasks A-Z, ihre Sub-Tasks jeweils A-Z direkt darunter.
+    private void RebuildTaskOptions()
+    {
+        var source = selectedProjectId is int projectId
+            ? allTasks.Where(t => t.ProjectId == projectId)
+            : allTasks;
+
         taskOptions = new();
-        foreach (var t in all.OrderBy(t => t.Title, NameComparer))
+        foreach (var t in source.OrderBy(t => t.Title, NameComparer))
         {
             taskOptions.Add(new TaskOption(t.Id, t.Title));
             if (t.SubTasks is not null)
@@ -114,11 +125,27 @@ else
         selectedProjectId = Note.ProjectId;
         selectedTaskId    = Note.TaskItemId;
         state             = SaveState.Saved;
+
+        // Task-Auswahl auf das Projekt der geladenen Notiz einschränken.
+        RebuildTaskOptions();
     }
 
     // ProjectSelect/Task-Dropdown aktualisieren selectedProjectId/selectedTaskId über
     // @bind-Value; hier nur den Auto-Save anstoßen (parameterlos → bindet an beide Events).
     private void OnAssignmentChanged() => ScheduleSave();
+
+    // Projektwechsel: Task-Auswahl neu aufbauen. Gehört der bisher zugeordnete Task
+    // nicht zum neuen Projekt, wird die Zuordnung verworfen (sonst bliebe eine
+    // Task-Id gespeichert, die im Dropdown gar nicht mehr auftaucht).
+    private void OnProjectChanged()
+    {
+        RebuildTaskOptions();
+
+        if (selectedTaskId is int taskId && taskOptions.All(o => o.Id != taskId))
+            selectedTaskId = null;
+
+        ScheduleSave();
+    }
 
     private void OnTitleInput(ChangeEventArgs e)
     {

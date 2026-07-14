@@ -51,7 +51,8 @@ else
             }
 
             @{
-                var unscheduled = tasks.Where(t => t.DueDate is null).ToList();
+                // Erledigte/abgebrochene Tasks gehören nicht in die Planungs-Seitenleiste.
+                var unscheduled = tasks.Where(t => t.DueDate is null && !t.IsCompleted).ToList();
             }
             @if (unscheduled.Count == 0)
             {
