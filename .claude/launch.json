@@ -4,14 +4,14 @@
     {
       "name": "api",
       "runtimeExecutable": "dotnet",
-      "runtimeArgs": ["run", "--project", "Server/HorizonNET.Api", "--launch-profile", "http"],
-      "port": 5081
+      "runtimeArgs": ["run", "--project", "Server/HorizonNET.Api", "--launch-profile", "https"],
+      "port": 7012
     },
     {
       "name": "client",
       "runtimeExecutable": "dotnet",
-      "runtimeArgs": ["run", "--project", "Client/HorizonNET.App", "--launch-profile", "http"],
-      "port": 5240
+      "runtimeArgs": ["run", "--project", "Client/HorizonNET.App", "--launch-profile", "https"],
+      "port": 7192
     }
   ]
 }

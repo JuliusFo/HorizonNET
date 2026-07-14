@@ -158,16 +158,33 @@ else
                 }
                 else
                 {
-                    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
-                        @foreach (var project in sectionProjects)
-                        {
-                            <div class="col">
-                                <ProjectCard Project="project"
-                                             OnEdit="() => OpenEditProject(project)"
-                                             OnDelete="() => DeleteProjectAsync(project)" />
+                    @* Je Arbeitsbereich eine umrandete Box mit neutraler Kopfzeile. Die
+                       Projektkarten sind bereits in ihrer Projektfarbe eingefärbt; die
+                       Bereichsfarbe erscheint deshalb nur als kleiner Punkt. *@
+                    @foreach (var group in GroupByWorkspace(sectionProjects))
+                    {
+                        var color = group.Workspace?.Color ?? "#6c757d";
+
+                        <div class="ws-group">
+                            <div class="ws-group-header">
+                                <span class="ws-group-dot" style="background-color:@color;"></span>
+                                <span class="text-truncate">@(group.Workspace?.Name ?? L["Workspace_None"])</span>
+                                <span class="ws-group-count">@group.Projects.Count</span>
                             </div>
-                        }
-                    </div>
+                            <div class="ws-group-body">
+                                <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+                                    @foreach (var project in group.Projects)
+                                    {
+                                        <div class="col">
+                                            <ProjectCard Project="project"
+                                                         OnEdit="() => OpenEditProject(project)"
+                                                         OnDelete="() => DeleteProjectAsync(project)" />
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
                 }
                 </div>
             }
@@ -235,6 +252,35 @@ else
 
     private void ToggleWorkspaceFilter(int workspaceId) =>
         workspaceFilter = workspaceFilter == workspaceId ? null : workspaceId;
+
+    // Gruppierung der Projekte einer Sektion nach Arbeitsbereich.
+    // Workspace = null → Sammelgruppe für Projekte ohne Arbeitsbereich.
+    private record WorkspaceGroup(WorkspaceResponseDto? Workspace, List<ProjectResponseDto> Projects);
+
+    // Reihenfolge wie in der Arbeitsbereichs-Liste oben auf der Seite. Leere Gruppen
+    // entfallen. Projekte, deren Arbeitsbereich nicht (mehr) existiert – nach dem
+    // Soft-Delete behalten sie ihre WorkspaceId, siehe NavMenu –, landen wie Projekte
+    // ganz ohne Arbeitsbereich in der Sammelgruppe am Ende.
+    private List<WorkspaceGroup> GroupByWorkspace(List<ProjectResponseDto> sectionProjects)
+    {
+        var groups = new List<WorkspaceGroup>();
+
+        foreach (var ws in workspaces ?? [])
+        {
+            var inWorkspace = sectionProjects.Where(p => p.WorkspaceId == ws.Id).ToList();
+            if (inWorkspace.Count > 0)
+                groups.Add(new WorkspaceGroup(ws, inWorkspace));
+        }
+
+        var existingIds = (workspaces ?? []).Select(w => w.Id).ToHashSet();
+        var ungrouped = sectionProjects
+            .Where(p => p.WorkspaceId is null || !existingIds.Contains(p.WorkspaceId.Value))
+            .ToList();
+        if (ungrouped.Count > 0)
+            groups.Add(new WorkspaceGroup(null, ungrouped));
+
+        return groups;
+    }
 
     protected override async Task OnInitializedAsync()
     {

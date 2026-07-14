@@ -13,6 +13,56 @@
     cursor: grabbing;
 }
 
+/* Projekte einer Status-Sektion nach Arbeitsbereich gruppiert: umrandete Box je
+   Bereich mit neutral gehaltener Kopfzeile. Farbe tragen die Projektkarten. */
+.ws-group {
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    overflow: hidden;
+    margin-bottom: 0.75rem;
+    background-color: #fff;
+}
+
+.ws-group:last-child {
+    margin-bottom: 0;
+}
+
+.ws-group-header {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    color: #495057;
+}
+
+/* Einziger Farbtupfer: der Arbeitsbereich bleibt an seiner Farbe erkennbar. */
+.ws-group-dot {
+    display: inline-block;
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.ws-group-count {
+    margin-left: auto;
+    flex-shrink: 0;
+    padding: 0 0.4rem;
+    border-radius: 0.75rem;
+    font-size: 0.72rem;
+    background-color: #e9ecef;
+    color: #6c757d;
+}
+
+.ws-group-body {
+    padding: 0.75rem;
+}
+
 /* Hervorhebung der Projektkarte, während ein Task darüber gezogen wird */
 .drop-target-active {
     outline: 2px dashed var(--bs-primary, #0d6efd);

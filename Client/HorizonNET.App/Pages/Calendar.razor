@@ -82,7 +82,7 @@ else
                         .ToList();
 
                     <div class="cal-ws-group" style="border-color:@color;">
-                        <div class="cal-ws-name" style="background-color:@color; color:@TextColorFor(color);">
+                        <div class="cal-ws-name" style="background-color:@color; color:@ColorDisplay.TextColorFor(color);">
                             @(group.Key?.Name ?? "Ohne Arbeitsbereich")
                         </div>
 
@@ -327,26 +327,6 @@ else
         if (projectId is not int id) return null;
         if (!projectWorkspaces.TryGetValue(id, out var workspaceId) || workspaceId is not int wsId) return null;
         return WorkspaceState.Workspaces?.FirstOrDefault(w => w.Id == wsId);
-    }
-
-    // Lesbare Schriftfarbe auf der Arbeitsbereichsfarbe: helle Flächen brauchen
-    // dunkle Schrift (wahrgenommene Helligkeit nach ITU-R BT.601).
-    private static string TextColorFor(string? hex)
-    {
-        if (string.IsNullOrWhiteSpace(hex) || hex.Length < 7 || hex[0] != '#') return "#fff";
-
-        try
-        {
-            var r = Convert.ToInt32(hex.Substring(1, 2), 16);
-            var g = Convert.ToInt32(hex.Substring(3, 2), 16);
-            var b = Convert.ToInt32(hex.Substring(5, 2), 16);
-            var luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
-            return luminance > 0.6 ? "#212529" : "#fff";
-        }
-        catch
-        {
-            return "#fff";
-        }
     }
 
     // ── Seitenleiste: Task „aufnehmen" und per Slot-Klick platzieren ───────────
