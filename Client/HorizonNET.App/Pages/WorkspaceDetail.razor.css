@@ -4,16 +4,18 @@
    Gefiltert wird ausschließlich über den Trichter-Button auf der Karte –
    die Karte selbst ist bewusst NICHT klickbar, sonst konkurriert der Filter
    mit dem Titel-Link. */
-.ws-project-card {
+/* ::deep, weil die Karte aus der ProjectCard-Komponente kommt und damit einen
+   anderen CSS-Isolation-Scope trägt als diese Seite. */
+::deep .ws-project-card {
     transition: opacity 0.12s ease, box-shadow 0.12s ease;
 }
 
 /* Gewähltes Filter-Projekt hervorheben, die übrigen zurücknehmen. */
-.ws-project-card.is-selected {
+::deep .ws-project-card.is-selected {
     box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.55);
 }
 
-.ws-project-card.is-dimmed {
+::deep .ws-project-card.is-dimmed {
     opacity: 0.45;
 }
 

@@ -23,6 +23,10 @@
 <ConfirmDialogHost />
 <SearchPalette @ref="searchPalette" />
 
+@* Host für die Radzen-Dialoge. Ohne ihn bleiben die Toolbar-Buttons des RadzenHtmlEditor,
+   die einen Dialog öffnen (Link, Bild, Farbe), folgenlos. *@
+<RadzenComponents />
+
 @code {
     private SearchPalette? searchPalette;
 

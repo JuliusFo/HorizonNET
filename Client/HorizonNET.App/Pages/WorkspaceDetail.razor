@@ -40,45 +40,22 @@ else
     }
     else
     {
-        <div class="row row-cols-1 row-cols-md-2 row-cols-xl-4 g-2 mb-2">
+        <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3 mb-2">
             @foreach (var p in ActiveProjects)
             {
                 <div class="col">
-                    <div class="card h-100 ws-project-card @FilterClass(p.Id)"
-                         style="@(p.Color is not null ? $"background-color: {p.Color}1A; border-color: {p.Color};" : "")">
-                        <div class="card-body py-2 px-3">
-                            <div class="d-flex justify-content-between align-items-center gap-2">
-                                <a href="/projects/@p.Id" class="text-decoration-none fw-semibold text-dark text-truncate">@p.Name</a>
-                                <div class="d-flex align-items-center gap-1 flex-shrink-0">
-                                    <PriorityIndicator Value="@p.Priority" />
-                                    <FilterToggleButton Active="@projectFilter.Contains(p.Id)"
-                                                        OnClick="() => ToggleProjectFilter(p.Id)"
-                                                        Title="Board auf dieses Projekt filtern" />
-                                    <button class="btn btn-sm btn-outline-primary btn-icon"
-                                            @onclick="() => OpenEditProject(p)" title="Bearbeiten">✎</button>
-                                </div>
-                            </div>
-
-                            @{
-                                var openTasks = p.TaskCount - p.DoneTaskCount;
-                                var pct = p.TaskCount > 0
-                                    ? (int)Math.Round(p.DoneTaskCount * 100.0 / p.TaskCount)
-                                    : 0;
-                            }
-                            @if (p.TaskCount > 0)
-                            {
-                                <div class="progress mt-2" style="height: 4px;">
-                                    <div class="progress-bar" role="progressbar" style="width: @pct%;"
-                                         aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
-                                </div>
-                                <div class="small text-muted mt-1">@pct% erledigt · @openTasks offen</div>
-                            }
-                            else
-                            {
-                                <div class="small text-muted mt-2">Keine Tasks</div>
-                            }
-                        </div>
-                    </div>
+                    @* Keine Beschreibung und kein Löschen-Button – die Karten sollen hier
+                       kompakt bleiben, das Löschen läuft über die Übersicht. *@
+                    <ProjectCard Project="p"
+                                 CssClass="@($"ws-project-card {FilterClass(p.Id)}")"
+                                 ShowDescription="false"
+                                 OnEdit="() => OpenEditProject(p)">
+                        <ExtraActions>
+                            <FilterToggleButton Active="@projectFilter.Contains(p.Id)"
+                                                OnClick="() => ToggleProjectFilter(p.Id)"
+                                                Title="Board auf dieses Projekt filtern" />
+                        </ExtraActions>
+                    </ProjectCard>
                 </div>
             }
         </div>

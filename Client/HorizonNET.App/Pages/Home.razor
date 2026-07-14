@@ -162,56 +162,9 @@ else
                         @foreach (var project in sectionProjects)
                         {
                             <div class="col">
-                                <div class="card h-100"
-                                     style="@(project.Color is not null ? $"background-color: {project.Color}1A; border-color: {project.Color};" : "")">
-                                    <div class="card-header d-flex justify-content-between align-items-center" style="background-color: transparent; border-color: rgba(0,0,0,0.1);">
-                                        <div class="d-flex align-items-center gap-2">
-                                            <a href="/projects/@project.Id" class="text-decoration-none fw-bold text-dark">
-                                                @project.Name
-                                            </a>
-                                            <PriorityIndicator Value="@project.Priority" />
-                                        </div>
-                                        <div class="d-flex gap-1">
-                                            <button class="btn btn-sm btn-outline-primary btn-icon" @onclick="() => OpenEditProject(project)" title="@L["Button_Edit_Title"]">✎</button>
-                                            <button class="btn btn-sm btn-outline-danger btn-icon" @onclick="() => DeleteProjectAsync(project)" title="@L["Button_Delete_Title"]">🗑</button>
-                                        </div>
-                                    </div>
-
-                                    <div class="card-body">
-                                        @if (project.Description is not null)
-                                        {
-                                            <p class="card-text text-muted small">@project.Description</p>
-                                        }
-                                    </div>
-
-                                    <div class="card-footer text-muted small">
-                                        @{
-                                            var openTasks = project.TaskCount - project.DoneTaskCount;
-                                            var pct = project.TaskCount > 0
-                                                ? (int)Math.Round(project.DoneTaskCount * 100.0 / project.TaskCount)
-                                                : 0;
-                                        }
-                                        @if (project.TaskCount > 0)
-                                        {
-                                            <div class="progress mb-1" style="height: 5px;">
-                                                <div class="progress-bar" role="progressbar"
-                                                     style="width: @pct%;"
-                                                     aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
-                                            </div>
-                                            <div class="d-flex justify-content-between">
-                                                <span>@string.Format(L["Card_Progress"], pct, openTasks)</span>
-                                                <span>@string.Format(L["Card_CreatedAt"], project.CreatedAt.ToString("dd.MM.yyyy"))</span>
-                                            </div>
-                                        }
-                                        else
-                                        {
-                                            <div class="d-flex justify-content-between">
-                                                <span>@L["Card_NoTasks"]</span>
-                                                <span>@string.Format(L["Card_CreatedAt"], project.CreatedAt.ToString("dd.MM.yyyy"))</span>
-                                            </div>
-                                        }
-                                    </div>
-                                </div>
+                                <ProjectCard Project="project"
+                                             OnEdit="() => OpenEditProject(project)"
+                                             OnDelete="() => DeleteProjectAsync(project)" />
                             </div>
                         }
                     </div>

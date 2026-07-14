@@ -63,15 +63,6 @@
   <data name="NewProject_Error" xml:space="preserve">
     <value>Projekt konnte nicht gespeichert werden.</value>
   </data>
-  <data name="Card_NoTasks" xml:space="preserve">
-    <value>Keine Tasks</value>
-  </data>
-  <data name="Card_CreatedAt" xml:space="preserve">
-    <value>Erstellt: {0}</value>
-  </data>
-  <data name="Card_Progress" xml:space="preserve">
-    <value>{0}% erledigt · {1} offen</value>
-  </data>
   <data name="Section_Empty" xml:space="preserve">
     <value>Keine Projekte vorhanden.</value>
   </data>

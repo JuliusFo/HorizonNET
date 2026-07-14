@@ -1,0 +1,8 @@
+/* Quadratische Icon-Buttons (✎ / 🗑) im Karten-Header. Lag vorher in Home.razor.css
+   und wirkte dadurch nicht auf der Arbeitsbereich-Seite. */
+.btn-icon {
+    width: 2rem;
+    padding-left: 0;
+    padding-right: 0;
+    text-align: center;
+}

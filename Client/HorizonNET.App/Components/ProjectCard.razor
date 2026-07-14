@@ -1,0 +1,80 @@
+@inject IStringLocalizer<ProjectCard> L
+
+@* Projekt-Karte für Übersicht und Arbeitsbereich-Detail. Die Unterschiede beider Seiten
+   laufen über Parameter (Löschen-Button, zusätzliche Aktionen, Beschreibung), damit die
+   Karten nicht wieder auseinanderdriften. Fortschritt kommt aus TaskCount/DoneTaskCount. *@
+<div class="card h-100 project-card @CssClass"
+     style="@(Project.Color is not null ? $"background-color: {Project.Color}1A; border-color: {Project.Color};" : "")">
+    <div class="card-header d-flex justify-content-between align-items-center gap-2"
+         style="background-color: transparent; border-color: rgba(0,0,0,0.1);">
+        <div class="d-flex align-items-center gap-3 text-truncate">
+            <PriorityIndicator Value="@Project.Priority" />
+            <a href="/projects/@Project.Id" class="text-decoration-none fw-bold text-dark text-truncate">
+                @Project.Name
+            </a>
+        </div>
+        <div class="d-flex align-items-center gap-1 flex-shrink-0">
+            @ExtraActions
+            @if (OnEdit.HasDelegate)
+            {
+                <button class="btn btn-sm btn-outline-primary btn-icon" @onclick="OnEdit"
+                        title="@L["Button_Edit_Title"]">✎</button>
+            }
+            @if (OnDelete.HasDelegate)
+            {
+                <button class="btn btn-sm btn-outline-danger btn-icon" @onclick="OnDelete"
+                        title="@L["Button_Delete_Title"]">🗑</button>
+            }
+        </div>
+    </div>
+
+    @if (ShowDescription)
+    {
+        <div class="card-body">
+            @if (Project.Description is not null)
+            {
+                <p class="card-text text-muted small mb-0">@Project.Description</p>
+            }
+        </div>
+    }
+
+    <div class="card-footer text-muted small">
+        @if (Project.TaskCount > 0)
+        {
+            var openTasks = Project.TaskCount - Project.DoneTaskCount;
+            var pct = (int)Math.Round(Project.DoneTaskCount * 100.0 / Project.TaskCount);
+
+            <div class="progress mb-1" style="height: 5px;">
+                <div class="progress-bar" role="progressbar" style="width: @pct%;"
+                     aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <div class="d-flex justify-content-between">
+                <span>@string.Format(L["Card_Progress"], pct, openTasks)</span>
+                <span>@string.Format(L["Card_CreatedAt"], Project.CreatedAt.ToString("dd.MM.yyyy"))</span>
+            </div>
+        }
+        else
+        {
+            <div class="d-flex justify-content-between">
+                <span>@L["Card_NoTasks"]</span>
+                <span>@string.Format(L["Card_CreatedAt"], Project.CreatedAt.ToString("dd.MM.yyyy"))</span>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ProjectResponseDto Project { get; set; } = default!;
+
+    // Ohne Delegate wird der jeweilige Button nicht gerendert (Arbeitsbereich: kein Löschen).
+    [Parameter] public EventCallback OnEdit { get; set; }
+    [Parameter] public EventCallback OnDelete { get; set; }
+
+    // Zusätzliche Aktionen links neben Bearbeiten/Löschen (Arbeitsbereich: Board-Filter).
+    [Parameter] public RenderFragment? ExtraActions { get; set; }
+
+    // Zusatzklassen der Karte (Arbeitsbereich: ws-project-card / is-selected / is-dimmed).
+    [Parameter] public string? CssClass { get; set; }
+
+    [Parameter] public bool ShowDescription { get; set; } = true;
+}

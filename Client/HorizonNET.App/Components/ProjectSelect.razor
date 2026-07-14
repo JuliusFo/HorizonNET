@@ -6,7 +6,7 @@
    dann Projekt (A-Z). Genutzt im NoteEditor und in der Inbox (Heute-Seite). *@
 <RadzenDropDown TValue="int?" Data="options" TextProperty="Label" ValueProperty="Id"
                 @bind-Value="currentValue" Change="OnDropDownChange"
-                AllowFiltering="true" AllowClear="AllowClear"
+                AllowFiltering="true" AllowClear="AllowClear" Disabled="Disabled"
                 FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
                 Placeholder="@Placeholder" class="@CssClass">
     <Template Context="opt">
@@ -26,6 +26,7 @@
 
     [Parameter] public string Placeholder { get; set; } = "— kein Projekt —";
     [Parameter] public bool AllowClear { get; set; } = true;
+    [Parameter] public bool Disabled { get; set; }
     [Parameter] public string? Class { get; set; }
 
     private string CssClass => string.IsNullOrEmpty(Class) ? "project-select" : $"project-select {Class}";

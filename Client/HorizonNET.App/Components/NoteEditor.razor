@@ -1,4 +1,5 @@
 @inject ApiService Api
+@inject IJSRuntime JS
 @implements IAsyncDisposable
 
 @* Editor für eine einzelne Notiz mit debounced Auto-Save (2 s nach letzter Änderung).
@@ -11,31 +12,50 @@
 else
 {
     <div class="note-editor">
+        @if (readOnly)
+        {
+            <div class="alert alert-warning d-flex align-items-center gap-3 py-2 mb-2">
+                <span class="flex-grow-1">Diese Notiz wird gerade in einem anderen Tab bearbeitet.</span>
+                <button type="button" class="btn btn-sm btn-warning flex-shrink-0" @onclick="TakeOverAsync">
+                    Bearbeitung hier übernehmen
+                </button>
+            </div>
+        }
+
         <div class="note-editor-bar">
             <input class="form-control form-control-lg fw-semibold note-editor-title"
-                   placeholder="Titel…" value="@title" @oninput="OnTitleInput" />
+                   placeholder="Titel…" value="@title" @oninput="OnTitleInput" disabled="@readOnly" />
             <span class="note-editor-status">@StatusText</span>
             <button type="button" class="btn btn-sm btn-outline-danger" @onclick="DeleteAsync"
-                    title="Notiz löschen">🗑</button>
+                    disabled="@readOnly" title="Notiz löschen">🗑</button>
         </div>
 
         <div class="note-editor-meta">
-            <ProjectSelect @bind-Value="selectedProjectId" Change="OnProjectChanged" />
+            <ProjectSelect @bind-Value="selectedProjectId" Change="OnProjectChanged" Disabled="readOnly" />
 
             <RadzenDropDown TValue="int?" Data="taskOptions" TextProperty="Label" ValueProperty="Id"
                             @bind-Value="selectedTaskId" Change="OnAssignmentChanged"
-                            AllowFiltering="true" AllowClear="true"
+                            AllowFiltering="true" AllowClear="true" Disabled="readOnly"
                             FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
                             Placeholder="— kein Task —" class="note-assign-task" />
 
-            <span class="text-muted ms-auto">Geändert: @loaded.UpdatedAt.ToString("dd.MM.yyyy HH:mm")</span>
+            <span class="text-muted ms-auto">Geändert: @loaded.UpdatedAt.ToString("dd.MM.yyyy HH:mm:ss")</span>
         </div>
 
-        @* Value wird EINWEG gebunden und nur beim Notiz-Wechsel gesetzt. Würde man
-           @bind-Value nutzen, schriebe Radzen den Inhalt bei jedem Tastendruck zurück
-           in den DOM → spürbare Eingabeverzögerung. Änderungen holen wir über Input/Change. *@
-        <RadzenHtmlEditor Value="@editorValue" Input="OnContentInput" Change="OnContentInput"
-                          class="note-editor-html" />
+        @if (readOnly)
+        {
+            @* Bewusst der Editor-Ersatz statt eines deaktivierten Editors: so kann hier
+               nichts getippt werden, was beim Verlassen doch noch gespeichert würde. *@
+            <div class="note-readonly">@((MarkupString)content)</div>
+        }
+        else
+        {
+            @* Value wird EINWEG gebunden und nur beim Notiz-Wechsel gesetzt. Würde man
+               @bind-Value nutzen, schriebe Radzen den Inhalt bei jedem Tastendruck zurück
+               in den DOM → spürbare Eingabeverzögerung. Änderungen holen wir über Input/Change. *@
+            <RadzenHtmlEditor Value="@editorValue" Input="OnContentInput" Change="OnContentInput"
+                              class="note-editor-html" />
+        }
     </div>
 }
 
@@ -54,8 +74,16 @@ else
     private string editorValue = string.Empty; // stabil an den Editor gebunden (nur bei Wechsel gesetzt)
     private string content = string.Empty;     // laufender Bearbeitungsstand (zum Speichern)
     private SaveState state = SaveState.Saved;
+    private DateTime? savedAt;                 // Zeitpunkt des letzten Speicherns in dieser Sitzung
     private CancellationTokenSource? debounceCts;
     private bool skipNextRender;               // unterdrückt Re-Renders während des Tippens
+
+    // Tab-Lock: Die Notiz darf nur in einem Tab bearbeitet werden. Hält ein anderer Tab
+    // den Lock, ist dieser Editor schreibgeschützt und speichert nichts – sonst würde er
+    // beim Verlassen seinen veralteten Stand über den des anderen Tabs schreiben.
+    private IJSObjectReference? lockModule;
+    private DotNetObjectReference<NoteEditor>? selfRef;
+    private bool readOnly;
 
     // Zuordnung (Projekt/Task) – aus der geladenen Notiz übernommen, per Dropdown änderbar.
     private int? selectedProjectId;
@@ -102,17 +130,26 @@ else
 
     private enum SaveState { Saved, Pending, Saving, Error }
 
+    // Der Zeitpunkt stammt aus dem UpdatedAt der Server-Antwort, nicht aus einer Client-Uhr.
+    // Vor dem ersten Speichern in dieser Sitzung ist savedAt null → nur "Gespeichert".
     private string StatusText => state switch
     {
         SaveState.Pending => "Nicht gespeichert…",
         SaveState.Saving  => "Speichert…",
         SaveState.Error   => "Fehler beim Speichern",
+        _ when savedAt is DateTime at => $"Gespeichert um {at:HH:mm:ss}",
         _                 => "Gespeichert"
     };
 
     protected override async Task OnParametersSetAsync()
     {
-        if (Note is null) { loaded = null; return; }
+        if (Note is null)
+        {
+            loaded = null;
+            await ReleaseLockAsync();
+            return;
+        }
+
         if (loaded?.Id == Note.Id) return;
 
         // Wechsel auf eine andere Notiz: ausstehende Änderungen der alten sichern.
@@ -125,9 +162,77 @@ else
         selectedProjectId = Note.ProjectId;
         selectedTaskId    = Note.TaskItemId;
         state             = SaveState.Saved;
+        savedAt           = null;
 
         // Task-Auswahl auf das Projekt der geladenen Notiz einschränken.
         RebuildTaskOptions();
+
+        await AcquireLockAsync(force: false);
+    }
+
+    // ── Tab-Lock ──────────────────────────────────────────────────────────────────
+
+    // Sperrt die geladene Notiz für diesen Tab. Hält sie bereits ein anderer, lebender
+    // Tab, geht der Editor in den Read-Only-Modus (force = true übernimmt trotzdem).
+    private async Task AcquireLockAsync(bool force)
+    {
+        if (loaded is null) return;
+
+        lockModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/noteLock.js");
+        selfRef    ??= DotNetObjectReference.Create(this);
+
+        var acquired = await lockModule.InvokeAsync<bool>("acquire", loaded.Id, selfRef, force);
+        readOnly = !acquired;
+    }
+
+    // Gibt den gehaltenen Lock frei (Notiz abgewählt/gelöscht), damit ein anderer Tab
+    // sie sofort bearbeiten kann statt erst nach Ablauf des TTL.
+    private async Task ReleaseLockAsync()
+    {
+        readOnly = false;
+
+        if (lockModule is null) return;
+
+        try
+        {
+            await lockModule.InvokeVoidAsync("release");
+        }
+        catch (JSDisconnectedException) { }
+    }
+
+    // Ein anderer Tab hat die Notiz übernommen. Ausstehende Änderungen werden bewusst
+    // verworfen statt gespeichert – genau dieses Zurückschreiben war das Problem.
+    [JSInvokable]
+    public async Task OnLockLost()
+    {
+        debounceCts?.Cancel();
+        readOnly       = true;
+        state          = SaveState.Saved;
+        skipNextRender = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // Bearbeitung in diesen Tab holen: Lock erzwingen und den Server-Stand frisch laden
+    // (der lokale kann inzwischen veraltet sein).
+    private async Task TakeOverAsync()
+    {
+        if (loaded is null) return;
+
+        var fresh = await Api.GetNoteAsync(loaded.Id);
+        if (fresh is null) return;
+
+        loaded            = fresh;
+        title             = fresh.Title;
+        content           = fresh.Content ?? string.Empty;
+        editorValue       = content;
+        selectedProjectId = fresh.ProjectId;
+        selectedTaskId    = fresh.TaskItemId;
+        state             = SaveState.Saved;
+        savedAt           = null;
+        RebuildTaskOptions();
+
+        await AcquireLockAsync(force: true);
+        await InvokeAsync(StateHasChanged);
     }
 
     // ProjectSelect/Task-Dropdown aktualisieren selectedProjectId/selectedTaskId über
@@ -165,6 +270,8 @@ else
 
     private void ScheduleSave()
     {
+        if (readOnly) return;
+
         state = SaveState.Pending;
         debounceCts?.Cancel();
         debounceCts = new CancellationTokenSource();
@@ -184,13 +291,13 @@ else
     // Speichert ausstehende Änderungen sofort (z. B. vor Notiz-Wechsel / Verlassen).
     public async Task FlushAsync()
     {
-        if (loaded is not null && state is SaveState.Pending or SaveState.Error)
+        if (loaded is not null && !readOnly && state is SaveState.Pending or SaveState.Error)
             await SaveAsync();
     }
 
     private async Task SaveAsync()
     {
-        if (loaded is null) return;
+        if (loaded is null || readOnly) return;
 
         debounceCts?.Cancel();
         state = SaveState.Saving;
@@ -206,15 +313,16 @@ else
             return;
         }
 
-        loaded = updated;
-        state  = SaveState.Saved;
+        loaded  = updated;
+        state   = SaveState.Saved;
+        savedAt = updated.UpdatedAt;
         await OnSaved.InvokeAsync(updated);
         await InvokeAsync(StateHasChanged);
     }
 
     private async Task DeleteAsync()
     {
-        if (loaded is null) return;
+        if (loaded is null || readOnly) return;
 
         debounceCts?.Cancel();
         var id = loaded.Id;
@@ -222,6 +330,7 @@ else
         if (!ok) return;
 
         loaded = null;
+        await ReleaseLockAsync();
         await OnDeleted.InvokeAsync(id);
     }
 
@@ -230,5 +339,17 @@ else
         debounceCts?.Cancel();
         await FlushAsync();
         debounceCts?.Dispose();
+
+        // Beim Verlassen der Seite ist der JS-Kontext u. U. schon weg – der Lock läuft
+        // dann über sein TTL ab, das ist unkritisch.
+        await ReleaseLockAsync();
+
+        if (lockModule is not null)
+        {
+            try { await lockModule.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+
+        selfRef?.Dispose();
     }
 }

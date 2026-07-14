@@ -30,6 +30,7 @@ else
         <div class="row g-4">
             @* Hauptbereich *@
             <div class="col-lg-8">
+                <label class="form-label text-muted small mb-1">Titel</label>
                 <InputText class="form-control form-control-lg fw-semibold mb-1 task-detail-title"
                            @bind-Value="editModel.Title" />
                 <ValidationMessage For="() => editModel.Title" />

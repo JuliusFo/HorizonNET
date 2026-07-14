@@ -41,8 +41,10 @@ else
     }
     else
     {
+        @* Sortiert wird beim Rendern, nicht in der Liste selbst – dadurch stimmt die
+           Reihenfolge sofort nach jeder Statusänderung, ohne Neuladen. *@
         <ul class="list-group mb-4">
-            @foreach (var task in tasks)
+            @foreach (var task in tasks.SortedByDefault())
             {
                 <!-- Parent-Task -->
                 <li class="list-group-item @(task.IsCompleted ? "task-completed" : "")">
@@ -52,7 +54,7 @@ else
                 <!-- Sub-Tasks eingerückt darunter -->
                 @if (task.SubTasks is { Count: > 0 })
                 {
-                    @foreach (var sub in task.SubTasks)
+                    @foreach (var sub in task.SubTasks.SortedByDefault())
                     {
                         <li class="list-group-item ps-5 @(sub.IsCompleted ? "task-completed" : "") subtask-item">
                             @TaskRow(sub, isSubTask: true)

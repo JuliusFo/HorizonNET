@@ -137,6 +137,9 @@ public class ApiService(HttpClient http)
     public Task<List<NoteResponseDto>?> GetNotesAsync() =>
         http.GetFromJsonAsync<List<NoteResponseDto>>("api/notes");
 
+    public Task<NoteResponseDto?> GetNoteAsync(int id) =>
+        http.GetFromJsonAsync<NoteResponseDto>($"api/notes/{id}");
+
     public Task<List<NoteResponseDto>?> GetNotesByTaskAsync(int taskId) =>
         http.GetFromJsonAsync<List<NoteResponseDto>>($"api/notes/task/{taskId}");
 
