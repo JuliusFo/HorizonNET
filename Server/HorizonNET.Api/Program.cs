@@ -1,7 +1,9 @@
+using System.Reflection;
 using HorizonNET.Api.Services;
 using HorizonNET.Data;
 using HorizonNET.Data.Repositories;
 using HorizonNET.Domain.Interfaces;
+using HorizonNET.Shared.Transfer.DTOs;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 
@@ -54,6 +56,21 @@ app.UseCors();
 app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
+
+// Version der laufenden API (Phase 9b). Bewusst anonym erreichbar, damit der Client die
+// Version auch ohne/vor einem Login prüfen kann (relevant nach Einführung der Auth).
+app.MapGet("/api/version", () =>
+{
+    var asm = typeof(Program).Assembly;
+    var version = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+                  ?? asm.GetName().Version?.ToString()
+                  ?? "0.0.0";
+    // Build-Zeit = Schreibzeit der Assembly; bei Single-File-Publish ggf. nicht vorhanden.
+    DateTime? buildUtc = !string.IsNullOrEmpty(asm.Location) && File.Exists(asm.Location)
+        ? File.GetLastWriteTimeUtc(asm.Location)
+        : null;
+    return Results.Ok(new AppVersionDto(version, buildUtc));
+});
 
 // Ausstehende Migrationen beim Start automatisch anwenden
 using (var scope = app.Services.CreateScope())

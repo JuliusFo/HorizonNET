@@ -1,0 +1,18 @@
+<Project>
+
+  <!--
+    Zentrale Versionsquelle für alle Projekte (Phase 9a). MSBuild importiert diese
+    Datei automatisch in jede .csproj unterhalb des Repo-Roots, daher tragen alle
+    Assemblies (API, Client, Domain, Data, Shared) dieselbe Version.
+
+    Version anheben = nur diese eine Zeile ändern (optional zusätzlich `git tag vX.Y.Z`).
+    <Version> setzt AssemblyVersion (X.Y.Z.0), FileVersion und InformationalVersion (X.Y.Z).
+
+    Startwert 0.9.0: "langsam Richtung 1.0". Sprung auf 1.0.0, wenn Phase 9 komplett ist.
+    Siehe docs/konzept-versionierung.md.
+  -->
+  <PropertyGroup>
+    <Version>0.9.0</Version>
+  </PropertyGroup>
+
+</Project>

@@ -35,6 +35,11 @@ public class ToastService
     public void ShowUndo(string text, Func<Task> undo) =>
         Show(ToastLevel.Info, text, DefaultUndoMs, actionLabel: "Rückgängig", action: undo);
 
+    // Toast mit „Neu laden"-Aktion bei erkanntem Versionsversatz (Phase 9c). Bleibt
+    // ohne Auto-Dismiss stehen, bis der Nutzer neu lädt oder den Toast schließt.
+    public void ShowUpdate(string text, Func<Task> reload) =>
+        Show(ToastLevel.Info, text, durationMs: null, actionLabel: "Neu laden", action: reload);
+
     public ToastMessage Show(
         ToastLevel level,
         string text,

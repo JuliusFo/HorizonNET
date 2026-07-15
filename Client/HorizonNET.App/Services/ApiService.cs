@@ -341,6 +341,16 @@ public class ApiService(HttpClient http)
         return response.IsSuccessStatusCode;
     }
 
+    // ── Version ────────────────────────────────────────────────────────────────
+
+    // Version der laufenden API. Fehler werden geschluckt (→ null), damit die
+    // Versatz-Prüfung die App nie stört, wenn die API gerade nicht antwortet.
+    public async Task<AppVersionDto?> GetApiVersionAsync()
+    {
+        try { return await http.GetFromJsonAsync<AppVersionDto>("api/version"); }
+        catch { return null; }
+    }
+
     // ── Google-Kalender ────────────────────────────────────────────────────────
 
     public Task<GoogleStatusDto?> GetGoogleStatusAsync() =>

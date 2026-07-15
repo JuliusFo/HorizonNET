@@ -51,6 +51,9 @@ builder.Services.AddScoped<SettingsState>();
 // UI-Sounds (Web Audio via JS-Interop)
 builder.Services.AddScoped<SoundService>();
 
+// Client-/API-Version (Anzeige + Versatz-Erkennung beim Start)
+builder.Services.AddScoped<VersionState>();
+
 // Lokalisierung registrieren
 builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
 

@@ -27,8 +27,14 @@
    die einen Dialog öffnen (Link, Bild, Farbe), folgenlos. *@
 <RadzenComponents />
 
+@inject VersionState Version
+
 @code {
     private SearchPalette? searchPalette;
+
+    // Beim App-Start die API-Version prüfen und bei Versatz zum Neuladen auffordern.
+    // Bewusst nicht awaiten, damit die GET-Anfrage das Layout-Rendern nicht blockiert.
+    protected override void OnInitialized() => _ = Version.CheckForMismatchAsync();
 
     private async Task OpenSearchAsync()
     {

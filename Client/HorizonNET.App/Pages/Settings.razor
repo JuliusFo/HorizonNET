@@ -2,6 +2,7 @@
 @inject SettingsState AppSettings
 @inject ApiService Api
 @inject IConfiguration Config
+@inject VersionState Version
 
 <PageTitle>Einstellungen – HorizonNET</PageTitle>
 
@@ -40,7 +41,7 @@
     </div>
 </div>
 
-<div class="card settings-card">
+<div class="card mb-3 settings-card">
     <div class="card-header fw-semibold">Google-Kalender</div>
     <div class="card-body">
         <p class="text-muted">
@@ -91,6 +92,32 @@
     </div>
 </div>
 
+<div class="card settings-card">
+    <div class="card-header fw-semibold">Über</div>
+    <div class="card-body">
+        <dl class="row mb-0">
+            <dt class="col-sm-4 fw-normal text-muted">Client-Version</dt>
+            <dd class="col-sm-8">@Version.ClientVersionShort</dd>
+
+            <dt class="col-sm-4 fw-normal text-muted">API-Version</dt>
+            <dd class="col-sm-8 mb-0">
+                @if (Version.ApiVersionShort is { } v)
+                {
+                    <span>@v</span>
+                    @if (Version.ApiVersion?.BuildUtc is { } built)
+                    {
+                        <span class="text-muted"> · Build @built.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
+                    }
+                }
+                else
+                {
+                    <span class="text-muted">nicht erreichbar</span>
+                }
+            </dd>
+        </dl>
+    </div>
+</div>
+
 @code {
     [Parameter, SupplyParameterFromQuery(Name = "google")]
     public string? GoogleResult { get; set; }
@@ -105,6 +132,7 @@
     protected override async Task OnInitializedAsync()
     {
         await AppSettings.EnsureLoadedAsync();
+        await Version.EnsureApiLoadedAsync();
         status = await Api.GetGoogleStatusAsync();
     }
 
