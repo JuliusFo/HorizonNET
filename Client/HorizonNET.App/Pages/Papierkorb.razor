@@ -1,0 +1,147 @@
+@page "/papierkorb"
+@using HorizonNET.Shared.Transfer.DTOs
+@inject ApiService Api
+@inject ConfirmService Confirm
+@inject ToastService Toast
+@inject ProjectState ProjectState
+@inject WorkspaceState WorkspaceState
+
+<PageTitle>Papierkorb – HorizonNET</PageTitle>
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h1 class="mb-0">Papierkorb</h1>
+    @if (items is { Count: > 0 })
+    {
+        <button class="btn btn-outline-danger" @onclick="EmptyAllAsync">Papierkorb leeren</button>
+    }
+</div>
+
+<p class="text-muted">
+    Gelöschte Einträge landen hier und lassen sich wiederherstellen. Erst das endgültige
+    Löschen entfernt sie unwiderruflich.
+</p>
+
+@if (items is null)
+{
+    <p class="text-muted">Wird geladen…</p>
+}
+else if (items.Count == 0)
+{
+    <div class="card">
+        <div class="card-body text-center text-muted py-5">
+            Der Papierkorb ist leer. 🗑️
+        </div>
+    </div>
+}
+else
+{
+    <ul class="list-group">
+        @foreach (var item in items)
+        {
+            <li class="list-group-item d-flex align-items-center gap-3">
+                <span class="badge @TypeBadgeClass(item.Type) trash-type">@TypeLabel(item.Type)</span>
+                <div class="flex-grow-1 min-w-0">
+                    <div class="fw-semibold text-truncate">@item.Title</div>
+                    <div class="small text-muted text-truncate">
+                        @if (!string.IsNullOrWhiteSpace(item.Context))
+                        {
+                            <span>@item.Context · </span>
+                        }
+                        <span>gelöscht am @item.DeletedAt.ToString("dd.MM.yyyy HH:mm")</span>
+                    </div>
+                </div>
+                <button class="btn btn-sm btn-outline-secondary text-nowrap"
+                        @onclick="() => RestoreAsync(item)">Wiederherstellen</button>
+                <button class="btn btn-sm btn-outline-danger text-nowrap"
+                        @onclick="() => PurgeAsync(item)">Endgültig löschen</button>
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    private List<TrashItemDto>? items;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        items = await Api.GetTrashAsync() ?? [];
+    }
+
+    private async Task RestoreAsync(TrashItemDto item)
+    {
+        if (!await Api.RestoreTrashItemAsync(item.Type, item.Id))
+        {
+            Toast.ShowError("Wiederherstellen fehlgeschlagen.");
+            return;
+        }
+        Toast.ShowSuccess($"{item.Title} wiederhergestellt");
+        await AfterChangeAsync();
+    }
+
+    private async Task PurgeAsync(TrashItemDto item)
+    {
+        if (!await Confirm.ShowAsync(
+            "Endgültig löschen",
+            $"{item.Title} wird unwiderruflich gelöscht und kann nicht wiederhergestellt werden.",
+            "Endgültig löschen"))
+            return;
+
+        if (!await Api.PurgeTrashItemAsync(item.Type, item.Id))
+        {
+            Toast.ShowError("Löschen fehlgeschlagen.");
+            return;
+        }
+        Toast.ShowInfo($"{item.Title} endgültig gelöscht");
+        await AfterChangeAsync();
+    }
+
+    private async Task EmptyAllAsync()
+    {
+        if (items is not { Count: > 0 }) return;
+
+        if (!await Confirm.ShowAsync(
+            "Papierkorb leeren",
+            $"Alle {items.Count} Einträge werden unwiderruflich gelöscht und können nicht wiederhergestellt werden.",
+            "Papierkorb leeren"))
+            return;
+
+        if (!await Api.EmptyTrashAsync())
+        {
+            Toast.ShowError("Leeren fehlgeschlagen.");
+            return;
+        }
+        Toast.ShowInfo("Papierkorb geleert");
+        await AfterChangeAsync();
+    }
+
+    // Wiederherstellen/Löschen kann Projekte und Arbeitsbereiche betreffen – Nav und
+    // Übersicht spiegeln das über die geteilten States. Danach die Liste neu laden.
+    private async Task AfterChangeAsync()
+    {
+        await ProjectState.RefreshAsync();
+        await WorkspaceState.RefreshAsync();
+        await LoadAsync();
+    }
+
+    private static string TypeLabel(string type) => type switch
+    {
+        TrashItemTypes.Workspace => "Arbeitsbereich",
+        TrashItemTypes.Project   => "Projekt",
+        TrashItemTypes.Task      => "Aufgabe",
+        TrashItemTypes.Note      => "Notiz",
+        TrashItemTypes.DailyTask => "Daily",
+        _ => type
+    };
+
+    private static string TypeBadgeClass(string type) => type switch
+    {
+        TrashItemTypes.Workspace => "text-bg-primary",
+        TrashItemTypes.Project   => "text-bg-info",
+        TrashItemTypes.Task      => "text-bg-secondary",
+        TrashItemTypes.Note      => "text-bg-success",
+        TrashItemTypes.DailyTask => "text-bg-warning",
+        _ => "text-bg-light"
+    };
+}

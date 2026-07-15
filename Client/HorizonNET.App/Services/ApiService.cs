@@ -312,6 +312,35 @@ public class ApiService(HttpClient http)
     public Task<List<SearchHitDto>?> SearchAsync(string query) =>
         http.GetFromJsonAsync<List<SearchHitDto>>($"api/search?q={Uri.EscapeDataString(query)}");
 
+    // ── Papierkorb ─────────────────────────────────────────────────────────────
+
+    public Task<List<TrashItemDto>?> GetTrashAsync() =>
+        http.GetFromJsonAsync<List<TrashItemDto>>("api/trash");
+
+    // Stellt einen Papierkorb-Eintrag über den typspezifischen Restore-Endpunkt wieder
+    // her – der Task-Restore spiegelt dabei serverseitig auch den Google-Termin neu.
+    public Task<bool> RestoreTrashItemAsync(string type, int id) => type switch
+    {
+        TrashItemTypes.Workspace => RestoreWorkspaceAsync(id),
+        TrashItemTypes.Project   => RestoreProjectAsync(id),
+        TrashItemTypes.Task      => RestoreTaskAsync(id),
+        TrashItemTypes.Note      => RestoreNoteAsync(id),
+        TrashItemTypes.DailyTask => RestoreDailyTaskAsync(id),
+        _ => Task.FromResult(false)
+    };
+
+    public async Task<bool> PurgeTrashItemAsync(string type, int id)
+    {
+        var response = await http.DeleteAsync($"api/trash/{type}/{id}");
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> EmptyTrashAsync()
+    {
+        var response = await http.DeleteAsync("api/trash");
+        return response.IsSuccessStatusCode;
+    }
+
     // ── Google-Kalender ────────────────────────────────────────────────────────
 
     public Task<GoogleStatusDto?> GetGoogleStatusAsync() =>

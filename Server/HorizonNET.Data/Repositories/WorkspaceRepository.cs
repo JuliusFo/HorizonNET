@@ -55,4 +55,25 @@ public class WorkspaceRepository(AppDbContext context) : IWorkspaceRepository
         await context.SaveChangesAsync();
         return true;
     }
+
+    public async Task<IEnumerable<Workspace>> GetDeletedAsync() =>
+        await context.Workspaces
+            .IgnoreQueryFilters()
+            .Where(w => w.DeletedAt != null)
+            .OrderByDescending(w => w.DeletedAt)
+            .ToListAsync();
+
+    public async Task<bool> PurgeAsync(int id)
+    {
+        var existing = await context.Workspaces
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(w => w.Id == id);
+        if (existing is null || existing.DeletedAt is null) return false;
+
+        // Projekte behalten hier ihre Daten – ihre WorkspaceId wird per FK auf null
+        // gesetzt (SetNull), sie erscheinen danach ungruppiert.
+        context.Workspaces.Remove(existing);
+        await context.SaveChangesAsync();
+        return true;
+    }
 }

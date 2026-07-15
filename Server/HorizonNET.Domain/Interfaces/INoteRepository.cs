@@ -22,4 +22,10 @@ public interface INoteRepository
 
     // Globale Suche über Titel und Inhalt (für die Kommandopalette).
     Task<IEnumerable<Note>> SearchAsync(string query, int limit);
+
+    // Soft-gelöschte Notizen (für den Papierkorb), zuletzt gelöscht zuerst.
+    Task<IEnumerable<Note>> GetDeletedAsync();
+
+    // Endgültiges Löschen einer soft-gelöschten Notiz (nicht umkehrbar).
+    Task<bool> PurgeAsync(int id);
 }

@@ -1,0 +1,11 @@
+/* Typ-Badge auf einheitliche Breite, damit die Titel bündig starten. */
+.trash-type {
+    flex: 0 0 auto;
+    width: 8.5rem;
+    text-align: center;
+}
+
+/* Erlaubt text-truncate im Flex-Kind (Bootstrap liefert min-width:0 nicht mit). */
+.min-w-0 {
+    min-width: 0;
+}

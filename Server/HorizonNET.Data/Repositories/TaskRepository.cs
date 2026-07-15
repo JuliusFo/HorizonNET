@@ -215,4 +215,41 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         await context.SaveChangesAsync();
         return true;
     }
+
+    public async Task<IEnumerable<TaskItem>> GetDeletedAsync()
+    {
+        var deleted = await context.Tasks
+            .IgnoreQueryFilters()
+            .Where(t => t.DeletedAt != null)
+            .Include(t => t.Project)
+            .Include(t => t.ParentTask)
+            .OrderByDescending(t => t.DeletedAt)
+            .ToListAsync();
+
+        // Nur eigenständig gelöschte "Wurzeln": Tasks, die im selben Vorgang (gleicher
+        // Zeitstempel) mit ihrem Projekt oder Eltern-Task gelöscht wurden, kämen beim
+        // Wiederherstellen von dort automatisch mit zurück – hier also ausblenden.
+        static bool CameWithParent(TaskItem t) =>
+            (t.Project is { DeletedAt: not null } p && p.DeletedAt == t.DeletedAt)
+            || (t.ParentTask is { DeletedAt: not null } pt && pt.DeletedAt == t.DeletedAt);
+
+        return deleted.Where(t => !CameWithParent(t)).ToList();
+    }
+
+    public async Task<bool> PurgeAsync(int id)
+    {
+        var existing = await context.Tasks
+            .IgnoreQueryFilters()
+            .Include(t => t.SubTasks)
+            .FirstOrDefaultAsync(t => t.Id == id);
+        if (existing is null || existing.DeletedAt is null) return false;
+
+        // Sub-Tasks manuell entfernen (FK ParentTask ist NoAction, kein DB-Cascade);
+        // die Zeiten von Haupt- und Sub-Tasks gehen per FK-Cascade mit, Notizen per SetNull.
+        if (existing.SubTasks.Count > 0)
+            context.Tasks.RemoveRange(existing.SubTasks);
+        context.Tasks.Remove(existing);
+        await context.SaveChangesAsync();
+        return true;
+    }
 }

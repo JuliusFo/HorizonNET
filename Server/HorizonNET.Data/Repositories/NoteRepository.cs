@@ -86,4 +86,23 @@ public class NoteRepository(AppDbContext context) : INoteRepository
         await context.SaveChangesAsync();
         return true;
     }
+
+    public async Task<IEnumerable<Note>> GetDeletedAsync() =>
+        await WithIncludes()
+            .IgnoreQueryFilters()
+            .Where(n => n.DeletedAt != null)
+            .OrderByDescending(n => n.DeletedAt)
+            .ToListAsync();
+
+    public async Task<bool> PurgeAsync(int id)
+    {
+        var existing = await context.Notes
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(n => n.Id == id);
+        if (existing is null || existing.DeletedAt is null) return false;
+
+        context.Notes.Remove(existing);
+        await context.SaveChangesAsync();
+        return true;
+    }
 }

@@ -15,4 +15,10 @@ public interface IWorkspaceRepository
     Task<bool> DeleteAsync(int id);
 
     Task<bool> RestoreAsync(int id);
+
+    // Soft-gelöschte Arbeitsbereiche (für den Papierkorb), zuletzt gelöscht zuerst.
+    Task<IEnumerable<Workspace>> GetDeletedAsync();
+
+    // Endgültiges Löschen eines soft-gelöschten Arbeitsbereichs (nicht umkehrbar).
+    Task<bool> PurgeAsync(int id);
 }

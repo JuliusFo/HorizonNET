@@ -39,4 +39,13 @@ public interface ITaskRepository
 
     // Globale Suche über Titel und Beschreibung (für die Kommandopalette).
     Task<IEnumerable<TaskItem>> SearchAsync(string query, int limit);
+
+    // Soft-gelöschte Tasks (für den Papierkorb), aber nur eigenständig gelöschte
+    // "Wurzeln": Tasks, die als Teil desselben Vorgangs mit ihrem Projekt oder
+    // Eltern-Task gelöscht wurden, kommen dort automatisch mit zurück und tauchen
+    // deshalb nicht separat auf. Zuletzt gelöscht zuerst.
+    Task<IEnumerable<TaskItem>> GetDeletedAsync();
+
+    // Endgültiges Löschen eines soft-gelöschten Tasks inkl. Sub-Tasks (nicht umkehrbar).
+    Task<bool> PurgeAsync(int id);
 }

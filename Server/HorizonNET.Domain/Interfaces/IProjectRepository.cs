@@ -19,4 +19,10 @@ public interface IProjectRepository
 
     // Globale Suche über Name und Beschreibung (für die Kommandopalette).
     Task<IEnumerable<Project>> SearchAsync(string query, int limit);
+
+    // Soft-gelöschte Projekte (für den Papierkorb), zuletzt gelöscht zuerst.
+    Task<IEnumerable<Project>> GetDeletedAsync();
+
+    // Endgültiges Löschen eines soft-gelöschten Projekts inkl. seiner Tasks (nicht umkehrbar).
+    Task<bool> PurgeAsync(int id);
 }

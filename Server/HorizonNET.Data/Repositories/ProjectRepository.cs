@@ -83,4 +83,32 @@ public class ProjectRepository(AppDbContext context) : IProjectRepository
         await context.SaveChangesAsync();
         return true;
     }
+
+    public async Task<IEnumerable<Project>> GetDeletedAsync() =>
+        await context.Projects
+            .IgnoreQueryFilters()
+            .Include(p => p.Workspace)
+            .Where(p => p.DeletedAt != null)
+            .OrderByDescending(p => p.DeletedAt)
+            .ToListAsync();
+
+    public async Task<bool> PurgeAsync(int id)
+    {
+        var existing = await context.Projects
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(p => p.Id == id);
+        if (existing is null || existing.DeletedAt is null) return false;
+
+        // Zugehörige Tasks (Haupt- und Sub-Tasks tragen dieselbe ProjectId) endgültig
+        // entfernen; deren Zeiten gehen per FK-Cascade mit, Notizen werden per SetNull
+        // gelöst. Explizit statt sich allein auf DB-Cascade zu verlassen.
+        var tasks = await context.Tasks
+            .IgnoreQueryFilters()
+            .Where(t => t.ProjectId == id)
+            .ToListAsync();
+        context.Tasks.RemoveRange(tasks);
+        context.Projects.Remove(existing);
+        await context.SaveChangesAsync();
+        return true;
+    }
 }

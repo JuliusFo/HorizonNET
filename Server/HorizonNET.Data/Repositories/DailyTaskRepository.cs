@@ -65,6 +65,27 @@ public class DailyTaskRepository(AppDbContext context) : IDailyTaskRepository
         return true;
     }
 
+    public async Task<IEnumerable<DailyTask>> GetDeletedAsync() =>
+        await context.DailyTasks
+            .IgnoreQueryFilters()
+            .Include(t => t.Project)
+            .Where(t => t.DeletedAt != null)
+            .OrderByDescending(t => t.DeletedAt)
+            .ToListAsync();
+
+    public async Task<bool> PurgeAsync(int id)
+    {
+        var existing = await context.DailyTasks
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(t => t.Id == id);
+        if (existing is null || existing.DeletedAt is null) return false;
+
+        // Häkchen (Completions) gehen per FK-Cascade mit.
+        context.DailyTasks.Remove(existing);
+        await context.SaveChangesAsync();
+        return true;
+    }
+
     public async Task ReorderAsync(IList<int> orderedIds)
     {
         var tasks = await context.DailyTasks
