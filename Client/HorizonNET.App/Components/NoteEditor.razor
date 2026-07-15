@@ -85,6 +85,9 @@ else
     private DotNetObjectReference<NoteEditor>? selfRef;
     private bool readOnly;
 
+    // Macht Links im contenteditable-Bereich des Editors anklickbar (siehe noteLinks.js).
+    private IJSObjectReference? linkModule;
+
     // Zuordnung (Projekt/Task) – aus der geladenen Notiz übernommen, per Dropdown änderbar.
     private int? selectedProjectId;
     private int? selectedTaskId;
@@ -100,6 +103,9 @@ else
     {
         allTasks = await Api.GetTasksAsync() ?? new();
         RebuildTaskOptions();
+
+        linkModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/noteLinks.js");
+        await linkModule.InvokeVoidAsync("attach");
     }
 
     // Ist ein Projekt gewählt, nur dessen Tasks anbieten – sonst alle.
@@ -347,6 +353,12 @@ else
         if (lockModule is not null)
         {
             try { await lockModule.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+
+        if (linkModule is not null)
+        {
+            try { await linkModule.DisposeAsync(); }
             catch (JSDisconnectedException) { }
         }
 
