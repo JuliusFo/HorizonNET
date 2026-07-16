@@ -15,7 +15,17 @@ public interface ITaskRepository
 
     Task<TaskItem> CreateAsync(TaskItem task);
 
+    // Vollersatz aller Felder – nur für die echten Editoren (Detailseite, Dialog).
     Task<TaskItem?> UpdateAsync(int id, TaskItem task);
+
+    // Zweckgebundene Teil-Updates: ändern genau ein Anliegen und lassen den Rest in
+    // Ruhe. Wer nur abhakt oder verschiebt, kann so nichts überschreiben, was er gar
+    // nicht kennt (und nicht mit einem veralteten Stand zurückrollen).
+    Task<TaskItem?> SetStatusAsync(int id, WorkStatus status);
+
+    Task<TaskItem?> SetScheduleAsync(int id, DateTime? dueDate, DateTime? startTime, DateTime? endTime);
+
+    Task<TaskItem?> SetProjectAsync(int id, int? projectId);
 
     // Setzt nur die Google-Event-Verknüpfung (serverseitiger Sync). Bewusst getrennt
     // vom DTO-getriebenen UpdateAsync, damit dieser Wert dort nicht überschrieben wird.

@@ -346,11 +346,7 @@ else
         DateTime? start = isTimed ? args.Start : null;
         DateTime? end   = isTimed ? args.End : null;
 
-        var dto = new TaskUpdateDto(
-            task.Title, task.Description, due, start, end,
-            task.Status, Enum.Parse<Priority>(task.Priority), task.ProjectId, task.Link);
-
-        var updated = await Api.UpdateTaskAsync(task.Id, dto);
+        var updated = await Api.SetTaskScheduleAsync(task.Id, due, start, end);
         if (updated is null) return;
 
         ReplaceTask(updated);
@@ -385,11 +381,7 @@ else
         DateTime? start = isTimed ? newStart : null;
         DateTime? end   = isTimed ? newEnd : null;
 
-        var dto = new TaskUpdateDto(
-            task.Title, task.Description, due, start, end,
-            task.Status, Enum.Parse<Priority>(task.Priority), task.ProjectId, task.Link);
-
-        var updated = await Api.UpdateTaskAsync(task.Id, dto);
+        var updated = await Api.SetTaskScheduleAsync(task.Id, due, start, end);
         if (updated is null) return;
 
         ReplaceTask(updated);
@@ -412,11 +404,8 @@ else
         if (parent.SubTasks is null) return;
 
         var newStatus = sub.IsCompleted ? WorkStatus.Planned : WorkStatus.Done;
-        var dto = new TaskUpdateDto(
-            sub.Title, sub.Description, sub.DueDate, sub.StartTime, sub.EndTime,
-            newStatus, Enum.Parse<Priority>(sub.Priority), sub.ProjectId, sub.Link);
 
-        var updated = await Api.UpdateTaskAsync(sub.Id, dto);
+        var updated = await Api.SetTaskStatusAsync(sub.Id, newStatus);
         if (updated is null) return;
 
         var idx = parent.SubTasks.FindIndex(s => s.Id == sub.Id);

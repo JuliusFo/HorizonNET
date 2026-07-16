@@ -487,12 +487,7 @@ else
 
     private async Task<bool> ChangeStatusAsync(TaskResponseDto task, WorkStatus newStatus)
     {
-        var dto = new TaskUpdateDto(
-            task.Title, task.Description, task.DueDate,
-            task.StartTime, task.EndTime, newStatus,
-            Enum.Parse<Priority>(task.Priority), task.ProjectId, task.Link);
-
-        var updated = await Api.UpdateTaskAsync(task.Id, dto);
+        var updated = await Api.SetTaskStatusAsync(task.Id, newStatus);
         if (updated is null || tasks is null) return false;
 
         var parent = tasks.FirstOrDefault(t => t.Id == task.Id);

@@ -210,11 +210,7 @@
 
     private async Task CompleteTaskAsync(TaskResponseDto task)
     {
-        var dto = new TaskUpdateDto(
-            task.Title, task.Description, task.DueDate, task.StartTime, task.EndTime,
-            WorkStatus.Done, Enum.Parse<Priority>(task.Priority), task.ProjectId, task.Link);
-
-        var updated = await Api.UpdateTaskAsync(task.Id, dto);
+        var updated = await Api.SetTaskStatusAsync(task.Id, WorkStatus.Done);
         if (updated is null)
         {
             await Sound.ErrorAsync();
@@ -232,11 +228,7 @@
     // Setzt die Fälligkeit eines überfälligen Tasks auf heute (wandert nach "Heute").
     private async Task MoveToTodayAsync(TaskResponseDto task)
     {
-        var dto = new TaskUpdateDto(
-            task.Title, task.Description, DateTime.Today, task.StartTime, task.EndTime,
-            task.Status, Enum.Parse<Priority>(task.Priority), task.ProjectId, task.Link);
-
-        var updated = await Api.UpdateTaskAsync(task.Id, dto);
+        var updated = await Api.SetTaskScheduleAsync(task.Id, DateTime.Today, task.StartTime, task.EndTime);
         if (updated is null || allTasks is null) return;
 
         // API liefert beim Update keinen Projektnamen mit – lokal erhalten.
@@ -332,12 +324,7 @@
     {
         if (projectId is null) return;
 
-        var dto = new TaskUpdateDto(
-            task.Title, task.Description, task.DueDate,
-            task.StartTime, task.EndTime, task.Status,
-            Enum.Parse<Priority>(task.Priority), projectId, task.Link);
-
-        var updated = await Api.UpdateTaskAsync(task.Id, dto);
+        var updated = await Api.SetTaskProjectAsync(task.Id, projectId);
         if (updated is null || inboxTasks is null) return;
 
         inboxTasks.Remove(task);

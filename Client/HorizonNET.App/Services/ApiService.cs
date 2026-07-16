@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using HorizonNET.Shared.Transfer.DTOs;
+using HorizonNET.Shared.Transfer.Enums;
 
 namespace HorizonNET.App.Services;
 
@@ -107,6 +108,8 @@ public class ApiService(HttpClient http)
             : null;
     }
 
+    // Vollersatz – nur für die echten Editoren (Detailseite, Bearbeiten-Dialog). Wer nur
+    // ein Anliegen hat, nimmt eines der Teil-Updates darunter.
     public async Task<TaskResponseDto?> UpdateTaskAsync(int id, TaskUpdateDto dto)
     {
         var response = await http.PutAsJsonAsync($"api/tasks/{id}", dto);
@@ -115,6 +118,37 @@ public class ApiService(HttpClient http)
         var updated = await response.Content.ReadFromJsonAsync<TaskResponseDto>();
         await NotifyTaskChangedAsync(); // Status kann den Timer gestartet/gestoppt haben
         return updated;
+    }
+
+    // ── Teil-Updates ───────────────────────────────────────────────────────────
+    // Schicken nur das jeweilige Anliegen; alle übrigen Felder bleiben serverseitig
+    // unangetastet. Antwort ist der frische Task.
+
+    public async Task<TaskResponseDto?> SetTaskStatusAsync(int id, WorkStatus status)
+    {
+        var response = await http.PutAsJsonAsync($"api/tasks/{id}/status", new TaskStatusDto(status));
+        if (!response.IsSuccessStatusCode) return null;
+
+        var updated = await response.Content.ReadFromJsonAsync<TaskResponseDto>();
+        await NotifyTaskChangedAsync(); // Status kann den Timer gestartet/gestoppt haben
+        return updated;
+    }
+
+    public async Task<TaskResponseDto?> SetTaskScheduleAsync(int id, DateTime? dueDate, DateTime? startTime, DateTime? endTime)
+    {
+        var response = await http.PutAsJsonAsync($"api/tasks/{id}/schedule",
+            new TaskScheduleDto(dueDate, startTime, endTime));
+        return response.IsSuccessStatusCode
+            ? await response.Content.ReadFromJsonAsync<TaskResponseDto>()
+            : null;
+    }
+
+    public async Task<TaskResponseDto?> SetTaskProjectAsync(int id, int? projectId)
+    {
+        var response = await http.PutAsJsonAsync($"api/tasks/{id}/project", new TaskProjectDto(projectId));
+        return response.IsSuccessStatusCode
+            ? await response.Content.ReadFromJsonAsync<TaskResponseDto>()
+            : null;
     }
 
     public async Task<bool> DeleteTaskAsync(int id)

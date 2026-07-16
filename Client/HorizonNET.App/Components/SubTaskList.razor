@@ -96,11 +96,8 @@
     private async Task ToggleSubTaskAsync(TaskResponseDto sub)
     {
         var newStatus = sub.IsCompleted ? WorkStatus.Planned : WorkStatus.Done;
-        var dto = new TaskUpdateDto(
-            sub.Title, sub.Description, sub.DueDate, sub.StartTime, sub.EndTime,
-            newStatus, Enum.Parse<Priority>(sub.Priority), sub.ProjectId, sub.Link);
 
-        var updated = await Api.UpdateTaskAsync(sub.Id, dto);
+        var updated = await Api.SetTaskStatusAsync(sub.Id, newStatus);
         if (updated is null) return;
 
         var idx = items.FindIndex(s => s.Id == sub.Id);

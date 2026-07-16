@@ -14,10 +14,13 @@ public record TaskCreateDto(
     WorkStatus Status = WorkStatus.Planned
 );
 
-// Achtung: UpdateAsync ersetzt die Felder vollständig – jeder Aufrufer muss also den
-// bestehenden Stand mitgeben, auch wenn ihn sein Bildschirm gar nicht anzeigt. Link hat
-// deshalb bewusst KEINEN Default: mit einem würden alle Aufrufer klaglos kompilieren und
-// den Link stillschweigend löschen. Ohne Default zwingt der Compiler zur Entscheidung.
+// Vollersatz aller Felder – nur für die echten Editoren (Detailseite, Bearbeiten-Dialog),
+// die auch wirklich alles anzeigen. Wer nur ein Anliegen hat, nimmt eines der Teil-Updates
+// darunter: sonst schickt er einen kompletten, womöglich veralteten Stand zurück und rollt
+// damit fremde Änderungen zurück.
+//
+// Link hat bewusst KEINEN Default: mit einem würden Aufrufer klaglos kompilieren und den
+// Link stillschweigend löschen. Ohne Default zwingt der Compiler zur Entscheidung.
 public record TaskUpdateDto(
     string Title,
     string? Description,
@@ -29,6 +32,19 @@ public record TaskUpdateDto(
     int? ProjectId,
     string? Link
 );
+
+// ── Teil-Updates ────────────────────────────────────────────────────────────────
+// Jedes ändert genau ein Anliegen und lässt alle übrigen Felder unberührt. Neue Felder
+// am Task betreffen diese DTOs deshalb nie – anders als TaskUpdateDto.
+
+// Abhaken, Statuswechsel im Dropdown. Der Server zieht Timer und Fälligkeit nach.
+public record TaskStatusDto(WorkStatus Status);
+
+// Termin: Kalender-Drag, "auf heute schieben". Ohne DueDate verwirft der Server die Uhrzeiten.
+public record TaskScheduleDto(DateTime? DueDate, DateTime? StartTime, DateTime? EndTime);
+
+// Task einem anderen Projekt zuordnen (bzw. mit null in die Inbox).
+public record TaskProjectDto(int? ProjectId);
 
 public record TaskResponseDto(
     int Id,

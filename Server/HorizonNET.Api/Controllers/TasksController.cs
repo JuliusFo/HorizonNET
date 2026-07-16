@@ -129,10 +129,11 @@ public class TasksController(
         {
             Title = dto.Title,
             Description = dto.Description,
+            // Uhrzeit-Invariante (ohne Fälligkeit keine Uhrzeit) setzt das Repository durch –
+            // dort gilt sie für jeden Weg, der Termine schreibt.
             DueDate = dto.DueDate,
-            // Ohne Fälligkeitsdatum keine Uhrzeit (Invariante, unabhängig vom Aufrufer).
-            StartTime = dto.DueDate is null ? null : dto.StartTime,
-            EndTime = dto.DueDate is null ? null : dto.EndTime,
+            StartTime = dto.StartTime,
+            EndTime = dto.EndTime,
             Status = dto.Status,
             Priority = dto.Priority,
             ProjectId = dto.ProjectId,
@@ -140,6 +141,41 @@ public class TasksController(
         });
         if (updated is null) return NotFound();
         await google.SyncTaskAsync(updated); // Änderung nach Google spiegeln (best-effort)
+        return Ok(ToDto(updated));
+    }
+
+    // ── Teil-Updates ─────────────────────────────────────────────────────────────
+    // Für Aufrufer mit genau einem Anliegen (abhaken, verschieben, umhängen). Sie müssen
+    // den restlichen Task weder kennen noch zurückschicken – dadurch können sie weder
+    // neue Felder übersehen noch mit einem veralteten Stand fremde Änderungen zurückrollen.
+
+    [HttpPut("{id:int}/status")]
+    public async Task<IActionResult> SetStatus(int id, [FromBody] TaskStatusDto dto)
+    {
+        var updated = await repo.SetStatusAsync(id, dto.Status);
+        if (updated is null) return NotFound();
+
+        // Ein Statuswechsel kann das Fälligkeitsdatum setzen ("Geplant Heute") – deshalb
+        // wie beim Vollersatz nach Google spiegeln.
+        await google.SyncTaskAsync(updated); // best-effort
+        return Ok(ToDto(updated));
+    }
+
+    [HttpPut("{id:int}/schedule")]
+    public async Task<IActionResult> SetSchedule(int id, [FromBody] TaskScheduleDto dto)
+    {
+        var updated = await repo.SetScheduleAsync(id, dto.DueDate, dto.StartTime, dto.EndTime);
+        if (updated is null) return NotFound();
+        await google.SyncTaskAsync(updated); // best-effort
+        return Ok(ToDto(updated));
+    }
+
+    [HttpPut("{id:int}/project")]
+    public async Task<IActionResult> SetProject(int id, [FromBody] TaskProjectDto dto)
+    {
+        var updated = await repo.SetProjectAsync(id, dto.ProjectId);
+        if (updated is null) return NotFound();
+        await google.SyncTaskAsync(updated); // best-effort
         return Ok(ToDto(updated));
     }
 

@@ -79,29 +79,85 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         return task;
     }
 
+    // Vollersatz – nur für die echten Editoren (Detailseite, Bearbeiten-Dialog), die
+    // wirklich alle Felder anzeigen. Wer nur ein Anliegen hat (abhaken, verschieben,
+    // umhängen), nimmt SetStatusAsync/SetScheduleAsync/SetProjectAsync: die überschreiben
+    // nichts, was der Aufrufer gar nicht kennt.
     public async Task<TaskItem?> UpdateAsync(int id, TaskItem updated)
     {
         var existing = await context.Tasks.FindAsync(id);
         if (existing is null) return null;
 
-        var previousStatus = existing.Status;
-
         existing.Title = updated.Title;
         existing.Description = updated.Description;
         existing.Link = updated.Link;
-        existing.DueDate = updated.DueDate;
-        existing.StartTime = updated.StartTime;
-        existing.EndTime = updated.EndTime;
-        existing.Status = updated.Status;
         existing.Priority = updated.Priority;
         existing.ProjectId = updated.ProjectId;
+        ApplySchedule(existing, updated.DueDate, updated.StartTime, updated.EndTime);
         existing.UpdatedAt = DateTime.Now;
 
-        ApplyDueDateForStatusChange(existing, previousStatus, updated.Status);
-        await ApplyTimerForStatusChangeAsync(id, previousStatus, updated.Status);
+        // Status samt Folgeregeln über denselben Weg wie SetStatusAsync.
+        await ApplyStatusChangeAsync(existing, updated.Status);
 
         await context.SaveChangesAsync();
         return await GetByIdAsync(id) ?? existing;
+    }
+
+    public async Task<TaskItem?> SetStatusAsync(int id, WorkStatus status)
+    {
+        var existing = await context.Tasks.FindAsync(id);
+        if (existing is null) return null;
+
+        await ApplyStatusChangeAsync(existing, status);
+        existing.UpdatedAt = DateTime.Now;
+
+        await context.SaveChangesAsync();
+        return await GetByIdAsync(id) ?? existing;
+    }
+
+    public async Task<TaskItem?> SetScheduleAsync(int id, DateTime? dueDate, DateTime? startTime, DateTime? endTime)
+    {
+        var existing = await context.Tasks.FindAsync(id);
+        if (existing is null) return null;
+
+        ApplySchedule(existing, dueDate, startTime, endTime);
+        existing.UpdatedAt = DateTime.Now;
+
+        await context.SaveChangesAsync();
+        return await GetByIdAsync(id) ?? existing;
+    }
+
+    public async Task<TaskItem?> SetProjectAsync(int id, int? projectId)
+    {
+        var existing = await context.Tasks.FindAsync(id);
+        if (existing is null) return null;
+
+        existing.ProjectId = projectId;
+        existing.UpdatedAt = DateTime.Now;
+
+        await context.SaveChangesAsync();
+        return await GetByIdAsync(id) ?? existing;
+    }
+
+    // Statuswechsel samt der daran hängenden Regeln. Gemeinsamer Kern von UpdateAsync,
+    // SetStatusAsync und ReorderAsync – damit liegt die Kopplung an genau einer Stelle,
+    // egal über welchen Weg der Status sich ändert.
+    private async Task ApplyStatusChangeAsync(TaskItem task, WorkStatus newStatus)
+    {
+        var previous = task.Status;
+
+        ApplyDueDateForStatusChange(task, previous, newStatus);
+        await ApplyTimerForStatusChangeAsync(task.Id, previous, newStatus);
+        task.Status = newStatus;
+    }
+
+    // Ohne Fälligkeitsdatum ergibt eine Uhrzeit keinen Sinn. Bewusst hier und nicht im
+    // Controller: die Invariante gilt für jeden Weg, der Termine schreibt.
+    private static void ApplySchedule(TaskItem task, DateTime? dueDate, DateTime? startTime, DateTime? endTime)
+    {
+        task.DueDate   = dueDate;
+        task.StartTime = dueDate is null ? null : startTime;
+        task.EndTime   = dueDate is null ? null : endTime;
     }
 
     // "Geplant Heute" bedeutet: heute fällig – also auch das Fälligkeitsdatum setzen.
@@ -185,9 +241,7 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
             // Auch das Verschieben im Kanban-Board ist ein Statuswechsel und steuert
             // damit den Timer (Spalte "In Arbeit" startet, jede andere stoppt) sowie
             // das Fälligkeitsdatum (Spalte "Geplant Heute" setzt es auf heute).
-            await ApplyTimerForStatusChangeAsync(t.Id, t.Status, status);
-            ApplyDueDateForStatusChange(t, t.Status, status);
-            t.Status = status;
+            await ApplyStatusChangeAsync(t, status);
         }
         await context.SaveChangesAsync();
     }
