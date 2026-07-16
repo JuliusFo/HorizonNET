@@ -82,6 +82,18 @@ public class TasksController(
     public async Task<IActionResult> Reorder([FromBody] TaskReorderDto dto)
     {
         await repo.ReorderAsync(dto.Status, dto.OrderedTaskIds);
+
+        // Sonderfall "Geplant Heute": Das Repository setzt dabei das Fälligkeitsdatum,
+        // also muss – anders als bei den übrigen Spalten – auch Google nachgezogen werden.
+        if (dto.Status == WorkStatus.PlannedToday)
+        {
+            foreach (var id in dto.OrderedTaskIds)
+            {
+                var task = await repo.GetByIdAsync(id);
+                if (task is not null) await google.SyncTaskAsync(task); // best-effort
+            }
+        }
+
         return NoContent();
     }
 

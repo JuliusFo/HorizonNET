@@ -43,6 +43,12 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         var now = DateTime.Now;
         task.CreatedAt = now;
         task.UpdatedAt = now;
+
+        // Auch ein direkt als "Geplant Heute" angelegter Task ist heute fällig – sonst
+        // gälte die Invariante je nach Einstiegspunkt unterschiedlich. Kein Client nutzt
+        // das aktuell (alle legen mit "Geplant" an), die API erlaubt es aber.
+        ApplyDueDateForStatusChange(task, WorkStatus.Planned, task.Status);
+
         context.Tasks.Add(task);
         await context.SaveChangesAsync();
         return task;
@@ -65,10 +71,23 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         existing.ProjectId = updated.ProjectId;
         existing.UpdatedAt = DateTime.Now;
 
+        ApplyDueDateForStatusChange(existing, previousStatus, updated.Status);
         await ApplyTimerForStatusChangeAsync(id, previousStatus, updated.Status);
 
         await context.SaveChangesAsync();
         return await GetByIdAsync(id) ?? existing;
+    }
+
+    // "Geplant Heute" bedeutet: heute fällig – also auch das Fälligkeitsdatum setzen.
+    // Ohne das erschiene der Task nie auf der Heute-Seite, denn die filtert nach DueDate
+    // und kennt den Status nicht. Bewusst hier und nicht im Client (wie die Timer-
+    // Steuerung), damit es für Kanban-Board, Dialog und Detailseite gleichermaßen gilt.
+    // Nur beim WECHSEL in den Status: sonst würde jede spätere Bearbeitung eines schon
+    // länger geplanten Tasks sein Datum wieder auf heute ziehen.
+    private static void ApplyDueDateForStatusChange(TaskItem task, WorkStatus previous, WorkStatus current)
+    {
+        if (current == WorkStatus.PlannedToday && previous != WorkStatus.PlannedToday)
+            task.DueDate = DateTime.Today;
     }
 
     // Der Status steuert die Zeiterfassung: "In Arbeit" startet den Timer, jeder
@@ -138,8 +157,10 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
             t.SortOrder = orderedTaskIds.IndexOf(t.Id);
 
             // Auch das Verschieben im Kanban-Board ist ein Statuswechsel und steuert
-            // damit den Timer (Spalte "In Arbeit" startet, jede andere stoppt).
+            // damit den Timer (Spalte "In Arbeit" startet, jede andere stoppt) sowie
+            // das Fälligkeitsdatum (Spalte "Geplant Heute" setzt es auf heute).
             await ApplyTimerForStatusChangeAsync(t.Id, t.Status, status);
+            ApplyDueDateForStatusChange(t, t.Status, status);
             t.Status = status;
         }
         await context.SaveChangesAsync();
