@@ -156,6 +156,13 @@
     font-size: 0.875rem;
 }
 
+/* Merkmal-Symbole (z. B. hinterlegter Link) neben dem Kartentitel. */
+.kanban-card-badge {
+    font-size: 0.75rem;
+    opacity: 0.7;
+    cursor: default;
+}
+
 /* Titel-Link zur Detailseite: sieht aus wie der Kartentext, unterstreicht beim Hover. */
 .kanban-card-link {
     color: inherit;

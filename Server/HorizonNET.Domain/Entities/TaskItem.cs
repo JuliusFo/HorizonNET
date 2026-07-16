@@ -10,6 +10,11 @@ public class TaskItem
 
     public string? Description { get; set; }
 
+    // Optionales Feld: externer Link zum Task. null = nicht gesetzt; die Detailseite
+    // blendet das Eingabefeld nur ein, wenn ein Wert da ist oder der Nutzer es
+    // hinzufügt. Erlaubt sind nur http/https, siehe TaskLink.IsValid.
+    public string? Link { get; set; }
+
     public DateTime? DueDate { get; set; }
 
     public DateTime? StartTime { get; set; }

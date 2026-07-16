@@ -14,6 +14,10 @@ public record TaskCreateDto(
     WorkStatus Status = WorkStatus.Planned
 );
 
+// Achtung: UpdateAsync ersetzt die Felder vollständig – jeder Aufrufer muss also den
+// bestehenden Stand mitgeben, auch wenn ihn sein Bildschirm gar nicht anzeigt. Link hat
+// deshalb bewusst KEINEN Default: mit einem würden alle Aufrufer klaglos kompilieren und
+// den Link stillschweigend löschen. Ohne Default zwingt der Compiler zur Entscheidung.
 public record TaskUpdateDto(
     string Title,
     string? Description,
@@ -22,7 +26,8 @@ public record TaskUpdateDto(
     DateTime? EndTime,
     WorkStatus Status,
     Priority Priority,
-    int? ProjectId
+    int? ProjectId,
+    string? Link
 );
 
 public record TaskResponseDto(
@@ -36,6 +41,8 @@ public record TaskResponseDto(
     string Priority,
     int? ProjectId,
     string? ProjectName,
+    // Optionaler externer Link; null = nicht gesetzt.
+    string? Link,
     int SortOrder = 0,
     // Position in der Projektliste (nur Haupt-Tasks); getrennt von der
     // Kanban-Position SortOrder, siehe TaskItem.

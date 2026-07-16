@@ -88,6 +88,7 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
 
         existing.Title = updated.Title;
         existing.Description = updated.Description;
+        existing.Link = updated.Link;
         existing.DueDate = updated.DueDate;
         existing.StartTime = updated.StartTime;
         existing.EndTime = updated.EndTime;

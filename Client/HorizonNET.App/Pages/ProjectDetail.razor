@@ -490,7 +490,7 @@ else
         var dto = new TaskUpdateDto(
             task.Title, task.Description, task.DueDate,
             task.StartTime, task.EndTime, newStatus,
-            Enum.Parse<Priority>(task.Priority), task.ProjectId);
+            Enum.Parse<Priority>(task.Priority), task.ProjectId, task.Link);
 
         var updated = await Api.UpdateTaskAsync(task.Id, dto);
         if (updated is null || tasks is null) return false;

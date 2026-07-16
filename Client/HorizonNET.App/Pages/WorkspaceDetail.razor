@@ -155,6 +155,12 @@ else
                                         <a href="@($"tasks/{task.Id}")" class="kanban-card-link"
                                            @onclick:stopPropagation="true"
                                            title="Zur Detailseite">@task.Title</a>
+                                        @* Merkmale des Tasks – hier reiht sich künftig auch
+                                           das "Warten auf"-Symbol ein. *@
+                                        @if (TaskLink.IsValid(task.Link))
+                                        {
+                                            <span class="kanban-card-badge" title="@task.Link">🔗</span>
+                                        }
                                     </div>
                                     @if (task.ProjectName is not null)
                                     {
@@ -332,7 +338,7 @@ else
         var newStatus = sub.IsCompleted ? WorkStatus.Planned : WorkStatus.Done;
         var dto = new TaskUpdateDto(
             sub.Title, sub.Description, sub.DueDate, sub.StartTime, sub.EndTime,
-            newStatus, Enum.Parse<Priority>(sub.Priority), sub.ProjectId);
+            newStatus, Enum.Parse<Priority>(sub.Priority), sub.ProjectId, sub.Link);
 
         var updated = await Api.UpdateTaskAsync(sub.Id, dto);
         if (updated is null) return;

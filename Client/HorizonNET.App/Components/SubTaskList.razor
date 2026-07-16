@@ -98,7 +98,7 @@
         var newStatus = sub.IsCompleted ? WorkStatus.Planned : WorkStatus.Done;
         var dto = new TaskUpdateDto(
             sub.Title, sub.Description, sub.DueDate, sub.StartTime, sub.EndTime,
-            newStatus, Enum.Parse<Priority>(sub.Priority), sub.ProjectId);
+            newStatus, Enum.Parse<Priority>(sub.Priority), sub.ProjectId, sub.Link);
 
         var updated = await Api.UpdateTaskAsync(sub.Id, dto);
         if (updated is null) return;

@@ -1,6 +1,7 @@
 using HorizonNET.Api.Services;
 using HorizonNET.Domain.Entities;
 using HorizonNET.Domain.Interfaces;
+using HorizonNET.Shared.Transfer;
 using HorizonNET.Shared.Transfer.DTOs;
 using HorizonNET.Shared.Transfer.Enums;
 using Microsoft.AspNetCore.Mvc;
@@ -17,6 +18,7 @@ public class TasksController(
     private static TaskResponseDto ToDto(TaskItem t) =>
         new(t.Id, t.Title, t.Description, t.DueDate, t.StartTime, t.EndTime,
             t.Status, t.Priority.ToString(), t.ProjectId, t.Project?.Name,
+            t.Link,
             t.SortOrder,
             t.ListSortOrder,
             t.ParentTaskId,
@@ -117,6 +119,12 @@ public class TasksController(
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] TaskUpdateDto dto)
     {
+        // Link-Regel gilt in der API, nicht nur im Formular (Invariante, unabhängig
+        // vom Aufrufer – wie die Uhrzeit-Regel darunter).
+        var link = string.IsNullOrWhiteSpace(dto.Link) ? null : dto.Link.Trim();
+        if (link is not null && !TaskLink.IsValid(link))
+            return BadRequest("Link muss mit http:// oder https:// beginnen.");
+
         var updated = await repo.UpdateAsync(id, new TaskItem
         {
             Title = dto.Title,
@@ -127,7 +135,8 @@ public class TasksController(
             EndTime = dto.DueDate is null ? null : dto.EndTime,
             Status = dto.Status,
             Priority = dto.Priority,
-            ProjectId = dto.ProjectId
+            ProjectId = dto.ProjectId,
+            Link = link
         });
         if (updated is null) return NotFound();
         await google.SyncTaskAsync(updated); // Änderung nach Google spiegeln (best-effort)

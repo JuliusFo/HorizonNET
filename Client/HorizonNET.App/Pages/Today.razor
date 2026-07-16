@@ -212,7 +212,7 @@
     {
         var dto = new TaskUpdateDto(
             task.Title, task.Description, task.DueDate, task.StartTime, task.EndTime,
-            WorkStatus.Done, Enum.Parse<Priority>(task.Priority), task.ProjectId);
+            WorkStatus.Done, Enum.Parse<Priority>(task.Priority), task.ProjectId, task.Link);
 
         var updated = await Api.UpdateTaskAsync(task.Id, dto);
         if (updated is null)
@@ -234,7 +234,7 @@
     {
         var dto = new TaskUpdateDto(
             task.Title, task.Description, DateTime.Today, task.StartTime, task.EndTime,
-            task.Status, Enum.Parse<Priority>(task.Priority), task.ProjectId);
+            task.Status, Enum.Parse<Priority>(task.Priority), task.ProjectId, task.Link);
 
         var updated = await Api.UpdateTaskAsync(task.Id, dto);
         if (updated is null || allTasks is null) return;
@@ -335,7 +335,7 @@
         var dto = new TaskUpdateDto(
             task.Title, task.Description, task.DueDate,
             task.StartTime, task.EndTime, task.Status,
-            Enum.Parse<Priority>(task.Priority), projectId);
+            Enum.Parse<Priority>(task.Priority), projectId, task.Link);
 
         var updated = await Api.UpdateTaskAsync(task.Id, dto);
         if (updated is null || inboxTasks is null) return;
