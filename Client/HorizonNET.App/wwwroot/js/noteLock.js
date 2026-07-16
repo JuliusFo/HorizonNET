@@ -50,8 +50,13 @@ export function acquire(noteId, owner, force) {
     return true;
 }
 
-export function release() {
+// noteId (optional): nur freigeben, wenn dieser Tab den Lock für GENAU diese Notiz hält.
+// Ohne Argument (interner Aufruf aus acquire, pagehide) wird unbedingt freigegeben.
+// Wichtig, wenn zwei Editor-Komponenten (Notiz/Zeichnung) wechseln: der abgebaute darf
+// nicht den frisch geholten Lock des neuen wieder entfernen.
+export function release(noteId) {
     if (!held) return;
+    if (noteId != null && held.noteId !== noteId) return;
 
     clearInterval(held.timer);
 

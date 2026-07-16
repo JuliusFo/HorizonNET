@@ -167,7 +167,8 @@
     {
         SearchHitTypes.Project => $"projects/{hit.Id}",
         SearchHitTypes.Task    => $"tasks/{hit.Id}",
-        SearchHitTypes.Note    => $"notes/{hit.Id}",
+        // Zeichnungen sind Notizen – gleiche Route, die Seite öffnet den passenden Editor.
+        SearchHitTypes.Note or SearchHitTypes.Drawing => $"notes/{hit.Id}",
         _                      => string.Empty,
     };
 
@@ -176,6 +177,7 @@
         SearchHitTypes.Project => "📁",
         SearchHitTypes.Task    => "☑",
         SearchHitTypes.Note    => "📝",
+        SearchHitTypes.Drawing => "✏️",
         _                      => string.Empty,
     };
 
@@ -184,6 +186,7 @@
         SearchHitTypes.Project => "Projekt",
         SearchHitTypes.Task    => "Task",
         SearchHitTypes.Note    => "Notiz",
+        SearchHitTypes.Drawing => "Zeichnung",
         _                      => string.Empty,
     };
 

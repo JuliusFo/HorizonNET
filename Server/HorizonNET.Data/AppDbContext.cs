@@ -1,4 +1,5 @@
 using HorizonNET.Domain.Entities;
+using HorizonNET.Shared.Transfer.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace HorizonNET.Data;
@@ -69,7 +70,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.HasKey(n => n.Id);
             e.Property(n => n.Title).IsRequired().HasMaxLength(300);
-            // Content ist HTML und kann lang werden – bewusst ohne MaxLength.
+            // Content ist HTML bzw. SVG und kann lang werden – bewusst ohne MaxLength.
+
+            // Bestehende Notizen bleiben HTML (0), wenn die Spalte hinzukommt.
+            e.Property(n => n.Kind).HasDefaultValue(NoteKind.Html);
+            // Thumbnail ist ein data:-URI (kleines PNG) – bewusst ohne MaxLength.
 
             // Beim Löschen eines Tasks bzw. Projekts bleibt die Notiz erhalten;
             // die jeweilige Zuordnung wird auf null gesetzt.

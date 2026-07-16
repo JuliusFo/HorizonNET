@@ -6,6 +6,13 @@
 
 main {
     flex: 1;
+    /* min-width: 0 ist hier essenziell: Als Flex-Item hat main sonst min-width:auto und
+       kann NICHT unter die Mindestbreite seines Inhalts schrumpfen. Ein Kind mit großer
+       Eigenbreite (z. B. das <canvas> von js-draw im Zeichen-Editor) zieht damit main –
+       und in der Folge die ganze Seite – beliebig breit; in Firefox schaukelte sich das
+       mit js-draws Größenanpassung bis ~65000px hoch. Mit min-width:0 bestimmt der
+       verfügbare Platz die Breite, und breite Inhalte scrollen/clippen in ihrem Container. */
+    min-width: 0;
 }
 
 .sidebar {

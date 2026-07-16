@@ -1,5 +1,6 @@
 using HorizonNET.Domain.Entities;
 using HorizonNET.Domain.Interfaces;
+using HorizonNET.Shared.Transfer.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace HorizonNET.Data.Repositories;
@@ -49,6 +50,8 @@ public class NoteRepository(AppDbContext context) : INoteRepository
         existing.Content = updated.Content;
         existing.TaskItemId = updated.TaskItemId;
         existing.ProjectId = updated.ProjectId;
+        existing.Thumbnail = updated.Thumbnail;
+        // Kind bewusst NICHT übernehmen – die Art einer Notiz bleibt, wie sie angelegt wurde.
         existing.UpdatedAt = DateTime.Now;
         await context.SaveChangesAsync();
         return await GetByIdAsync(id);
@@ -68,8 +71,11 @@ public class NoteRepository(AppDbContext context) : INoteRepository
     {
         var pattern = SearchPattern.For(query);
         return await WithIncludes()
+            // Zeichnungen (Kind == Drawing) nur über den Titel durchsuchen – ein LIKE über
+            // deren SVG-Content in Content würde bei „path", „stroke" o. Ä. Unsinn treffen.
             .Where(n => EF.Functions.Like(n.Title, pattern, SearchPattern.Escape)
-                     || EF.Functions.Like(n.Content, pattern, SearchPattern.Escape))
+                     || (n.Kind == NoteKind.Html
+                         && EF.Functions.Like(n.Content, pattern, SearchPattern.Escape)))
             .OrderByDescending(n => n.UpdatedAt)
             .Take(limit)
             .ToListAsync();

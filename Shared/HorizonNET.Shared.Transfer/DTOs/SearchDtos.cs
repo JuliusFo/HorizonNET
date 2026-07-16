@@ -7,6 +7,10 @@ public static class SearchHitTypes
     public const string Task    = "task";
     public const string Project = "project";
     public const string Note    = "note";
+
+    // Zeichnungen sind technisch Notizen (Kind == Drawing) und springen ebenfalls auf
+    // /notes/{id} – eigener Typ nur, damit die Palette sie mit eigenem Symbol zeigt.
+    public const string Drawing = "drawing";
 }
 
 // Ein Treffer der globalen Suche.

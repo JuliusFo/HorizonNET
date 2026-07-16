@@ -1,3 +1,5 @@
+using HorizonNET.Shared.Transfer.Enums;
+
 namespace HorizonNET.Domain.Entities;
 
 public class Note
@@ -6,8 +8,17 @@ public class Note
 
     public string Title { get; set; } = string.Empty;
 
-    // HTML-Inhalt (aus dem RadzenHtmlEditor).
+    // Bei Kind == Html der HTML-Inhalt (aus dem RadzenHtmlEditor),
+    // bei Kind == Drawing das SVG der Zeichnung.
     public string Content { get; set; } = string.Empty;
+
+    // Art der Notiz: normale HTML-Notiz oder Zeichnung. Wird beim Anlegen gesetzt und
+    // danach nicht mehr geändert (kein Umwandeln Notiz ↔ Zeichnung).
+    public NoteKind Kind { get; set; } = NoteKind.Html;
+
+    // Nur bei Kind == Drawing: kleines PNG (data:-URI) für die schlanke Listenvorschau,
+    // damit die Liste nicht das komplette SVG laden muss.
+    public string? Thumbnail { get; set; }
 
     // Zeitstempel; ausschließlich serverseitig im Repository gesetzt.
     public DateTime CreatedAt { get; set; }

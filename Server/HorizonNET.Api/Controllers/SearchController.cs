@@ -1,5 +1,6 @@
 using HorizonNET.Domain.Interfaces;
 using HorizonNET.Shared.Transfer.DTOs;
+using HorizonNET.Shared.Transfer.Enums;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HorizonNET.Api.Controllers;
@@ -34,7 +35,8 @@ public class SearchController(
             .Concat(taskHits.Select(t => new SearchHitDto(
                 SearchHitTypes.Task, t.Id, t.Title, t.Project?.Name)))
             .Concat(noteHits.Select(n => new SearchHitDto(
-                SearchHitTypes.Note, n.Id, n.Title, n.TaskItem?.Title ?? n.Project?.Name)))
+                n.Kind == NoteKind.Drawing ? SearchHitTypes.Drawing : SearchHitTypes.Note,
+                n.Id, n.Title, n.TaskItem?.Title ?? n.Project?.Name)))
             .ToList();
 
         return Ok(results);

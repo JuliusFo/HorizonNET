@@ -1,0 +1,122 @@
+/* ── Editor-Rahmen (Kopie aus NoteEditor.razor.css) ───────────────────────────
+   Blazor-CSS ist pro Komponente scoped: Die .note-editor*-Regeln aus
+   NoteEditor.razor.css greifen hier NICHT, obwohl dieselben Klassen verwendet werden.
+   Deshalb – wie schon bei DailyTaskDialog – eine eigene Kopie. Wird der Titel-Balken
+   im NoteEditor geändert, hier mitziehen (beide Editoren sollen gleich aussehen). */
+
+.note-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 20rem;
+}
+
+.note-editor {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-width: 0;
+}
+
+.note-editor-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.note-editor-title {
+    border-color: transparent;
+    background-color: transparent;
+    padding-left: 0.25rem;
+    min-width: 0;
+}
+
+.note-editor-title:hover {
+    border-color: #dee2e6;
+}
+
+.note-editor-title:focus {
+    border-color: #86b7fe;
+    background-color: #fff;
+}
+
+.note-editor-status {
+    font-size: 0.8rem;
+    color: #6c757d;
+    white-space: nowrap;
+}
+
+.note-editor-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Task-Dropdown auf handliche Breite begrenzen – ohne das kann es an langen
+   Task-Titeln sehr breit werden und die Spalte auseinanderziehen. */
+.note-assign-task {
+    min-width: 12rem;
+    max-width: 18rem;
+}
+
+/* ── Zeichenfläche ────────────────────────────────────────────────────────────── */
+
+/* Füllt den Rest der Spalte (analog .note-editor-html im NoteEditor). */
+.drawing-host {
+    flex: 1 1 auto;
+    min-height: 22rem;
+    min-width: 0;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    overflow: hidden;
+}
+
+/* js-draw setzt seinem Container fest height:400px – damit würde er den Host nicht
+   füllen (tote Fläche darunter). Der Container wird per JS erzeugt, hat also kein
+   Scope-Attribut → ::deep. */
+.drawing-host ::deep .imageEditorContainer {
+    height: 100%;
+    max-width: 100%;
+}
+
+/* js-draw schaltet bei prefers-color-scheme: dark auf sein dunkles Theme um. Die App
+   ist (noch) durchgehend hell – der Editor stünde sonst als schwarzer Block in einer
+   weißen Oberfläche. Deshalb die Theme-Variablen auf das helle Set festnageln.
+   Sobald die App echten Dark-Mode bekommt, kann das hier wieder entfallen. */
+.drawing-host ::deep .imageEditorContainer {
+    --background-color-1: white;
+    --foreground-color-1: black;
+    --background-color-2: #f5f5f5;
+    --foreground-color-2: #2c303a;
+    --background-color-3: #e5e5e5;
+    --foreground-color-3: #1c202a;
+    --selection-background-color: #cbdaf1;
+    --selection-foreground-color: #2c303a;
+    --background-color-transparent: rgba(105, 100, 100, 0.5);
+    --shadow-color: rgba(0, 0, 0, 0.5);
+    --primary-action-foreground-color: #15b;
+}
+
+/* Read-only (anderer Tab bearbeitet): SVG als Bild, gleiche Fläche wie der Editor,
+   damit die Ansicht beim Übernehmen nicht springt (analog .note-readonly). */
+.drawing-readonly {
+    flex: 1 1 auto;
+    min-height: 22rem;
+    min-width: 0;
+    overflow: auto;
+    padding: 0.75rem;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    background-color: #f8f9fa;
+    text-align: center;
+}
+
+.drawing-readonly ::deep svg {
+    max-width: 100%;
+    height: auto;
+}

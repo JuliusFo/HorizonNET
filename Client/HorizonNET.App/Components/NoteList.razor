@@ -11,13 +11,25 @@
         {
             <button type="button" class="note-list-item @(SelectedId == n.Id ? "active" : "")"
                     @onclick="() => OnSelect.InvokeAsync(n)">
-                <div class="note-list-title">@(string.IsNullOrWhiteSpace(n.Title) ? "(ohne Titel)" : n.Title)</div>
-                @{
-                    var snippet = Snippet(n.Content);
-                }
-                @if (snippet.Length > 0)
+                <div class="note-list-title">
+                    @if (n.Kind == NoteKind.Drawing)
+                    {
+                        <span class="note-list-kind" title="Zeichnung" aria-hidden="true">✏️</span>
+                    }
+                    @(string.IsNullOrWhiteSpace(n.Title) ? "(ohne Titel)" : n.Title)
+                </div>
+
+                @* Zeichnung: Vorschaubild statt Text-Snippet (das SVG liegt nicht in der Liste). *@
+                @if (n.Kind == NoteKind.Drawing)
                 {
-                    <div class="note-list-snippet">@snippet</div>
+                    @if (!string.IsNullOrEmpty(n.Thumbnail))
+                    {
+                        <img class="note-list-thumb" src="@n.Thumbnail" alt="" />
+                    }
+                }
+                else if (!string.IsNullOrEmpty(n.Snippet))
+                {
+                    <div class="note-list-snippet">@n.Snippet</div>
                 }
                 <div class="note-list-meta">
                     @if (n.TaskItemTitle is not null)
@@ -36,18 +48,8 @@
 </div>
 
 @code {
-    [Parameter, EditorRequired] public List<NoteResponseDto> Notes { get; set; } = new();
+    [Parameter, EditorRequired] public List<NoteListItemDto> Notes { get; set; } = new();
     [Parameter] public int? SelectedId { get; set; }
-    [Parameter] public EventCallback<NoteResponseDto> OnSelect { get; set; }
+    [Parameter] public EventCallback<NoteListItemDto> OnSelect { get; set; }
     [Parameter] public string EmptyText { get; set; } = "Keine Notizen.";
-
-    // HTML grob zu Klartext für eine kurze Vorschau in der Liste.
-    private static string Snippet(string? html)
-    {
-        if (string.IsNullOrEmpty(html)) return string.Empty;
-        var text = System.Text.RegularExpressions.Regex.Replace(html, "<.*?>", " ");
-        text = System.Net.WebUtility.HtmlDecode(text);
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ").Trim();
-        return text.Length > 120 ? text[..120] + "…" : text;
-    }
 }

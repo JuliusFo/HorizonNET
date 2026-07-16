@@ -2,12 +2,14 @@
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
-@* Editor für eine einzelne Notiz mit debounced Auto-Save (2 s nach letzter Änderung).
-   Ausstehende Änderungen werden beim Wechsel auf eine andere Notiz und beim Verlassen
-   der Seite noch gespeichert (FlushAsync / DisposeAsync). *@
+@* Editor für eine Zeichnungs-Notiz (Kind == Drawing). Aufbau wie NoteEditor: gleicher
+   Titel-Balken, gleiche Projekt-/Task-Zuordnung, gleicher Tab-Lock (noteLock.js). Statt
+   des HTML-Editors zeichnet js-draw ins Canvas; gespeichert wird das SVG.
+   Auto-Save taktet anders als bei Text: erst ~5 s nach dem letzten Strich, weil bei jedem
+   Speichern das komplette SVG über die Leitung geht. *@
 @if (loaded is null)
 {
-    <div class="note-empty text-muted">Keine Notiz ausgewählt.</div>
+    <div class="note-empty text-muted">Keine Zeichnung ausgewählt.</div>
 }
 else
 {
@@ -15,7 +17,7 @@ else
         @if (readOnly)
         {
             <div class="alert alert-warning d-flex align-items-center gap-3 py-2 mb-2">
-                <span class="flex-grow-1">Diese Notiz wird gerade in einem anderen Tab bearbeitet.</span>
+                <span class="flex-grow-1">Diese Zeichnung wird gerade in einem anderen Tab bearbeitet.</span>
                 <button type="button" class="btn btn-sm btn-warning flex-shrink-0" @onclick="TakeOverAsync">
                     Bearbeitung hier übernehmen
                 </button>
@@ -27,7 +29,7 @@ else
                    placeholder="Titel…" value="@title" @oninput="OnTitleInput" disabled="@readOnly" />
             <span class="note-editor-status">@StatusText</span>
             <button type="button" class="btn btn-sm btn-outline-danger" @onclick="DeleteAsync"
-                    disabled="@readOnly" title="Notiz löschen">🗑</button>
+                    disabled="@readOnly" title="Zeichnung löschen">🗑</button>
         </div>
 
         <div class="note-editor-meta">
@@ -44,23 +46,20 @@ else
 
         @if (readOnly)
         {
-            @* Bewusst der Editor-Ersatz statt eines deaktivierten Editors: so kann hier
-               nichts getippt werden, was beim Verlassen doch noch gespeichert würde. *@
-            <div class="note-readonly">@((MarkupString)content)</div>
+            @* Read-only: SVG einfach als Bild anzeigen (kein js-draw). *@
+            <div class="drawing-readonly">@((MarkupString)content)</div>
         }
         else
         {
-            @* Value wird EINWEG gebunden und nur beim Notiz-Wechsel gesetzt. Würde man
-               @bind-Value nutzen, schriebe Radzen den Inhalt bei jedem Tastendruck zurück
-               in den DOM → spürbare Eingabeverzögerung. Änderungen holen wir über Input/Change. *@
-            <RadzenHtmlEditor Value="@editorValue" Input="OnContentInput" Change="OnContentInput"
-                              class="note-editor-html" />
+            @* Leerer Host – js-draw befüllt ihn per Interop. Bewusst OHNE Razor-Kindinhalt,
+               damit Blazors DOM-Diffing das von js-draw erzeugte DOM nicht anfasst. *@
+            <div class="drawing-host" @ref="canvasHost"></div>
         }
     </div>
 }
 
 @code {
-    // Aktuell zu bearbeitende Notiz; null = nichts ausgewählt.
+    // Aktuell zu bearbeitende Zeichnung; null = nichts ausgewählt.
     [Parameter] public NoteResponseDto? Note { get; set; }
 
     // Nach erfolgreichem Speichern (für Listenaktualisierung beim Aufrufer).
@@ -69,47 +68,51 @@ else
     // Nach dem Löschen.
     [Parameter] public EventCallback<int> OnDeleted { get; set; }
 
-    private NoteResponseDto? loaded;   // Snapshot der geladenen Notiz (Save-Ziel)
+    private NoteResponseDto? loaded;      // Snapshot der geladenen Zeichnung (Save-Ziel)
     private string title = string.Empty;
-    private string editorValue = string.Empty; // stabil an den Editor gebunden (nur bei Wechsel gesetzt)
-    private string content = string.Empty;     // laufender Bearbeitungsstand (zum Speichern)
+    private string content = string.Empty; // zuletzt geladenes/gespeichertes SVG (nur Read-only-Anzeige)
     private SaveState state = SaveState.Saved;
-    private DateTime? savedAt;                 // Zeitpunkt des letzten Speicherns in dieser Sitzung
+    private DateTime? savedAt;
     private CancellationTokenSource? debounceCts;
-    private bool skipNextRender;               // unterdrückt Re-Renders während des Tippens
 
-    // Tab-Lock: Die Notiz darf nur in einem Tab bearbeitet werden. Hält ein anderer Tab
-    // den Lock, ist dieser Editor schreibgeschützt und speichert nichts – sonst würde er
-    // beim Verlassen seinen veralteten Stand über den des anderen Tabs schreiben.
+    // js-draw-Interop
+    private ElementReference canvasHost;
+    private IJSObjectReference? drawingModule;
+    private bool needsInit;   // beim nächsten OnAfterRender einen Editor in canvasHost erzeugen
+    private bool editorActive; // ist aktuell ein js-draw-Editor am Host aktiv?
+
+    // Tab-Lock (identisch zu NoteEditor – noteLock.js ist generisch über die Note-Id).
     private IJSObjectReference? lockModule;
-    private DotNetObjectReference<NoteEditor>? selfRef;
+    private DotNetObjectReference<DrawingEditor>? selfRef;
     private bool readOnly;
 
-    // Macht Links im contenteditable-Bereich des Editors anklickbar (siehe noteLinks.js).
-    private IJSObjectReference? linkModule;
-
-    // Zuordnung (Projekt/Task) – aus der geladenen Notiz übernommen, per Dropdown änderbar.
+    // Zuordnung (Projekt/Task)
     private int? selectedProjectId;
     private int? selectedTaskId;
     private List<TaskResponseDto> allTasks = new();
     private List<TaskOption> taskOptions = new();
 
-    // Auswahl-Eintrag für das Task-Dropdown (Sub-Tasks mit ↳ gekennzeichnet).
     private record TaskOption(int Id, string Label);
 
     private static readonly StringComparer NameComparer = StringComparer.CurrentCultureIgnoreCase;
+
+    private enum SaveState { Saved, Pending, Saving, Error }
+
+    private string StatusText => state switch
+    {
+        SaveState.Pending => "Nicht gespeichert…",
+        SaveState.Saving  => "Speichert…",
+        SaveState.Error   => "Fehler beim Speichern",
+        _ when savedAt is DateTime at => $"Gespeichert um {at:HH:mm:ss}",
+        _                 => "Gespeichert"
+    };
 
     protected override async Task OnInitializedAsync()
     {
         allTasks = await Api.GetTasksAsync() ?? new();
         RebuildTaskOptions();
-
-        linkModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/noteLinks.js");
-        await linkModule.InvokeVoidAsync("attach");
     }
 
-    // Ist ein Projekt gewählt, nur dessen Tasks anbieten – sonst alle.
-    // Sortierung: Haupt-Tasks A-Z, ihre Sub-Tasks jeweils A-Z direkt darunter.
     private void RebuildTaskOptions()
     {
         var source = selectedProjectId is int projectId
@@ -126,32 +129,12 @@ else
         }
     }
 
-    // Während des Tippens NICHT neu rendern – sonst schreibt Radzen den Editor-DOM neu.
-    // Beim Laden einer Notiz und bei Statuswechseln (Speichern) rendern wir normal.
-    protected override bool ShouldRender()
-    {
-        if (skipNextRender) { skipNextRender = false; return false; }
-        return true;
-    }
-
-    private enum SaveState { Saved, Pending, Saving, Error }
-
-    // Der Zeitpunkt stammt aus dem UpdatedAt der Server-Antwort, nicht aus einer Client-Uhr.
-    // Vor dem ersten Speichern in dieser Sitzung ist savedAt null → nur "Gespeichert".
-    private string StatusText => state switch
-    {
-        SaveState.Pending => "Nicht gespeichert…",
-        SaveState.Saving  => "Speichert…",
-        SaveState.Error   => "Fehler beim Speichern",
-        _ when savedAt is DateTime at => $"Gespeichert um {at:HH:mm:ss}",
-        _                 => "Gespeichert"
-    };
-
     protected override async Task OnParametersSetAsync()
     {
         if (Note is null)
         {
             var prev = loaded?.Id;
+            await DestroyEditorAsync();
             loaded = null;
             await ReleaseLockAsync(prev);
             return;
@@ -159,28 +142,48 @@ else
 
         if (loaded?.Id == Note.Id) return;
 
-        // Wechsel auf eine andere Notiz: ausstehende Änderungen der alten sichern.
+        // Wechsel auf eine andere Zeichnung: erst sichern, dann den alten Editor abbauen.
         await FlushAsync();
+        await DestroyEditorAsync();
 
         loaded            = Note;
         title             = Note.Title;
         content           = Note.Content ?? string.Empty;
-        editorValue       = content; // nur hier setzen → Editor schreibt den DOM nur beim Wechsel
         selectedProjectId = Note.ProjectId;
         selectedTaskId    = Note.TaskItemId;
         state             = SaveState.Saved;
         savedAt           = null;
-
-        // Task-Auswahl auf das Projekt der geladenen Notiz einschränken.
         RebuildTaskOptions();
 
         await AcquireLockAsync(force: false);
+
+        // Nur wenn wir schreiben dürfen, einen js-draw-Editor aufbauen (sonst Bild-Anzeige).
+        needsInit = !readOnly;
     }
 
-    // ── Tab-Lock ──────────────────────────────────────────────────────────────────
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!needsInit || loaded is null || readOnly) return;
+        needsInit = false;
 
-    // Sperrt die geladene Notiz für diesen Tab. Hält sie bereits ein anderer, lebender
-    // Tab, geht der Editor in den Read-Only-Modus (force = true übernimmt trotzdem).
+        drawingModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/drawingEditor.js");
+        selfRef       ??= DotNetObjectReference.Create(this);
+
+        await drawingModule.InvokeVoidAsync("init", canvasHost, content, selfRef);
+        editorActive = true;
+    }
+
+    // ── js-draw meldet eine Änderung ────────────────────────────────────────────
+
+    [JSInvokable]
+    public Task OnDrawingChanged()
+    {
+        ScheduleSave();
+        return Task.CompletedTask;
+    }
+
+    // ── Tab-Lock (wie NoteEditor) ───────────────────────────────────────────────
+
     private async Task AcquireLockAsync(bool force)
     {
         if (loaded is null) return;
@@ -192,35 +195,25 @@ else
         readOnly = !acquired;
     }
 
-    // Gibt den gehaltenen Lock frei (Notiz abgewählt/gelöscht), damit ein anderer Tab
-    // sie sofort bearbeiten kann statt erst nach Ablauf des TTL.
     private async Task ReleaseLockAsync(int? noteId)
     {
         readOnly = false;
-
         if (lockModule is null) return;
-
-        try
-        {
-            await lockModule.InvokeVoidAsync("release", noteId);
-        }
+        try { await lockModule.InvokeVoidAsync("release", noteId); }
         catch (JSDisconnectedException) { }
     }
 
-    // Ein anderer Tab hat die Notiz übernommen. Ausstehende Änderungen werden bewusst
-    // verworfen statt gespeichert – genau dieses Zurückschreiben war das Problem.
+    // Ein anderer Tab hat übernommen: ausstehende Änderungen verwerfen, Editor abbauen.
     [JSInvokable]
     public async Task OnLockLost()
     {
         debounceCts?.Cancel();
-        readOnly       = true;
-        state          = SaveState.Saved;
-        skipNextRender = false;
+        await DestroyEditorAsync();
+        readOnly = true;
+        state = SaveState.Saved;
         await InvokeAsync(StateHasChanged);
     }
 
-    // Bearbeitung in diesen Tab holen: Lock erzwingen und den Server-Stand frisch laden
-    // (der lokale kann inzwischen veraltet sein).
     private async Task TakeOverAsync()
     {
         if (loaded is null) return;
@@ -231,7 +224,6 @@ else
         loaded            = fresh;
         title             = fresh.Title;
         content           = fresh.Content ?? string.Empty;
-        editorValue       = content;
         selectedProjectId = fresh.ProjectId;
         selectedTaskId    = fresh.TaskItemId;
         state             = SaveState.Saved;
@@ -239,41 +231,29 @@ else
         RebuildTaskOptions();
 
         await AcquireLockAsync(force: true);
+        needsInit = !readOnly;   // OnAfterRender baut den Editor (neu) auf
         await InvokeAsync(StateHasChanged);
     }
 
-    // ProjectSelect/Task-Dropdown aktualisieren selectedProjectId/selectedTaskId über
-    // @bind-Value; hier nur den Auto-Save anstoßen (parameterlos → bindet an beide Events).
+    // ── Zuordnung / Titel ───────────────────────────────────────────────────────
+
     private void OnAssignmentChanged() => ScheduleSave();
 
-    // Projektwechsel: Task-Auswahl neu aufbauen. Gehört der bisher zugeordnete Task
-    // nicht zum neuen Projekt, wird die Zuordnung verworfen (sonst bliebe eine
-    // Task-Id gespeichert, die im Dropdown gar nicht mehr auftaucht).
     private void OnProjectChanged()
     {
         RebuildTaskOptions();
-
         if (selectedTaskId is int taskId && taskOptions.All(o => o.Id != taskId))
             selectedTaskId = null;
-
         ScheduleSave();
     }
 
     private void OnTitleInput(ChangeEventArgs e)
     {
         title = e.Value?.ToString() ?? string.Empty;
-        skipNextRender = true;
         ScheduleSave();
     }
 
-    // Neuer HTML-Inhalt aus dem Editor (Input = beim Tippen, Change = bei Blur/Befehl).
-    // editorValue bleibt bewusst unverändert, damit Radzen den DOM nicht neu schreibt.
-    private void OnContentInput(string html)
-    {
-        content = html;
-        skipNextRender = true;
-        ScheduleSave();
-    }
+    // ── Auto-Save ───────────────────────────────────────────────────────────────
 
     private void ScheduleSave()
     {
@@ -289,13 +269,13 @@ else
     {
         try
         {
-            await Task.Delay(2000, token);
+            // Längerer Ruhe-Debounce als bei Text: ein SVG ist deutlich größer.
+            await Task.Delay(5000, token);
             await SaveAsync();
         }
-        catch (TaskCanceledException) { /* durch neue Eingabe ersetzt */ }
+        catch (TaskCanceledException) { /* durch neue Änderung ersetzt */ }
     }
 
-    // Speichert ausstehende Änderungen sofort (z. B. vor Notiz-Wechsel / Verlassen).
     public async Task FlushAsync()
     {
         if (loaded is not null && !readOnly && state is SaveState.Pending or SaveState.Error)
@@ -304,13 +284,23 @@ else
 
     private async Task SaveAsync()
     {
-        if (loaded is null || readOnly) return;
+        if (loaded is null || readOnly || drawingModule is null || !editorActive) return;
 
         debounceCts?.Cancel();
         state = SaveState.Saving;
         await InvokeAsync(StateHasChanged);
 
-        var dto = new NoteUpdateDto(title.Trim(), content, selectedTaskId, selectedProjectId);
+        // SVG + Thumbnail erst jetzt aus js-draw holen (nicht bei jeder Änderung).
+        var svg = await drawingModule.InvokeAsync<string?>("getSvg", canvasHost);
+        if (svg is null)
+        {
+            state = SaveState.Error;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+        var thumbnail = await drawingModule.InvokeAsync<string?>("getThumbnail", canvasHost);
+
+        var dto = new NoteUpdateDto(title.Trim(), svg, selectedTaskId, selectedProjectId, thumbnail);
         var updated = await Api.UpdateNoteAsync(loaded.Id, dto);
 
         if (updated is null)
@@ -321,6 +311,7 @@ else
         }
 
         loaded  = updated;
+        content = svg;
         state   = SaveState.Saved;
         savedAt = updated.UpdatedAt;
         await OnSaved.InvokeAsync(updated);
@@ -336,9 +327,18 @@ else
         var ok = await Api.DeleteNoteAsync(id);
         if (!ok) return;
 
+        await DestroyEditorAsync();
         loaded = null;
         await ReleaseLockAsync(id);
         await OnDeleted.InvokeAsync(id);
+    }
+
+    private async Task DestroyEditorAsync()
+    {
+        if (!editorActive || drawingModule is null) return;
+        editorActive = false;
+        try { await drawingModule.InvokeVoidAsync("destroy", canvasHost); }
+        catch (JSDisconnectedException) { }
     }
 
     public async ValueTask DisposeAsync()
@@ -347,19 +347,17 @@ else
         await FlushAsync();
         debounceCts?.Dispose();
 
-        // Beim Verlassen der Seite ist der JS-Kontext u. U. schon weg – der Lock läuft
-        // dann über sein TTL ab, das ist unkritisch.
+        await DestroyEditorAsync();
         await ReleaseLockAsync(loaded?.Id);
 
+        if (drawingModule is not null)
+        {
+            try { await drawingModule.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
         if (lockModule is not null)
         {
             try { await lockModule.DisposeAsync(); }
-            catch (JSDisconnectedException) { }
-        }
-
-        if (linkModule is not null)
-        {
-            try { await linkModule.DisposeAsync(); }
             catch (JSDisconnectedException) { }
         }
 

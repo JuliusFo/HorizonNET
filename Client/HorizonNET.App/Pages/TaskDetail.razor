@@ -210,7 +210,7 @@ else
     private int? loadedId;
 
     // Notizen zu diesem Task
-    private List<NoteResponseDto>? notes;
+    private List<NoteListItemDto>? notes;
     private NoteResponseDto? selectedNote;
     private NoteEditor? noteEditor;
 
@@ -330,22 +330,22 @@ else
         var created = await Api.CreateNoteAsync(new NoteCreateDto("Neue Notiz", null, TaskItemId: Id));
         if (created is null || notes is null) return;
 
-        notes.Insert(0, created);
+        notes.Insert(0, NoteListItemDto.From(created));
         selectedNote = created;
     }
 
-    private async Task SelectNoteAsync(NoteResponseDto note)
+    private async Task SelectNoteAsync(NoteListItemDto note)
     {
         if (selectedNote?.Id == note.Id) return;
         if (noteEditor is not null) await noteEditor.FlushAsync(); // offene Änderungen sichern
-        selectedNote = note;
+        selectedNote = await Api.GetNoteAsync(note.Id);            // volle Notiz inkl. Content laden
     }
 
     private void HandleNoteSaved(NoteResponseDto updated)
     {
         if (notes is null) return;
         var idx = notes.FindIndex(n => n.Id == updated.Id);
-        if (idx >= 0) notes[idx] = updated;
+        if (idx >= 0) notes[idx] = NoteListItemDto.From(updated);
         if (selectedNote?.Id == updated.Id) selectedNote = updated;
     }
 

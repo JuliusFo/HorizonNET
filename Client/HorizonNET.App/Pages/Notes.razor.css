@@ -21,6 +21,28 @@
     border-bottom: 1px solid #dee2e6;
 }
 
+/* Split-Button „Neue Notiz / Neue Zeichnung". Bootstrap-JS (Popper) ist nicht
+   eingebunden, daher wird das Menü hier selbst positioniert. */
+.new-note-group {
+    position: relative;
+}
+
+.new-note-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    margin-top: 0.125rem;
+}
+
+/* Fängt Klicks außerhalb ab und schließt das Menü. */
+.new-note-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+}
+
 /* Liste scrollt innerhalb der Seitenleiste. */
 .notes-sidebar ::deep .note-list {
     overflow-y: auto;

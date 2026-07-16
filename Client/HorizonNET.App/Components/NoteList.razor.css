@@ -45,6 +45,22 @@
     margin-top: 0.1rem;
 }
 
+/* Kennzeichnet eine Zeichnung im Titel. */
+.note-list-kind {
+    margin-right: 0.25rem;
+}
+
+/* Vorschaubild einer Zeichnung (kleines PNG aus dem Thumbnail-Feld). */
+.note-list-thumb {
+    display: block;
+    margin-top: 0.25rem;
+    max-width: 100%;
+    max-height: 4.5rem;
+    border: 1px solid #eee;
+    border-radius: 0.25rem;
+    background: #fff;
+}
+
 .note-list-meta {
     display: flex;
     align-items: center;

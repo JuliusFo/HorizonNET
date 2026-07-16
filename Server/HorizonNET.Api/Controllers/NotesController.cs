@@ -1,6 +1,8 @@
 using HorizonNET.Domain.Entities;
 using HorizonNET.Domain.Interfaces;
+using HorizonNET.Shared.Transfer;
 using HorizonNET.Shared.Transfer.DTOs;
+using HorizonNET.Shared.Transfer.Enums;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HorizonNET.Api.Controllers;
@@ -11,13 +13,21 @@ public class NotesController(INoteRepository repo) : ControllerBase
 {
     private static NoteResponseDto ToDto(Note n) =>
         new(n.Id, n.Title, n.Content, n.CreatedAt, n.UpdatedAt,
+            n.TaskItemId, n.TaskItem?.Title, n.ProjectId, n.Project?.Name,
+            n.Kind, n.Thumbnail);
+
+    // Schlankes Listen-DTO: kein Content, dafür ein serverseitiger Snippet (nur HTML).
+    private static NoteListItemDto ToListItem(Note n) =>
+        new(n.Id, n.Title,
+            n.Kind == NoteKind.Html ? NoteSnippet.From(n.Content) : null,
+            n.UpdatedAt, n.Kind, n.Thumbnail,
             n.TaskItemId, n.TaskItem?.Title, n.ProjectId, n.Project?.Name);
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
         var notes = await repo.GetAllAsync();
-        return Ok(notes.Select(ToDto));
+        return Ok(notes.Select(ToListItem));
     }
 
     [HttpGet("{id:int}")]
@@ -32,14 +42,14 @@ public class NotesController(INoteRepository repo) : ControllerBase
     public async Task<IActionResult> GetByTask(int taskId)
     {
         var notes = await repo.GetByTaskIdAsync(taskId);
-        return Ok(notes.Select(ToDto));
+        return Ok(notes.Select(ToListItem));
     }
 
     [HttpGet("project/{projectId:int}")]
     public async Task<IActionResult> GetByProject(int projectId)
     {
         var notes = await repo.GetByProjectIdAsync(projectId);
-        return Ok(notes.Select(ToDto));
+        return Ok(notes.Select(ToListItem));
     }
 
     [HttpPost]
@@ -50,7 +60,9 @@ public class NotesController(INoteRepository repo) : ControllerBase
             Title = dto.Title,
             Content = dto.Content ?? string.Empty,
             TaskItemId = dto.TaskItemId,
-            ProjectId = dto.ProjectId
+            ProjectId = dto.ProjectId,
+            Kind = dto.Kind,
+            Thumbnail = dto.Thumbnail
         };
         var created = await repo.CreateAsync(note);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, ToDto(created));
@@ -64,7 +76,8 @@ public class NotesController(INoteRepository repo) : ControllerBase
             Title = dto.Title,
             Content = dto.Content ?? string.Empty,
             TaskItemId = dto.TaskItemId,
-            ProjectId = dto.ProjectId
+            ProjectId = dto.ProjectId,
+            Thumbnail = dto.Thumbnail
         });
         if (updated is null) return NotFound();
         return Ok(ToDto(updated));

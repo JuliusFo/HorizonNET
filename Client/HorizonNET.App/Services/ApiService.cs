@@ -146,17 +146,17 @@ public class ApiService(HttpClient http)
 
     // ── Notizen ────────────────────────────────────────────────────────────────
 
-    public Task<List<NoteResponseDto>?> GetNotesAsync() =>
-        http.GetFromJsonAsync<List<NoteResponseDto>>("api/notes");
+    public Task<List<NoteListItemDto>?> GetNotesAsync() =>
+        http.GetFromJsonAsync<List<NoteListItemDto>>("api/notes");
 
     public Task<NoteResponseDto?> GetNoteAsync(int id) =>
         http.GetFromJsonAsync<NoteResponseDto>($"api/notes/{id}");
 
-    public Task<List<NoteResponseDto>?> GetNotesByTaskAsync(int taskId) =>
-        http.GetFromJsonAsync<List<NoteResponseDto>>($"api/notes/task/{taskId}");
+    public Task<List<NoteListItemDto>?> GetNotesByTaskAsync(int taskId) =>
+        http.GetFromJsonAsync<List<NoteListItemDto>>($"api/notes/task/{taskId}");
 
-    public Task<List<NoteResponseDto>?> GetNotesByProjectAsync(int projectId) =>
-        http.GetFromJsonAsync<List<NoteResponseDto>>($"api/notes/project/{projectId}");
+    public Task<List<NoteListItemDto>?> GetNotesByProjectAsync(int projectId) =>
+        http.GetFromJsonAsync<List<NoteListItemDto>>($"api/notes/project/{projectId}");
 
     public async Task<NoteResponseDto?> CreateNoteAsync(NoteCreateDto dto)
     {

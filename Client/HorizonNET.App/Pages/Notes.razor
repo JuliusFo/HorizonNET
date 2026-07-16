@@ -10,11 +10,42 @@
     <div class="notes-sidebar">
         <div class="notes-sidebar-header">
             <h1 class="h5 mb-2">Notizen</h1>
-            <button class="btn btn-sm btn-primary w-100 mb-2" @onclick="CreateNoteAsync">+ Neue Notiz</button>
+            @* Klick auf den Hauptteil legt direkt eine Notiz an; über den Pfeil auch eine
+               Zeichnung. Auf/Zu wird hier selbst gesteuert – Bootstrap-JS ist nicht eingebunden. *@
+            @if (newMenuOpen)
+            {
+                <div class="new-note-backdrop" @onclick="() => newMenuOpen = false"></div>
+            }
+            <div class="btn-group w-100 mb-2 new-note-group">
+                <button class="btn btn-sm btn-primary" @onclick="() => CreateNoteAsync(NoteKind.Html)">
+                    + Neue Notiz
+                </button>
+                <button class="btn btn-sm btn-primary dropdown-toggle dropdown-toggle-split"
+                        @onclick="() => newMenuOpen = !newMenuOpen"
+                        aria-expanded="@newMenuOpen" title="Weitere Optionen">
+                    <span class="visually-hidden">Weitere Optionen</span>
+                </button>
+                @if (newMenuOpen)
+                {
+                    <ul class="dropdown-menu show new-note-menu">
+                        <li>
+                            <button type="button" class="dropdown-item"
+                                    @onclick="() => CreateNoteAsync(NoteKind.Html)">📝 Neue Notiz</button>
+                        </li>
+                        <li>
+                            <button type="button" class="dropdown-item"
+                                    @onclick="() => CreateNoteAsync(NoteKind.Drawing)">✏️ Neue Zeichnung</button>
+                        </li>
+                    </ul>
+                }
+            </div>
+
             <input class="form-control form-control-sm mb-2" placeholder="Suchen…"
                    @bind="search" @bind:event="oninput" />
             <select class="form-select form-select-sm" @bind="filter">
                 <option value="all">Alle</option>
+                <option value="html">Nur Notizen</option>
+                <option value="drawing">Nur Zeichnungen</option>
                 <option value="none">Ohne Zuordnung</option>
                 <option value="project">Mit Projekt</option>
                 <option value="task">Mit Task</option>
@@ -32,9 +63,16 @@
         }
     </div>
 
-    @* Editor *@
+    @* Editor: je nach Notiz-Art der HTML- oder der Zeichen-Editor. *@
     <div class="notes-main">
-        <NoteEditor @ref="editor" Note="selected" OnSaved="HandleSaved" OnDeleted="HandleDeleted" />
+        @if (selected?.Kind == NoteKind.Drawing)
+        {
+            <DrawingEditor @ref="drawingEditor" Note="selected" OnSaved="HandleSaved" OnDeleted="HandleDeleted" />
+        }
+        else
+        {
+            <NoteEditor @ref="editor" Note="selected" OnSaved="HandleSaved" OnDeleted="HandleDeleted" />
+        }
     </div>
 </div>
 
@@ -42,56 +80,68 @@
     // Optionale Route /notes/{id} – z. B. aus der globalen Suche (Strg+K).
     [Parameter] public int? Id { get; set; }
 
-    private List<NoteResponseDto>? notes;
+    private List<NoteListItemDto>? notes;
     private NoteResponseDto? selected;
     private NoteEditor? editor;
+    private DrawingEditor? drawingEditor;
     private string search = string.Empty;
     private string filter = "all";
+    private bool newMenuOpen;   // Split-Dropdown „Neue Notiz / Neue Zeichnung"
+
+    // Sichert offene Änderungen des gerade sichtbaren Editors (HTML oder Zeichnung).
+    private async Task FlushActiveAsync()
+    {
+        if (editor is not null) await editor.FlushAsync();
+        if (drawingEditor is not null) await drawingEditor.FlushAsync();
+    }
 
     protected override async Task OnParametersSetAsync()
     {
         notes ??= await Api.GetNotesAsync() ?? new();
 
-        // Beim Aufruf mit Id die passende Notiz vorauswählen.
-        if (Id is int id && selected?.Id != id)
+        // Beim Aufruf mit Id die passende Notiz vorauswählen (Content per GET nachladen).
+        if (Id is int id && selected?.Id != id && notes.Any(n => n.Id == id))
         {
-            var match = notes.FirstOrDefault(n => n.Id == id);
-            if (match is not null)
-            {
-                if (editor is not null) await editor.FlushAsync(); // offene Änderungen sichern
-                selected = match;
-            }
+            await FlushActiveAsync(); // offene Änderungen sichern
+            selected = await Api.GetNoteAsync(id);
         }
     }
 
-    private List<NoteResponseDto> Filtered => (notes ?? new())
+    private List<NoteListItemDto> Filtered => (notes ?? new())
         .Where(n => filter switch
         {
+            "html"    => n.Kind == NoteKind.Html,
+            "drawing" => n.Kind == NoteKind.Drawing,
             "none"    => n.TaskItemId is null && n.ProjectId is null,
             "project" => n.ProjectId is not null,
             "task"    => n.TaskItemId is not null,
             _         => true
         })
+        // Ohne Content in der Liste wird über Titel + Snippet gesucht; die Volltextsuche
+        // über den ganzen Inhalt leistet die Kommandopalette (Strg+K, serverseitig).
         .Where(n => string.IsNullOrWhiteSpace(search)
                     || n.Title.Contains(search, StringComparison.OrdinalIgnoreCase)
-                    || (n.Content?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false))
+                    || (n.Snippet?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false))
         .ToList();
 
-    private async Task SelectAsync(NoteResponseDto note)
+    private async Task SelectAsync(NoteListItemDto note)
     {
         if (selected?.Id == note.Id) return;
-        if (editor is not null) await editor.FlushAsync(); // offene Änderungen sichern
-        selected = note;
+        await FlushActiveAsync();                    // offene Änderungen sichern
+        selected = await Api.GetNoteAsync(note.Id);  // volle Notiz inkl. Content laden
     }
 
-    private async Task CreateNoteAsync()
+    private async Task CreateNoteAsync(NoteKind kind)
     {
-        if (editor is not null) await editor.FlushAsync();
+        newMenuOpen = false;
+        await FlushActiveAsync();
 
-        var created = await Api.CreateNoteAsync(new NoteCreateDto("Neue Notiz", null));
+        // Kind wird beim Anlegen festgelegt und ist danach unveränderlich (siehe NoteUpdateDto).
+        var title = kind == NoteKind.Drawing ? "Neue Zeichnung" : "Neue Notiz";
+        var created = await Api.CreateNoteAsync(new NoteCreateDto(title, null, Kind: kind));
         if (created is null || notes is null) return;
 
-        notes.Insert(0, created);
+        notes.Insert(0, NoteListItemDto.From(created));
         selected = created;
     }
 
@@ -99,7 +149,7 @@
     {
         if (notes is null) return;
         var idx = notes.FindIndex(n => n.Id == updated.Id);
-        if (idx >= 0) notes[idx] = updated;
+        if (idx >= 0) notes[idx] = NoteListItemDto.From(updated);
         if (selected?.Id == updated.Id) selected = updated;
         StateHasChanged();
     }
