@@ -18,9 +18,16 @@ public class TaskItem
 
     public WorkStatus Status { get; set; } = WorkStatus.Planned;
 
-    // Manuelle Reihenfolge innerhalb einer Kanban-Spalte (Status).
+    // Manuelle Reihenfolge innerhalb einer Kanban-Spalte (Status) – bei Sub-Tasks
+    // die Reihenfolge innerhalb des Eltern-Tasks (SubTaskList).
     // Sortiert wird stets erst nach Status, dann nach SortOrder.
     public int SortOrder { get; set; }
+
+    // Manuelle Reihenfolge in der Task-Liste eines Projekts; nur für Haupt-Tasks
+    // belegt (Sub-Tasks nutzen dort SortOrder). Bewusst getrennt von SortOrder:
+    // dieselbe Spalte kann nicht gleichzeitig die Kanban-Position tragen, weil jede
+    // Status-Spalte eigene 0..n-1 vergibt und die Projektliste Status mischt.
+    public int ListSortOrder { get; set; }
 
     public bool IsCompleted => Status == WorkStatus.Done || Status == WorkStatus.Abandoned;
 

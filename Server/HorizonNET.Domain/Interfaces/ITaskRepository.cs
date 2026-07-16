@@ -31,6 +31,10 @@ public interface ITaskRepository
     // Setzt nur SortOrder = Listenindex (Status bleibt unverändert) – für Sub-Tasks.
     Task ReorderSubTasksAsync(IList<int> orderedTaskIds);
 
+    // Setzt ListSortOrder = Listenindex – die manuelle Reihenfolge der Haupt-Tasks in
+    // der Projektliste. Rührt weder Status noch SortOrder (Kanban) an.
+    Task ReorderTaskListAsync(IList<int> orderedTaskIds);
+
     // Soft-Delete: stempelt den Task (und aktive Sub-Tasks) als gelöscht.
     Task<bool> DeleteAsync(int id);
 

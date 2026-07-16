@@ -144,6 +144,14 @@ public class ApiService(HttpClient http)
         return response.IsSuccessStatusCode;
     }
 
+    // Reihenfolge der Haupt-Tasks in der Projektliste. Kein NotifyTaskChangedAsync:
+    // es ändert sich nur die Position, kein Status – andere Ansichten bleiben gültig.
+    public async Task<bool> ReorderTaskListAsync(List<int> orderedTaskIds)
+    {
+        var response = await http.PutAsJsonAsync("api/tasks/reorder-list", orderedTaskIds);
+        return response.IsSuccessStatusCode;
+    }
+
     // ── Notizen ────────────────────────────────────────────────────────────────
 
     public Task<List<NoteListItemDto>?> GetNotesAsync() =>

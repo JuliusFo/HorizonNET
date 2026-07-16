@@ -49,6 +49,31 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         // das aktuell (alle legen mit "Geplant" an), die API erlaubt es aber.
         ApplyDueDateForStatusChange(task, WorkStatus.Planned, task.Status);
 
+        // Neu Angelegtes hängt sich ans Ende der jeweiligen manuellen Reihenfolge. Ohne
+        // das trüge alles den Wert 0 und die Reihenfolge wäre bedeutungslos bzw. ein
+        // neuer Eintrag spränge nach dem ersten Umsortieren an den Anfang.
+        // IgnoreQueryFilters: auch gelöschte Zeilen zählen mit, sonst bekäme ein aus dem
+        // Papierkorb wiederhergestellter Task denselben Wert wie ein neuer.
+        if (task.ParentTaskId is null)
+        {
+            // Haupt-Task: Position in der Projektliste. SortOrder (Kanban-Spalte) bleibt
+            // bewusst unangetastet – dort ist 0 = oben in der Spalte "Geplant".
+            var maxOrder = await context.Tasks
+                .IgnoreQueryFilters()
+                .Where(t => t.ParentTaskId == null && t.ProjectId == task.ProjectId)
+                .MaxAsync(t => (int?)t.ListSortOrder) ?? -1;
+            task.ListSortOrder = maxOrder + 1;
+        }
+        else
+        {
+            // Sub-Task: Position innerhalb des Eltern-Tasks (SortOrder).
+            var maxOrder = await context.Tasks
+                .IgnoreQueryFilters()
+                .Where(t => t.ParentTaskId == task.ParentTaskId)
+                .MaxAsync(t => (int?)t.SortOrder) ?? -1;
+            task.SortOrder = maxOrder + 1;
+        }
+
         context.Tasks.Add(task);
         await context.SaveChangesAsync();
         return task;
@@ -175,6 +200,20 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         // Nur die Reihenfolge ändern – der Status der Sub-Tasks bleibt erhalten.
         foreach (var t in tasks)
             t.SortOrder = orderedTaskIds.IndexOf(t.Id);
+
+        await context.SaveChangesAsync();
+    }
+
+    public async Task ReorderTaskListAsync(IList<int> orderedTaskIds)
+    {
+        var tasks = await context.Tasks
+            .Where(t => orderedTaskIds.Contains(t.Id))
+            .ToListAsync();
+
+        // Nur die Position in der Projektliste – Status und die Kanban-Position
+        // (SortOrder) bleiben unberührt.
+        foreach (var t in tasks)
+            t.ListSortOrder = orderedTaskIds.IndexOf(t.Id);
 
         await context.SaveChangesAsync();
     }

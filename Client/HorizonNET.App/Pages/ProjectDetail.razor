@@ -42,25 +42,39 @@ else
     else
     {
         @* Sortiert wird beim Rendern, nicht in der Liste selbst – dadurch stimmt die
-           Reihenfolge sofort nach jeder Statusänderung, ohne Neuladen. *@
+           Reihenfolge sofort nach jeder Änderung, ohne Neuladen. *@
         <ul class="list-group mb-4">
-            @foreach (var task in tasks.SortedByDefault())
+            @foreach (var task in OrderedTasks(tasks))
             {
-                @* @key ist hier zwingend: eine Statusänderung sortiert die Liste um. Ohne
+                @* @key ist hier zwingend: Abhaken und Umsortieren ordnen die Liste um. Ohne
                    Schlüssel verwendet Blazor die <li> positionsweise wieder – das Status-
                    Dropdown des nachrückenden Tasks behielte dann die vom Nutzer gewählte
                    Auswahl (z. B. "Fertig"), weil sich sein value-Attribut nicht ändert. *@
                 <!-- Parent-Task -->
-                <li @key="task.Id" class="list-group-item @(task.IsCompleted ? "task-completed" : "")">
+                <li @key="task.Id"
+                    class="list-group-item @(task.IsCompleted ? "task-completed" : "") @(dragOverTaskId == task.Id ? "task-drop-before" : "")"
+                    draggable="true"
+                    @ondragstart="() => draggedTask = task"
+                    @ondragend="ResetDrag"
+                    @ondragover:preventDefault="true"
+                    @ondragover="() => { if (draggedTask is { ParentTaskId: null }) dragOverTaskId = task.Id; }"
+                    @ondrop="() => DropTaskAsync(task)">
                     @TaskRow(task, isSubTask: false)
                 </li>
 
                 <!-- Sub-Tasks eingerückt darunter -->
                 @if (task.SubTasks is { Count: > 0 })
                 {
-                    @foreach (var sub in task.SubTasks.SortedByDefault())
+                    @foreach (var sub in OrderedSubTasks(task))
                     {
-                        <li @key="sub.Id" class="list-group-item ps-5 @(sub.IsCompleted ? "task-completed" : "") subtask-item">
+                        <li @key="sub.Id"
+                            class="list-group-item ps-5 @(sub.IsCompleted ? "task-completed" : "") subtask-item @(dragOverTaskId == sub.Id ? "task-drop-before" : "")"
+                            draggable="true"
+                            @ondragstart="() => draggedTask = sub"
+                            @ondragend="ResetDrag"
+                            @ondragover:preventDefault="true"
+                            @ondragover="() => { if (draggedTask?.ParentTaskId == sub.ParentTaskId) dragOverTaskId = sub.Id; }"
+                            @ondrop="() => DropSubTaskAsync(task, sub)">
                             @TaskRow(sub, isSubTask: true)
                         </li>
                     }
@@ -73,7 +87,8 @@ else
                         <EditForm Model="newSubTask" OnValidSubmit="() => CreateSubTaskAsync(task.Id)" class="row g-2">
                             <DataAnnotationsValidator />
                             <div class="col-12">
-                                <InputText class="form-control form-control-sm" @bind-Value="newSubTask.Title" placeholder="@L["SubTask_Placeholder"]" />
+                                <InputText @ref="subTaskTitleInput" class="form-control form-control-sm"
+                                           @bind-Value="newSubTask.Title" placeholder="@L["SubTask_Placeholder"]" />
                                 <ValidationMessage For="() => newSubTask.Title" />
                             </div>
                             <div class="col-md-6">
@@ -236,6 +251,8 @@ else
     private int? addingSubTaskForId;
     private TaskCreateFormModel newSubTask = new();
     private string? subTaskErrorMessage;
+    private InputText? subTaskTitleInput;
+    private bool focusSubTaskTitle;
 
     // OnParametersSetAsync statt OnInitializedAsync: lädt neu beim Wechsel
     // zwischen zwei Projekten (gleiche Komponenteninstanz, nur Id ändert sich).
@@ -263,12 +280,91 @@ else
         notes   = await Api.GetNotesByProjectAsync(Id) ?? new();
     }
 
+    // ── Reihenfolge ──────────────────────────────────────────────────────────
+
+    // Haupt-Tasks: manuelle Reihenfolge (ListSortOrder). Erledigte Tasks bleiben als
+    // Gruppe am Listenende – das ist die einzige verbliebene Automatik.
+    private static IEnumerable<TaskResponseDto> OrderedTasks(IEnumerable<TaskResponseDto> source) =>
+        source.OrderBy(t => t.IsCompleted).ThenBy(t => t.ListSortOrder);
+
+    // Sub-Tasks: rein manuell über SortOrder – bewusst ohne die Erledigt-Gruppierung,
+    // damit die Reihenfolge exakt der SubTaskList (Detailseite/Edit-Dialog) entspricht.
+    private static IEnumerable<TaskResponseDto> OrderedSubTasks(TaskResponseDto parent) =>
+        (parent.SubTasks ?? []).OrderBy(s => s.SortOrder);
+
+    // ── Sortieren per Drag & Drop ────────────────────────────────────────────
+
+    private TaskResponseDto? draggedTask;
+    private int? dragOverTaskId;
+
+    private void ResetDrag()
+    {
+        draggedTask    = null;
+        dragOverTaskId = null;
+    }
+
+    // Haupt-Task vor den Ziel-Task einsortieren (schreibt ListSortOrder).
+    private async Task DropTaskAsync(TaskResponseDto target)
+    {
+        var dragged = draggedTask;
+        ResetDrag();
+
+        if (tasks is null || dragged is null || dragged.Id == target.Id) return;
+
+        // Nur innerhalb der Haupt-Task-Ebene; ein Sub-Task hat hier nichts verloren.
+        if (dragged.ParentTaskId is not null || target.ParentTaskId is not null) return;
+
+        var ordered = OrderedTasks(tasks).ToList();
+        ordered.RemoveAll(t => t.Id == dragged.Id);
+        var idx = ordered.FindIndex(t => t.Id == target.Id);
+        if (idx < 0) idx = ordered.Count;
+        ordered.Insert(idx, dragged);
+
+        // ListSortOrder lokal mitziehen, sonst rendert die Liste nach den alten Werten.
+        for (var i = 0; i < ordered.Count; i++)
+            ordered[i] = ordered[i] with { ListSortOrder = i };
+
+        // GetTasksByProjectAsync liefert ausschließlich Haupt-Tasks – die Liste darf
+        // deshalb komplett ersetzt werden.
+        tasks = ordered;
+
+        await Api.ReorderTaskListAsync(ordered.Select(t => t.Id).ToList());
+    }
+
+    // Sub-Task vor den Ziel-Sub-Task einsortieren (schreibt SortOrder, wie die SubTaskList).
+    private async Task DropSubTaskAsync(TaskResponseDto parent, TaskResponseDto target)
+    {
+        var dragged = draggedTask;
+        ResetDrag();
+
+        if (tasks is null || dragged is null || dragged.Id == target.Id) return;
+
+        // Nur Geschwister desselben Eltern-Tasks tauschen die Plätze.
+        if (dragged.ParentTaskId != parent.Id || target.ParentTaskId != parent.Id) return;
+
+        var ordered = OrderedSubTasks(parent).ToList();
+        ordered.RemoveAll(s => s.Id == dragged.Id);
+        var idx = ordered.FindIndex(s => s.Id == target.Id);
+        if (idx < 0) idx = ordered.Count;
+        ordered.Insert(idx, dragged);
+
+        for (var i = 0; i < ordered.Count; i++)
+            ordered[i] = ordered[i] with { SortOrder = i };
+
+        var parentIdx = tasks.FindIndex(t => t.Id == parent.Id);
+        if (parentIdx >= 0) tasks[parentIdx] = parent with { SubTasks = ordered };
+
+        await Api.ReorderSubTasksAsync(ordered.Select(s => s.Id).ToList());
+    }
+
     // ── Render-Helfer ────────────────────────────────────────────────────────
 
     private RenderFragment TaskRow(TaskResponseDto task, bool isSubTask) => __builder =>
     {
         <div class="d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center gap-3">
+                <span class="task-handle" title="Zum Sortieren ziehen">⠿</span>
+
                 @* Schnell-Abschluss: Haken setzt auf "Fertig", Abwählen zurück auf "Geplant". *@
                 <input type="checkbox" class="form-check-input task-done-check flex-shrink-0"
                        checked="@task.IsCompleted"
@@ -503,8 +599,11 @@ else
                 var updatedSubTasks = (parentTask.SubTasks ?? []).Append(created).ToList();
                 tasks[tasks.IndexOf(parentTask)] = parentTask with { SubTasks = updatedSubTasks };
             }
-            addingSubTaskForId = null;
-            newSubTask         = new();
+
+            // Formular bleibt offen: Titel → Enter → Titel → Enter. Geschlossen wird
+            // nur über "Abbrechen" (CancelSubTask) oder beim Projektwechsel.
+            newSubTask        = new();
+            focusSubTaskTitle = true;
         }
         else
         {
@@ -512,6 +611,17 @@ else
         }
 
         isSaving = false;
+    }
+
+    // Fokus erst nach dem Render setzen: die neue Sub-Task-Zeile verschiebt das
+    // Formular im DOM, vorher zeigt die ElementReference noch auf das alte Feld.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!focusSubTaskTitle) return;
+        focusSubTaskTitle = false;
+
+        if (subTaskTitleInput?.Element is ElementReference el)
+            await el.FocusAsync();
     }
 
     // ── Erstellen ────────────────────────────────────────────────────────────

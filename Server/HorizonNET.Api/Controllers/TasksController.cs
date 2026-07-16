@@ -18,6 +18,7 @@ public class TasksController(
         new(t.Id, t.Title, t.Description, t.DueDate, t.StartTime, t.EndTime,
             t.Status, t.Priority.ToString(), t.ProjectId, t.Project?.Name,
             t.SortOrder,
+            t.ListSortOrder,
             t.ParentTaskId,
             t.SubTasks.Count > 0 ? t.SubTasks.OrderBy(s => s.SortOrder).Select(s => ToDto(s)).ToList() : null,
             t.CreatedAt, t.UpdatedAt, t.GoogleEventId != null,
@@ -101,6 +102,15 @@ public class TasksController(
     public async Task<IActionResult> ReorderSubTasks([FromBody] List<int> orderedTaskIds)
     {
         await repo.ReorderSubTasksAsync(orderedTaskIds);
+        return NoContent();
+    }
+
+    // Reihenfolge der Haupt-Tasks in der Projektliste. Kein Google-Sync nötig: weder
+    // Status noch Fälligkeitsdatum ändern sich (anders als bei "reorder").
+    [HttpPut("reorder-list")]
+    public async Task<IActionResult> ReorderTaskList([FromBody] List<int> orderedTaskIds)
+    {
+        await repo.ReorderTaskListAsync(orderedTaskIds);
         return NoContent();
     }
 

@@ -37,6 +37,9 @@ public record TaskResponseDto(
     int? ProjectId,
     string? ProjectName,
     int SortOrder = 0,
+    // Position in der Projektliste (nur Haupt-Tasks); getrennt von der
+    // Kanban-Position SortOrder, siehe TaskItem.
+    int ListSortOrder = 0,
     int? ParentTaskId = null,
     List<TaskResponseDto>? SubTasks = null,
     DateTime CreatedAt = default,

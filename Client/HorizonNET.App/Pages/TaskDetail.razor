@@ -292,6 +292,8 @@ else
 
         // Die API liefert beim Update keine Sub-Tasks/Projektnamen mit – lokal erhalten.
         task = updated with { SubTasks = task.SubTasks, ProjectName = task.ProjectName };
+
+        Toast.ShowSuccess("Gespeichert");
     }
 
     private async Task DeleteAsync()

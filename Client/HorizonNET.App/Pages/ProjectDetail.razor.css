@@ -31,3 +31,18 @@
     height: 1.15rem;
     cursor: pointer;
 }
+
+/* Ziehgriff und Einfügemarke – gleiche Optik wie in SubTaskList und im Kanban-Board. */
+.task-handle {
+    cursor: grab;
+    color: #adb5bd;
+    user-select: none;
+}
+
+.task-handle:active {
+    cursor: grabbing;
+}
+
+.task-drop-before {
+    box-shadow: 0 -2px 0 -1px var(--bs-primary, #0d6efd);
+}

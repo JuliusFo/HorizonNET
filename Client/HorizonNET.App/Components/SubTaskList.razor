@@ -35,6 +35,7 @@
 
 <div class="d-flex gap-2 @(items.Count > 0 ? "mt-3" : "")">
     <input class="form-control form-control-sm" placeholder="Neuer Sub-Task…"
+           @ref="newSubTaskInput"
            @bind="newSubTaskTitle" @bind:event="oninput"
            @onkeydown="HandleSubTaskKeyAsync" />
     <button type="button" class="btn btn-sm btn-primary text-nowrap"
@@ -58,6 +59,7 @@
 
     private List<TaskResponseDto> items = new();
     private string newSubTaskTitle = string.Empty;
+    private ElementReference newSubTaskInput;
     private TaskResponseDto? draggedSub;
     private int? dragOverSubId;
     private int? loadedParentId;
@@ -86,6 +88,9 @@
         items.Add(created);
         newSubTaskTitle = string.Empty;
         await NotifyChangedAsync();
+
+        // Fokus zurück ins Feld: Titel → Enter → Titel → Enter, ohne Mausgriff.
+        await newSubTaskInput.FocusAsync();
     }
 
     private async Task ToggleSubTaskAsync(TaskResponseDto sub)
