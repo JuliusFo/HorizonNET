@@ -46,3 +46,31 @@
 .task-drop-before {
     box-shadow: 0 -2px 0 -1px var(--bs-primary, #0d6efd);
 }
+
+/* Kopfzeile der Erledigt-Gruppe: unauffällig, aber über die ganze Breite klickbar. */
+.done-group {
+    padding: 0;
+    background-color: #f8f9fa;
+}
+
+.done-group-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 0;
+    background: none;
+    color: #6c757d;
+    font-size: 0.875rem;
+    text-align: left;
+}
+
+.done-group-toggle:hover {
+    color: #212529;
+}
+
+.done-group-caret {
+    width: 0.75rem;
+    flex-shrink: 0;
+}

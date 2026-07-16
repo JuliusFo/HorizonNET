@@ -44,74 +44,29 @@ else
         @* Sortiert wird beim Rendern, nicht in der Liste selbst – dadurch stimmt die
            Reihenfolge sofort nach jeder Änderung, ohne Neuladen. *@
         <ul class="list-group mb-4">
-            @foreach (var task in OrderedTasks(tasks))
+            @foreach (var task in OpenTasks(tasks))
             {
-                @* @key ist hier zwingend: Abhaken und Umsortieren ordnen die Liste um. Ohne
-                   Schlüssel verwendet Blazor die <li> positionsweise wieder – das Status-
-                   Dropdown des nachrückenden Tasks behielte dann die vom Nutzer gewählte
-                   Auswahl (z. B. "Fertig"), weil sich sein value-Attribut nicht ändert. *@
-                <!-- Parent-Task -->
-                <li @key="task.Id"
-                    class="list-group-item @(task.IsCompleted ? "task-completed" : "") @(dragOverTaskId == task.Id ? "task-drop-before" : "")"
-                    draggable="true"
-                    @ondragstart="() => draggedTask = task"
-                    @ondragend="ResetDrag"
-                    @ondragover:preventDefault="true"
-                    @ondragover="() => { if (draggedTask is { ParentTaskId: null }) dragOverTaskId = task.Id; }"
-                    @ondrop="() => DropTaskAsync(task)">
-                    @TaskRow(task, isSubTask: false)
+                @TaskBlock(task)
+            }
+
+            @* Erledigte Tasks stehen zugeklappt am Listenende – gleiche Konvention wie
+               die Spalten "Fertig"/"Abgebrochen" im Kanban-Board. *@
+            @if (DoneCount > 0)
+            {
+                <li class="list-group-item done-group">
+                    <button type="button" class="done-group-toggle"
+                            @onclick="() => doneCollapsed = !doneCollapsed">
+                        <span class="done-group-caret">@(doneCollapsed ? "▸" : "▾")</span>
+                        <span>@string.Format(L["Done_Group"], DoneCount)</span>
+                    </button>
                 </li>
 
-                <!-- Sub-Tasks eingerückt darunter -->
-                @if (task.SubTasks is { Count: > 0 })
+                @if (!doneCollapsed)
                 {
-                    @foreach (var sub in OrderedSubTasks(task))
+                    @foreach (var task in CompletedTasks(tasks))
                     {
-                        <li @key="sub.Id"
-                            class="list-group-item ps-5 @(sub.IsCompleted ? "task-completed" : "") subtask-item @(dragOverTaskId == sub.Id ? "task-drop-before" : "")"
-                            draggable="true"
-                            @ondragstart="() => draggedTask = sub"
-                            @ondragend="ResetDrag"
-                            @ondragover:preventDefault="true"
-                            @ondragover="() => { if (draggedTask?.ParentTaskId == sub.ParentTaskId) dragOverTaskId = sub.Id; }"
-                            @ondrop="() => DropSubTaskAsync(task, sub)">
-                            @TaskRow(sub, isSubTask: true)
-                        </li>
+                        @TaskBlock(task)
                     }
-                }
-
-                <!-- Sub-Task-Erstellformular -->
-                @if (addingSubTaskForId == task.Id)
-                {
-                    <li class="list-group-item ps-5 subtask-item">
-                        <EditForm Model="newSubTask" OnValidSubmit="() => CreateSubTaskAsync(task.Id)" class="row g-2">
-                            <DataAnnotationsValidator />
-                            <div class="col-12">
-                                <InputText @ref="subTaskTitleInput" class="form-control form-control-sm"
-                                           @bind-Value="newSubTask.Title" placeholder="@L["SubTask_Placeholder"]" />
-                                <ValidationMessage For="() => newSubTask.Title" />
-                            </div>
-                            <div class="col-md-6">
-                                <InputDate class="form-control form-control-sm" @bind-Value="newSubTask.DueDate" />
-                            </div>
-                            <div class="col-md-6">
-                                <InputSelect class="form-select form-select-sm" @bind-Value="newSubTask.Priority">
-                                    @foreach (var p in Enum.GetValues<Priority>())
-                                    {
-                                        <option value="@p">@PriorityDisplay.Symbol(p) @EnumL[$"Priority_{p}"]</option>
-                                    }
-                                </InputSelect>
-                            </div>
-                            @if (subTaskErrorMessage is not null)
-                            {
-                                <div class="col-12"><div class="alert alert-danger py-1">@subTaskErrorMessage</div></div>
-                            }
-                            <div class="col-12 d-flex gap-2">
-                                <button type="submit" class="btn btn-sm btn-primary" disabled="@isSaving">@L["Task_EditSave"]</button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelSubTask">@L["Task_EditCancel"]</button>
-                            </div>
-                        </EditForm>
-                    </li>
                 }
             }
         </ul>
@@ -288,6 +243,19 @@ else
     private static IEnumerable<TaskResponseDto> OrderedTasks(IEnumerable<TaskResponseDto> source) =>
         source.OrderBy(t => t.IsCompleted).ThenBy(t => t.ListSortOrder);
 
+    // Die beiden Gruppen der Liste: offen oben, erledigt in der Klapp-Gruppe darunter.
+    private static IEnumerable<TaskResponseDto> OpenTasks(IEnumerable<TaskResponseDto> source) =>
+        source.Where(t => !t.IsCompleted).OrderBy(t => t.ListSortOrder);
+
+    private static IEnumerable<TaskResponseDto> CompletedTasks(IEnumerable<TaskResponseDto> source) =>
+        source.Where(t => t.IsCompleted).OrderBy(t => t.ListSortOrder);
+
+    // Erledigte Tasks starten zugeklappt; der Zustand gilt bis zum Neuladen und
+    // übersteht – wie im Kanban-Board – einen Projektwechsel.
+    private bool doneCollapsed = true;
+
+    private int DoneCount => tasks?.Count(t => t.IsCompleted) ?? 0;
+
     // Sub-Tasks: rein manuell über SortOrder – bewusst ohne die Erledigt-Gruppierung,
     // damit die Reihenfolge exakt der SubTaskList (Detailseite/Edit-Dialog) entspricht.
     private static IEnumerable<TaskResponseDto> OrderedSubTasks(TaskResponseDto parent) =>
@@ -359,6 +327,79 @@ else
     }
 
     // ── Render-Helfer ────────────────────────────────────────────────────────
+
+    // Ein Haupt-Task mit seinen Sub-Tasks und dem Anlege-Formular. Als Fragment, weil
+    // der Block an zwei Stellen gerendert wird: oben die offenen, unten (aufgeklappt)
+    // die erledigten.
+    private RenderFragment TaskBlock(TaskResponseDto task) => __builder =>
+    {
+        @* @key ist hier zwingend: Abhaken und Umsortieren ordnen die Liste um. Ohne
+           Schlüssel verwendet Blazor die <li> positionsweise wieder – das Status-
+           Dropdown des nachrückenden Tasks behielte dann die vom Nutzer gewählte
+           Auswahl (z. B. "Fertig"), weil sich sein value-Attribut nicht ändert. *@
+        <li @key="task.Id"
+            class="list-group-item @(task.IsCompleted ? "task-completed" : "") @(dragOverTaskId == task.Id ? "task-drop-before" : "")"
+            draggable="true"
+            @ondragstart="() => draggedTask = task"
+            @ondragend="ResetDrag"
+            @ondragover:preventDefault="true"
+            @ondragover="() => { if (draggedTask is { ParentTaskId: null }) dragOverTaskId = task.Id; }"
+            @ondrop="() => DropTaskAsync(task)">
+            @TaskRow(task, isSubTask: false)
+        </li>
+
+        @* Sub-Tasks eingerückt darunter *@
+        @if (task.SubTasks is { Count: > 0 })
+        {
+            @foreach (var sub in OrderedSubTasks(task))
+            {
+                <li @key="sub.Id"
+                    class="list-group-item ps-5 @(sub.IsCompleted ? "task-completed" : "") subtask-item @(dragOverTaskId == sub.Id ? "task-drop-before" : "")"
+                    draggable="true"
+                    @ondragstart="() => draggedTask = sub"
+                    @ondragend="ResetDrag"
+                    @ondragover:preventDefault="true"
+                    @ondragover="() => { if (draggedTask?.ParentTaskId == sub.ParentTaskId) dragOverTaskId = sub.Id; }"
+                    @ondrop="() => DropSubTaskAsync(task, sub)">
+                    @TaskRow(sub, isSubTask: true)
+                </li>
+            }
+        }
+
+        @* Sub-Task-Erstellformular *@
+        @if (addingSubTaskForId == task.Id)
+        {
+            <li class="list-group-item ps-5 subtask-item">
+                <EditForm Model="newSubTask" OnValidSubmit="() => CreateSubTaskAsync(task.Id)" class="row g-2">
+                    <DataAnnotationsValidator />
+                    <div class="col-12">
+                        <InputText @ref="subTaskTitleInput" class="form-control form-control-sm"
+                                   @bind-Value="newSubTask.Title" placeholder="@L["SubTask_Placeholder"]" />
+                        <ValidationMessage For="() => newSubTask.Title" />
+                    </div>
+                    <div class="col-md-6">
+                        <InputDate class="form-control form-control-sm" @bind-Value="newSubTask.DueDate" />
+                    </div>
+                    <div class="col-md-6">
+                        <InputSelect class="form-select form-select-sm" @bind-Value="newSubTask.Priority">
+                            @foreach (var p in Enum.GetValues<Priority>())
+                            {
+                                <option value="@p">@PriorityDisplay.Symbol(p) @EnumL[$"Priority_{p}"]</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    @if (subTaskErrorMessage is not null)
+                    {
+                        <div class="col-12"><div class="alert alert-danger py-1">@subTaskErrorMessage</div></div>
+                    }
+                    <div class="col-12 d-flex gap-2">
+                        <button type="submit" class="btn btn-sm btn-primary" disabled="@isSaving">@L["Task_EditSave"]</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelSubTask">@L["Task_EditCancel"]</button>
+                    </div>
+                </EditForm>
+            </li>
+        }
+    };
 
     private RenderFragment TaskRow(TaskResponseDto task, bool isSubTask) => __builder =>
     {
