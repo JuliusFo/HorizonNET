@@ -49,6 +49,7 @@ else
                     <ProjectCard Project="p"
                                  CssClass="@($"ws-project-card {FilterClass(p.Id)}")"
                                  ShowDescription="false"
+                                 OnAddTask="() => OpenQuickAdd(p)"
                                  OnEdit="() => OpenEditProject(p)">
                         <ExtraActions>
                             <FilterToggleButton Active="@projectFilter.Contains(p.Id)"
@@ -202,11 +203,15 @@ else
     }
 }
 
-<TaskEditDialog Task="selectedTask"
+@* Ein Dialog für beides: Task gesetzt → bearbeiten, Task = null → anlegen
+   (dann trägt quickAddProject das Zielprojekt). *@
+<TaskEditDialog Visible="taskDialogVisible"
+                Task="selectedTask"
+                DefaultProjectId="quickAddProject?.Id"
                 OnSaved="HandleTaskSaved"
                 OnDeleted="HandleTaskDeleted"
                 OnTaskUpdated="HandleTaskUpdated"
-                OnClose="@(() => selectedTask = null)" />
+                OnClose="CloseTaskDialog" />
 
 @* Anlegen legt das Projekt direkt in DIESEM Arbeitsbereich an (DefaultWorkspaceId). *@
 <ProjectEditDialog Visible="showProjectDialog"
@@ -214,6 +219,7 @@ else
                    DefaultWorkspaceId="Id"
                    OnSaved="HandleProjectSavedAsync"
                    OnClose="CloseProjectDialog" />
+
 
 @code {
     [Parameter] public int Id { get; set; }
@@ -371,28 +377,54 @@ else
         await Api.ReorderTasksAsync(new TaskReorderDto(status, column.Select(t => t.Id).ToList()));
     }
 
-    // ── Bearbeiten-Dialog ──────────────────────────────────────────────────────
+    // ── Task-Dialog (Anlegen und Bearbeiten) ───────────────────────────────────
 
-    private void OpenTask(TaskResponseDto task) => selectedTask = task;
+    private bool taskDialogVisible;
 
-    private async Task HandleTaskSaved(TaskResponseDto updated)
+    // Bearbeiten: Task gesetzt.
+    private void OpenTask(TaskResponseDto task)
     {
-        if (tasks is null) { selectedTask = null; return; }
+        selectedTask      = task;
+        quickAddProject   = null;
+        taskDialogVisible = true;
+    }
 
+    // Anlegen: kein Task, dafür das Zielprojekt aus der Karte.
+    private void OpenQuickAdd(ProjectResponseDto project)
+    {
+        selectedTask      = null;
+        quickAddProject   = project;
+        taskDialogVisible = true;
+    }
+
+    private void CloseTaskDialog()
+    {
+        taskDialogVisible = false;
+        selectedTask      = null;
+        quickAddProject   = null;
+    }
+
+    private async Task HandleTaskSaved(TaskResponseDto saved)
+    {
+        // Vor dem Schließen lesen – CloseTaskDialog räumt selectedTask ab.
         var oldStatus = selectedTask?.Status;
+        var isNew     = selectedTask is null;
 
-        var idx = tasks.FindIndex(t => t.Id == updated.Id);
-        if (idx >= 0) tasks[idx] = updated;
+        if (tasks is null) { CloseTaskDialog(); return; }
+
+        var idx = tasks.FindIndex(t => t.Id == saved.Id);
+        if (idx >= 0) tasks[idx] = saved;
+        else tasks.Add(saved);   // neu angelegt → als Karte aufs Board
 
         // Bei Status-Wechsel im Dialog ans Ende der neuen Spalte einsortieren
-        if (oldStatus is not null && oldStatus != updated.Status)
+        if (oldStatus is not null && oldStatus != saved.Status)
         {
-            var newStatus = updated.Status;
-            var orderedIds = tasks.Where(t => t.ParentTaskId is null && t.Status == newStatus && t.Id != updated.Id)
+            var newStatus = saved.Status;
+            var orderedIds = tasks.Where(t => t.ParentTaskId is null && t.Status == newStatus && t.Id != saved.Id)
                                   .OrderBy(t => t.SortOrder)
                                   .Select(t => t.Id)
                                   .ToList();
-            orderedIds.Add(updated.Id);
+            orderedIds.Add(saved.Id);
 
             for (var i = 0; i < orderedIds.Count; i++)
             {
@@ -403,14 +435,21 @@ else
             await Api.ReorderTasksAsync(new TaskReorderDto(newStatus, orderedIds));
         }
 
-        selectedTask = null;
+        CloseTaskDialog();
+
+        // Die Karten zeigen server-berechnete Task-Zähler – nach dem Anlegen frisch holen.
+        if (isNew)
+        {
+            await ProjectState.RefreshAsync();
+            RebuildProjects();
+        }
     }
 
     private void HandleTaskDeleted(int id)
     {
         var title = tasks?.FirstOrDefault(t => t.Id == id)?.Title;
         tasks?.RemoveAll(t => t.Id == id);
-        selectedTask = null;
+        CloseTaskDialog();
 
         Toast.ShowUndo(string.IsNullOrWhiteSpace(title) ? "Task gelöscht" : $"{title} gelöscht", async () =>
         {
@@ -438,6 +477,9 @@ else
         projects      = (ProjectState.Projects ?? []).Where(p => p.WorkspaceId == Id).ToList();
         projectColors = projects.ToDictionary(p => p.Id, p => p.Color);
     }
+
+    // Zielprojekt für den Anlege-Modus des Task-Dialogs (von der Projekt-Card).
+    private ProjectResponseDto? quickAddProject;
 
     private void OpenNewProject()
     {

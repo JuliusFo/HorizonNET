@@ -212,7 +212,8 @@ else
     }
 }
 
-<TaskEditDialog Task="selectedTask"
+<TaskEditDialog Visible="selectedTask is not null"
+                Task="selectedTask"
                 OnSaved="HandleTaskSaved"
                 OnDeleted="HandleTaskDeleted"
                 OnTaskUpdated="HandleTaskUpdated"

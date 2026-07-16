@@ -177,6 +177,7 @@ else
                                     {
                                         <div class="col">
                                             <ProjectCard Project="project"
+                                                         OnAddTask="() => quickAddProject = project"
                                                          OnEdit="() => OpenEditProject(project)"
                                                          OnDelete="() => DeleteProjectAsync(project)" />
                                         </div>
@@ -199,6 +200,12 @@ else
                    Project="dialogProject"
                    OnSaved="HandleProjectSavedAsync"
                    OnClose="CloseProjectDialog" />
+
+@* Task = null → Anlege-Modus; das Projekt kommt über DefaultProjectId. *@
+<TaskEditDialog Visible="quickAddProject is not null"
+                DefaultProjectId="quickAddProject?.Id"
+                OnSaved="HandleTaskQuickAddedAsync"
+                OnClose="@(() => quickAddProject = null)" />
 
 @code {
     // Projekte werden im geteilten ProjectState gehalten, damit die
@@ -290,6 +297,19 @@ else
         // veraltet, bis der Browser neu geladen wird.
         await ProjectState.RefreshAsync();
         await WorkspaceState.EnsureLoadedAsync();
+    }
+
+    // ── Schnell-Anlegen eines Tasks (TaskEditDialog im Anlege-Modus) ─────────
+
+    // Zielprojekt aus der Projekt-Card; null = Dialog zu.
+    private ProjectResponseDto? quickAddProject;
+
+    // Die Karten zeigen server-berechnete Task-Zähler – nach dem Anlegen frisch holen,
+    // statt sie hier hochzuzählen (gleiche Begründung wie bei OnInitializedAsync).
+    private async Task HandleTaskQuickAddedAsync(TaskResponseDto _)
+    {
+        quickAddProject = null;
+        await ProjectState.RefreshAsync();
     }
 
     // ── Anlegen / Bearbeiten (ProjectEditDialog) ─────────────────────────────

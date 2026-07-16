@@ -3,18 +3,23 @@
 @inject SoundService Sound
 @inject ToastService Toast
 
-@* Wiederverwendbarer Bearbeiten-Dialog für Tasks (leichtgewichtiges Overlay,
-   kein JS-Interop). Die Sichtbarkeit steuert der Aufrufer über den Task-Parameter. *@
-@if (Task is not null)
+@* Wiederverwendbarer Dialog zum Anlegen UND Bearbeiten von Tasks (leichtgewichtiges
+   Overlay, kein JS-Interop). Visible steuert die Sichtbarkeit; Task = null bedeutet
+   "neuer Task" – Muster wie ProjectEditDialog. Im Anlege-Modus entfällt alles, was
+   eine bestehende Id braucht: Sub-Tasks, Löschen, Vorlage und der Details-Link. *@
+@if (Visible)
 {
     <div class="task-dialog-backdrop" @onclick="CloseAsync"></div>
     <div class="task-dialog">
         <div class="task-dialog-content" @onclick:stopPropagation="true">
             <div class="task-dialog-header">
-                <h5 class="mb-0">Task bearbeiten</h5>
+                <h5 class="mb-0">@(IsNew ? "Neuer Task" : "Task bearbeiten")</h5>
                 <div class="d-flex align-items-center gap-2">
-                    <a class="btn btn-sm btn-outline-secondary" href="@($"tasks/{Task.Id}")"
-                       title="Zur Detailseite">Details</a>
+                    @if (!IsNew)
+                    {
+                        <a class="btn btn-sm btn-outline-secondary" href="@($"tasks/{Task!.Id}")"
+                           title="Zur Detailseite">Details</a>
+                    }
                     <button type="button" class="btn-close" @onclick="CloseAsync" aria-label="Schließen"></button>
                 </div>
             </div>
@@ -26,7 +31,7 @@
                     <DataAnnotationsValidator />
                     <div class="mb-3">
                         <label class="form-label">Titel</label>
-                        <InputText class="form-control" @bind-Value="editModel.Title" />
+                        <InputText @ref="titleInput" class="form-control" @bind-Value="editModel.Title" />
                         <ValidationMessage For="() => editModel.Title" />
                     </div>
                     <div class="mb-3">
@@ -75,8 +80,9 @@
                     }
                 </EditForm>
 
-                @* Sub-Tasks – nur bei Haupt-Tasks (eine Verschachtelungsebene) *@
-                @if (Task.ParentTaskId is null)
+                @* Sub-Tasks – nur bei Haupt-Tasks (eine Verschachtelungsebene) und erst,
+                   wenn der Task existiert: sie brauchen eine ParentTaskId. *@
+                @if (!IsNew && Task!.ParentTaskId is null)
                 {
                     <hr class="my-3" />
                     <SubTaskList ParentTaskId="Task.Id" ProjectId="Task.ProjectId"
@@ -85,14 +91,27 @@
             </div>
 
             <div class="task-dialog-footer">
-                <button type="button" class="btn btn-outline-danger" @onclick="DeleteAsync" disabled="@isSaving">Löschen</button>
+                @if (!IsNew)
+                {
+                    <button type="button" class="btn btn-outline-danger" @onclick="DeleteAsync" disabled="@isSaving">Löschen</button>
+                }
+                else
+                {
+                    @* Platzhalter: der Footer verteilt per space-between. *@
+                    <span></span>
+                }
                 <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-outline-secondary" @onclick="SaveAsTemplateAsync"
-                            disabled="@isSaving" title="Titel, Beschreibung, Priorität und Projekt als Vorlage sichern">
-                        Als Vorlage speichern
-                    </button>
+                    @if (!IsNew)
+                    {
+                        <button type="button" class="btn btn-outline-secondary" @onclick="SaveAsTemplateAsync"
+                                disabled="@isSaving" title="Titel, Beschreibung, Priorität und Projekt als Vorlage sichern">
+                            Als Vorlage speichern
+                        </button>
+                    }
                     <button type="submit" form="taskEditForm" class="btn btn-primary" disabled="@isSaving">
-                        @(isSaving ? "Speichert…" : "Speichern")
+                        @(isSaving
+                            ? (IsNew ? "Legt an…" : "Speichert…")
+                            : (IsNew ? "Anlegen" : "Speichern"))
                     </button>
                     <button type="button" class="btn btn-outline-secondary" @onclick="CloseAsync">Abbrechen</button>
                 </div>
@@ -102,11 +121,16 @@
 }
 
 @code {
-    // Der zu bearbeitende Task; null = Dialog geschlossen. Der Aufrufer steuert
-    // die Sichtbarkeit, indem er diesen Parameter setzt bzw. wieder auf null setzt.
+    [Parameter] public bool Visible { get; set; }
+
+    // Der zu bearbeitende Task; null = Anlege-Modus.
     [Parameter] public TaskResponseDto? Task { get; set; }
 
-    // Liefert den aktualisierten Task nach "Speichern" (schließt den Dialog).
+    // Projekt, dem ein neu angelegter Task zugeordnet wird (nur im Anlege-Modus).
+    [Parameter] public int? DefaultProjectId { get; set; }
+
+    // Liefert den angelegten ODER aktualisierten Task (schließt den Dialog). Ein Aufrufer,
+    // der beide Modi nutzt, unterscheidet per Id-Suche in seiner Liste – wie bei Projekten.
     [Parameter] public EventCallback<TaskResponseDto> OnSaved { get; set; }
 
     // Liefert die Id des gelöschten Tasks (schließt den Dialog).
@@ -120,19 +144,36 @@
 
     private TaskEditModel editModel = new();
     private List<TaskResponseDto> subTasks = new();
+    private InputText? titleInput;
     private bool isSaving;
     private string? editError;
+    private bool loaded;
     private int? loadedTaskId;
+    private bool focusPending;
+
+    private bool IsNew => Task is null;
 
     protected override void OnParametersSet()
     {
-        // Nur (neu) befüllen, wenn ein anderer Task übergeben wurde.
-        if (Task is null) { loadedTaskId = null; return; }
-        if (loadedTaskId == Task.Id) return;
+        if (!Visible) { loaded = false; loadedTaskId = null; return; }
 
-        loadedTaskId = Task.Id;
+        // Nur (neu) befüllen, wenn der Dialog frisch geöffnet wurde oder ein anderer
+        // Task übergeben wird – nicht bei jedem Render.
+        if (loaded && loadedTaskId == Task?.Id) return;
+
+        loaded       = true;
+        loadedTaskId = Task?.Id;
         editError    = null;
-        subTasks     = Task.SubTasks?.OrderBy(s => s.SortOrder).ToList() ?? new();
+
+        if (IsNew)
+        {
+            subTasks     = new();
+            editModel    = new TaskEditModel();  // Vorbelegung: Geplant, Priorität Mittel
+            focusPending = true;                 // direkt lostippen können
+            return;
+        }
+
+        subTasks  = Task!.SubTasks?.OrderBy(s => s.SortOrder).ToList() ?? new();
         editModel = new TaskEditModel
         {
             Title       = Task.Title,
@@ -145,29 +186,46 @@
         };
     }
 
+    // Fokus erst nach dem Render: vorher gibt es das Eingabefeld noch nicht.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!focusPending) return;
+        focusPending = false;
+
+        if (titleInput?.Element is ElementReference el) await el.FocusAsync();
+    }
+
     // ── Hauptfelder ────────────────────────────────────────────────────────────
 
     private async Task SaveAsync()
     {
-        if (Task is null) return;
-
         isSaving  = true;
         editError = null;
 
-        var dto = new TaskUpdateDto(
-            editModel.Title,
-            string.IsNullOrWhiteSpace(editModel.Description) ? null : editModel.Description,
-            editModel.DueDate, editModel.StartTime, editModel.EndTime,
-            editModel.Status, editModel.Priority, Task.ProjectId);
+        var description = string.IsNullOrWhiteSpace(editModel.Description) ? null : editModel.Description;
+        var wasDone     = Task?.Status == WorkStatus.Done;
 
-        var wasDone = Task.Status == WorkStatus.Done;
+        TaskResponseDto? saved;
+        if (IsNew)
+        {
+            saved = await Api.CreateTaskAsync(new TaskCreateDto(
+                editModel.Title.Trim(), description,
+                editModel.DueDate, editModel.StartTime, editModel.EndTime,
+                editModel.Priority, DefaultProjectId, ParentTaskId: null, Status: editModel.Status));
+        }
+        else
+        {
+            saved = await Api.UpdateTaskAsync(Task!.Id, new TaskUpdateDto(
+                editModel.Title, description,
+                editModel.DueDate, editModel.StartTime, editModel.EndTime,
+                editModel.Status, editModel.Priority, Task.ProjectId));
+        }
 
-        var updated = await Api.UpdateTaskAsync(Task.Id, dto);
         isSaving = false;
 
-        if (updated is null)
+        if (saved is null)
         {
-            editError = "Speichern fehlgeschlagen.";
+            editError = IsNew ? "Anlegen fehlgeschlagen." : "Speichern fehlgeschlagen.";
             await Sound.ErrorAsync();
             return;
         }
@@ -176,9 +234,17 @@
         if (editModel.Status == WorkStatus.Done && !wasDone)
             await Sound.SuccessAsync();
 
-        // Die API liefert beim Update keine Sub-Tasks mit – lokalen Stand erhalten.
-        updated = updated with { SubTasks = subTasks.Count > 0 ? subTasks.ToList() : null };
-        await OnSaved.InvokeAsync(updated);
+        if (IsNew)
+        {
+            Toast.ShowSuccess($"„{saved.Title}\" angelegt");
+        }
+        else
+        {
+            // Die API liefert beim Update keine Sub-Tasks mit – lokalen Stand erhalten.
+            saved = saved with { SubTasks = subTasks.Count > 0 ? subTasks.ToList() : null };
+        }
+
+        await OnSaved.InvokeAsync(saved);
     }
 
     // Sichert den aktuellen Formularstand als Vorlage (ohne Termine/Status – die
