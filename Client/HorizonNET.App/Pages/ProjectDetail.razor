@@ -504,6 +504,7 @@ else
                 parentTask.SubTasks[parentTask.SubTasks.IndexOf(parentTask.SubTasks.First(s => s.Id == task.Id))] = updated;
         }
 
+        SyncProjectCounts();
         return true;
     }
 
@@ -530,6 +531,7 @@ else
             }
         }
 
+        SyncProjectCounts();
         selectedTask = null;
     }
 
@@ -551,6 +553,7 @@ else
             }
         }
 
+        SyncProjectCounts();
         selectedTask = null;
         ShowTaskUndo(id, title);
     }
@@ -562,6 +565,7 @@ else
         if (tasks is null) return;
         var idx = tasks.FindIndex(t => t.Id == updated.Id);
         if (idx >= 0) tasks[idx] = updated;
+        SyncProjectCounts();
     }
 
     // ── Löschen ──────────────────────────────────────────────────────────────
@@ -581,6 +585,7 @@ else
             parentTask?.SubTasks?.Remove(task);
         }
 
+        SyncProjectCounts();
         ShowTaskUndo(task.Id, task.Title);
     }
 
@@ -596,6 +601,7 @@ else
         {
             if (!await Api.RestoreTaskAsync(id)) return;
             tasks = await Api.GetTasksByProjectAsync(Id);
+            SyncProjectCounts();
             await InvokeAsync(StateHasChanged);
         });
     }
@@ -635,6 +641,7 @@ else
             {
                 var updatedSubTasks = (parentTask.SubTasks ?? []).Append(created).ToList();
                 tasks[tasks.IndexOf(parentTask)] = parentTask with { SubTasks = updatedSubTasks };
+                SyncProjectCounts();
             }
 
             // Formular bleibt offen: Titel → Enter → Titel → Enter. Geschlossen wird
@@ -697,6 +704,7 @@ else
             tasks.Add(created);
             showForm = false;
             newTask  = new();
+            SyncProjectCounts();
         }
         else
         {
@@ -766,6 +774,29 @@ else
             if (idx >= 0) all[idx] = saved;
             ProjectState.NotifyChanged();
         }
+    }
+
+    // Hält die gecachten Projekt-Zähler (Anzahl/Fortschritt auf den Karten in Übersicht
+    // und Arbeitsbereich) synchron, nachdem sich hier Tasks geändert haben – sonst zeigen
+    // die Karten veraltete Werte, bis die Projekte neu geladen werden. Formel exakt wie
+    // serverseitig in ProjectsController.ToDto: alle nicht gelöschten Tasks des Projekts
+    // (Haupt- UND Sub-Tasks) bzw. die davon erledigten. Kein API-Aufruf nötig, weil die
+    // vollständige Liste hier ohnehin vorliegt.
+    private void SyncProjectCounts()
+    {
+        if (tasks is null) return;
+
+        var total = tasks.Count + tasks.Sum(t => t.SubTasks?.Count ?? 0);
+        var done  = tasks.Count(t => t.IsCompleted)
+                  + tasks.Sum(t => t.SubTasks?.Count(s => s.IsCompleted) ?? 0);
+
+        var cached = ProjectState.Projects;
+        var idx    = cached?.FindIndex(p => p.Id == Id) ?? -1;
+        if (cached is null || idx < 0) return;
+        if (cached[idx].TaskCount == total && cached[idx].DoneTaskCount == done) return;
+
+        cached[idx] = cached[idx] with { TaskCount = total, DoneTaskCount = done };
+        ProjectState.NotifyChanged();
     }
 
     // ── Formularmodelle ──────────────────────────────────────────────────────
