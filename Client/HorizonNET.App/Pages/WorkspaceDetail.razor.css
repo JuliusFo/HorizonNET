@@ -20,6 +20,28 @@
 }
 
 /* Pausierte/archivierte Projekte: kompakte Chips, nur zum Filtern. */
+/* Einklappbarer Header über den inaktiven Projekten (Default: zugeklappt). */
+.ws-inactive-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    font-size: 0.8rem;
+    color: #6c757d;
+    cursor: pointer;
+}
+
+.ws-inactive-toggle:hover {
+    color: #495057;
+}
+
+.ws-inactive-caret {
+    font-size: 0.7rem;
+    line-height: 1;
+}
+
 .ws-inactive-row {
     display: flex;
     flex-wrap: wrap;

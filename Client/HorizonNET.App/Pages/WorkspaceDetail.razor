@@ -63,32 +63,48 @@ else
     }
 
     @* Pausierte/archivierte Projekte haben weiterhin Tasks auf dem Board – ohne diese
-       Zeile wären sie nach dem Wegfall der Legende nicht mehr filterbar. *@
+       Zeile wären sie nach dem Wegfall der Legende nicht mehr filterbar. Gerade bei
+       HorizonNET (jede Phase = eigenes Projekt) sammeln sich viele archivierte Projekte,
+       darum steckt die Gruppe hinter einem einklappbaren Header (Default: zugeklappt).
+       Wird ein inaktives Projekt gefiltert, klappt die Gruppe automatisch auf, damit der
+       aktive Filter sichtbar/entfernbar bleibt. *@
     @if (InactiveProjects.Any())
     {
-        <div class="ws-inactive-row mb-4">
-            <span class="text-muted small">Inaktiv:</span>
-            @foreach (var p in InactiveProjects)
+        var showInactiveEffective = showInactive || InactiveProjects.Any(p => projectFilter.Contains(p.Id));
+        <div class="ws-inactive-group mb-4">
+            <button type="button" class="ws-inactive-toggle" @onclick="() => showInactive = !showInactive"
+                    title="@(showInactiveEffective ? "Inaktive Projekte ausblenden" : "Inaktive Projekte anzeigen")">
+                <span class="ws-inactive-caret">@(showInactiveEffective ? "▾" : "▸")</span>
+                Inaktive Projekte
+                <span class="badge bg-secondary">@InactiveProjects.Count()</span>
+            </button>
+
+            @if (showInactiveEffective)
             {
-                @* Der Chip IST der Filter-Button (ein <button> lässt sich nicht verschachteln),
-                   deshalb hier der Trichter als Symbol statt der FilterToggleButton-Komponente. *@
-                <button type="button" class="ws-inactive-chip @FilterClass(p.Id)"
-                        @onclick="() => ToggleProjectFilter(p.Id)"
-                        title="@(projectFilter.Contains(p.Id) ? "Filter entfernen" : "Board auf dieses Projekt filtern")">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="currentColor" viewBox="0 0 16 16">
-                        @if (projectFilter.Contains(p.Id))
-                        {
-                            <path d="M1.5 1.5A.5.5 0 0 1 2 1h12a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.128.334L10 8.692V13.5a.5.5 0 0 1-.342.474l-3 1A.5.5 0 0 1 6 14.5V8.692L1.628 3.834A.5.5 0 0 1 1.5 3.5z" />
-                        }
-                        else
-                        {
-                            <path d="M1.5 1.5A.5.5 0 0 1 2 1h12a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.128.334L10 8.692V13.5a.5.5 0 0 1-.342.474l-3 1A.5.5 0 0 1 6 14.5V8.692L1.628 3.834A.5.5 0 0 1 1.5 3.5zM2 2v1.293l4.372 4.858A.5.5 0 0 1 6.5 8.5v5.306l2-.666V8.5a.5.5 0 0 1 .128-.349L13 3.293V2z" />
-                        }
-                    </svg>
-                    <span class="ws-inactive-dot" style="background-color:@(p.Color ?? "#6c757d");"></span>
-                    @p.Name
-                    <span class="text-muted">· @EnumL[$"ProjectStatus_{p.Status}"]</span>
-                </button>
+                <div class="ws-inactive-row mt-2">
+                    @foreach (var p in InactiveProjects)
+                    {
+                        @* Der Chip IST der Filter-Button (ein <button> lässt sich nicht verschachteln),
+                           deshalb hier der Trichter als Symbol statt der FilterToggleButton-Komponente. *@
+                        <button type="button" class="ws-inactive-chip @FilterClass(p.Id)"
+                                @onclick="() => ToggleProjectFilter(p.Id)"
+                                title="@(projectFilter.Contains(p.Id) ? "Filter entfernen" : "Board auf dieses Projekt filtern")">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="currentColor" viewBox="0 0 16 16">
+                                @if (projectFilter.Contains(p.Id))
+                                {
+                                    <path d="M1.5 1.5A.5.5 0 0 1 2 1h12a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.128.334L10 8.692V13.5a.5.5 0 0 1-.342.474l-3 1A.5.5 0 0 1 6 14.5V8.692L1.628 3.834A.5.5 0 0 1 1.5 3.5z" />
+                                }
+                                else
+                                {
+                                    <path d="M1.5 1.5A.5.5 0 0 1 2 1h12a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.128.334L10 8.692V13.5a.5.5 0 0 1-.342.474l-3 1A.5.5 0 0 1 6 14.5V8.692L1.628 3.834A.5.5 0 0 1 1.5 3.5zM2 2v1.293l4.372 4.858A.5.5 0 0 1 6.5 8.5v5.306l2-.666V8.5a.5.5 0 0 1 .128-.349L13 3.293V2z" />
+                                }
+                            </svg>
+                            <span class="ws-inactive-dot" style="background-color:@(p.Color ?? "#6c757d");"></span>
+                            @p.Name
+                            <span class="text-muted">· @EnumL[$"ProjectStatus_{p.Status}"]</span>
+                        </button>
+                    }
+                </div>
             }
         </div>
     }
@@ -290,6 +306,11 @@ else
     // Aufgeklappte Sub-Task-Bereiche je Task-Id
     private HashSet<int> expandedSubtasks = new();
 
+    // Inaktive-Projekte-Gruppe aufgeklappt? Default zugeklappt, damit archivierte
+    // Projekte die Übersicht nicht zumüllen (ein gefiltertes inaktives Projekt
+    // erzwingt im Markup trotzdem die Anzeige).
+    private bool showInactive;
+
     // OnParametersSetAsync statt OnInitializedAsync: lädt neu beim Wechsel
     // zwischen zwei Arbeitsbereichen (gleiche Komponenteninstanz).
     protected override async Task OnParametersSetAsync()
@@ -299,6 +320,7 @@ else
         loading  = true;
         tasks    = null;
         projectFilter.Clear();
+        showInactive = false;
 
         workspace = await Api.GetWorkspaceAsync(Id);
         if (workspace is not null)
