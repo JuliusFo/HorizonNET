@@ -155,14 +155,12 @@ else
                                         <a href="@($"tasks/{task.Id}")" class="kanban-card-link"
                                            @onclick:stopPropagation="true"
                                            title="Zur Detailseite">@task.Title</a>
-                                        @* Merkmale des Tasks *@
+                                        @* Der Link steht nur als Symbol: eine URL ist zu lang
+                                           für die Karte, "Warten auf" bekommt unten eine
+                                           eigene Zeile mit Klartext. *@
                                         @if (TaskLink.IsValid(task.Link))
                                         {
                                             <span class="kanban-card-badge" title="@task.Link">🔗</span>
-                                        }
-                                        @if (task.WaitingFor is not null)
-                                        {
-                                            <span class="kanban-card-badge" title="@($"Wartet auf: {task.WaitingFor}")">⏳</span>
                                         }
                                     </div>
                                     @if (task.ProjectName is not null)
@@ -172,6 +170,12 @@ else
                                     @if (task.DueDate is not null)
                                     {
                                         <div class="small text-muted mt-1">📅 @task.DueDate.Value.ToString("dd.MM.yyyy")</div>
+                                    }
+                                    @* title als Rückfall: lange Werte kürzt text-truncate ab. *@
+                                    @if (task.WaitingFor is not null)
+                                    {
+                                        <div class="small text-muted text-truncate mt-1"
+                                             title="@($"Wartet auf: {task.WaitingFor}")">⏳ @task.WaitingFor</div>
                                     }
                                     @if (task.SubTasks is { Count: > 0 })
                                     {
