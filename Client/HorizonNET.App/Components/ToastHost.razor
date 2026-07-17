@@ -1,7 +1,7 @@
 @implements IDisposable
 @inject ToastService Toasts
 
-<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1090;">
+<div class="toast-container position-fixed bottom-0 start-50 translate-middle-x p-3" style="z-index: 1090;">
     @foreach (var toast in Toasts.Toasts)
     {
         <div class="toast show align-items-center border-0 mb-2 @LevelClass(toast.Level)"
