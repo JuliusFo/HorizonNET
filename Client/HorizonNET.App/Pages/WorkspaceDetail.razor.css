@@ -154,6 +154,27 @@
 .kanban-card-title {
     font-weight: 500;
     font-size: 0.875rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.35rem;
+}
+
+/* Titel + Merkmale links, das ✎-Symbol rechts – flex-start hält den Button
+   oben, wenn der Titel über mehrere Zeilen läuft. */
+.kanban-card-title-main {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* Quadratischer Icon-Button (✎) auf der Karte. .btn-icon liegt sonst nur im
+   scoped CSS von ProjectCard/Home und wirkt daher hier nicht (CSS-Isolation). */
+.btn-icon {
+    flex: 0 0 auto;
+    width: 1.75rem;
+    padding-left: 0;
+    padding-right: 0;
+    text-align: center;
+    line-height: 1.2;
 }
 
 /* Merkmal-Symbole (z. B. hinterlegter Link) neben dem Kartentitel. */

@@ -144,24 +144,26 @@ else
                                 var color = ProjectColor(task.ProjectId);
                                 <div class="kanban-card @(dragOverTaskId == task.Id ? "drop-before" : "")" draggable="true"
                                      style="@(color is not null ? $"border-color:{color};background-color:{color}1A;" : "")"
-                                     @onclick="() => OpenTask(task)"
                                      @ondragstart="() => draggedTask = task"
                                      @ondragend="() => { draggedTask = null; dragOverStatus = null; dragOverTaskId = null; }"
                                      @ondragover:preventDefault="true"
                                      @ondragover:stopPropagation="true"
                                      @ondragover="() => { if (draggedTask is not null) { dragOverStatus = status; dragOverTaskId = task.Id; } }">
                                     <div class="kanban-card-title">
-                                        <PriorityIndicator Value="@task.Priority" />
-                                        <a href="@($"tasks/{task.Id}")" class="kanban-card-link"
-                                           @onclick:stopPropagation="true"
-                                           title="Zur Detailseite">@task.Title</a>
-                                        @* Der Link steht nur als Symbol: eine URL ist zu lang
-                                           für die Karte, "Warten auf" bekommt unten eine
-                                           eigene Zeile mit Klartext. *@
-                                        @if (TaskLink.IsValid(task.Link))
-                                        {
-                                            <span class="kanban-card-badge" title="@task.Link">🔗</span>
-                                        }
+                                        <span class="kanban-card-title-main">
+                                            <PriorityIndicator Value="@task.Priority" />
+                                            <a href="@($"tasks/{task.Id}")" class="kanban-card-link"
+                                               title="Zur Detailseite">@task.Title</a>
+                                            @* Der Link steht nur als Symbol: eine URL ist zu lang
+                                               für die Karte, "Warten auf" bekommt unten eine
+                                               eigene Zeile mit Klartext. *@
+                                            @if (TaskLink.IsValid(task.Link))
+                                            {
+                                                <span class="kanban-card-badge" title="@task.Link">🔗</span>
+                                            }
+                                        </span>
+                                        <button type="button" class="btn btn-sm btn-outline-primary btn-icon"
+                                                @onclick="() => OpenTask(task)" title="Bearbeiten">✎</button>
                                     </div>
                                     @if (task.ProjectName is not null)
                                     {
