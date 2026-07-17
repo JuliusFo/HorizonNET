@@ -155,11 +155,14 @@ else
                                         <a href="@($"tasks/{task.Id}")" class="kanban-card-link"
                                            @onclick:stopPropagation="true"
                                            title="Zur Detailseite">@task.Title</a>
-                                        @* Merkmale des Tasks – hier reiht sich künftig auch
-                                           das "Warten auf"-Symbol ein. *@
+                                        @* Merkmale des Tasks *@
                                         @if (TaskLink.IsValid(task.Link))
                                         {
                                             <span class="kanban-card-badge" title="@task.Link">🔗</span>
+                                        }
+                                        @if (task.WaitingFor is not null)
+                                        {
+                                            <span class="kanban-card-badge" title="@($"Wartet auf: {task.WaitingFor}")">⏳</span>
                                         }
                                     </div>
                                     @if (task.ProjectName is not null)

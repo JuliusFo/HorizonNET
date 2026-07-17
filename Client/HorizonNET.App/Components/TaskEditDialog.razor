@@ -215,12 +215,14 @@
         }
         else
         {
-            // Link zeigt der Dialog nicht an – bestehenden Wert unverändert durchreichen,
-            // sonst löscht das Speichern hier den auf der Detailseite gesetzten Link.
+            // Die optionalen Felder zeigt der Dialog nicht an – bestehende Werte unverändert
+            // durchreichen, sonst löscht das Speichern hier, was auf der Detailseite gesetzt
+            // wurde. (Task.WaitingFor bleibt gleich → die Pausiert-Regel greift nicht.)
             saved = await Api.UpdateTaskAsync(Task!.Id, new TaskUpdateDto(
                 editModel.Title, description,
                 editModel.DueDate, editModel.StartTime, editModel.EndTime,
-                editModel.Status, editModel.Priority, Task.ProjectId, Task.Link));
+                editModel.Status, editModel.Priority, Task.ProjectId,
+                Task.Link, Task.WaitingFor));
         }
 
         isSaving = false;

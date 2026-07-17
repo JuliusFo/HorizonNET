@@ -88,16 +88,24 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         var existing = await context.Tasks.FindAsync(id);
         if (existing is null) return null;
 
+        var previousWaitingFor = existing.WaitingFor;
+
         existing.Title = updated.Title;
         existing.Description = updated.Description;
         existing.Link = updated.Link;
+        existing.WaitingFor = updated.WaitingFor;
         existing.Priority = updated.Priority;
         existing.ProjectId = updated.ProjectId;
         ApplySchedule(existing, updated.DueDate, updated.StartTime, updated.EndTime);
         existing.UpdatedAt = DateTime.Now;
 
-        // Status samt Folgeregeln über denselben Weg wie SetStatusAsync.
-        await ApplyStatusChangeAsync(existing, updated.Status);
+        // Status samt Folgeregeln über denselben Weg wie SetStatusAsync. Ein frisch
+        // ausgefülltes "Warten auf" übersteuert dabei den gewünschten Status.
+        var targetStatus = WasJustFilled(previousWaitingFor, updated.WaitingFor)
+            ? WorkStatus.Paused
+            : updated.Status;
+
+        await ApplyStatusChangeAsync(existing, targetStatus);
 
         await context.SaveChangesAsync();
         return await GetByIdAsync(id) ?? existing;
@@ -150,6 +158,17 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         await ApplyTimerForStatusChangeAsync(task.Id, previous, newStatus);
         task.Status = newStatus;
     }
+
+    // "Warten auf" ausgefüllt heißt: der Task ruht, bis die Antwort da ist – also auf
+    // "Pausiert". Bewusst hier und nicht im Client, damit die Regel für jeden Weg gilt.
+    //
+    // Nur beim WECHSEL von leer auf gefüllt (gleiche Begründung wie bei
+    // ApplyDueDateForStatusChange): sonst würde jedes spätere Speichern eines wartenden
+    // Tasks ihn wieder auf "Pausiert" zwingen – auch wenn du ihn bewusst auf "In Arbeit"
+    // gestellt hast, weil du trotz Warten schon mal anfängst. Das Leeren des Feldes lässt
+    // den Status bewusst in Ruhe: wohin er dann gehört, weiß nur der Nutzer.
+    private static bool WasJustFilled(string? previous, string? current) =>
+        string.IsNullOrWhiteSpace(previous) && !string.IsNullOrWhiteSpace(current);
 
     // Ohne Fälligkeitsdatum ergibt eine Uhrzeit keinen Sinn. Bewusst hier und nicht im
     // Controller: die Invariante gilt für jeden Weg, der Termine schreibt.

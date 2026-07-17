@@ -15,6 +15,10 @@ public class TaskItem
     // hinzufügt. Erlaubt sind nur http/https, siehe TaskLink.IsValid.
     public string? Link { get; set; }
 
+    // Optionales Feld: worauf der Task wartet (Freitext). Frisch ausgefüllt setzt es den
+    // Task auf "Pausiert" – siehe ApplyWaitingForChange im TaskRepository.
+    public string? WaitingFor { get; set; }
+
     public DateTime? DueDate { get; set; }
 
     public DateTime? StartTime { get; set; }

@@ -44,6 +44,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(t => t.Description).HasMaxLength(2000);
             e.Property(t => t.Priority).HasConversion<string>();
             e.Property(t => t.Link).HasMaxLength(2048);
+            e.Property(t => t.WaitingFor).HasMaxLength(200);
             e.Property(t => t.GoogleEventId).HasMaxLength(1024);
 
             e.HasOne(t => t.Project)

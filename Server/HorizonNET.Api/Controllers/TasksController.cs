@@ -19,6 +19,7 @@ public class TasksController(
         new(t.Id, t.Title, t.Description, t.DueDate, t.StartTime, t.EndTime,
             t.Status, t.Priority.ToString(), t.ProjectId, t.Project?.Name,
             t.Link,
+            t.WaitingFor,
             t.SortOrder,
             t.ListSortOrder,
             t.ParentTaskId,
@@ -137,7 +138,8 @@ public class TasksController(
             Status = dto.Status,
             Priority = dto.Priority,
             ProjectId = dto.ProjectId,
-            Link = link
+            Link = link,
+            WaitingFor = string.IsNullOrWhiteSpace(dto.WaitingFor) ? null : dto.WaitingFor.Trim()
         });
         if (updated is null) return NotFound();
         await google.SyncTaskAsync(updated); // Änderung nach Google spiegeln (best-effort)

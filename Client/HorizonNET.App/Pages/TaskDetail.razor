@@ -147,11 +147,37 @@ else
                                 }
                             </div>
                         }
-                        else
+
+                        @if (showWaitingFor)
                         {
                             <div>
-                                <button type="button" class="btn btn-sm btn-outline-secondary"
-                                        @onclick="() => showLink = true">+ Link hinzufügen</button>
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label class="form-label small text-muted mb-0">Warten auf</label>
+                                    <button type="button" class="btn-close btn-sm" @onclick="RemoveWaitingFor"
+                                            title="Feld entfernen"></button>
+                                </div>
+                                <InputText class="form-control form-control-sm" @bind-Value="editModel.WaitingFor"
+                                           placeholder="z. B. Rückmeldung von Anna" />
+                                @if (task.WaitingFor is null)
+                                {
+                                    <div class="form-text small">Setzt den Task beim Speichern auf „Pausiert".</div>
+                                }
+                            </div>
+                        }
+
+                        @if (!showLink || !showWaitingFor)
+                        {
+                            <div class="d-flex flex-wrap gap-2">
+                                @if (!showLink)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                                            @onclick="() => showLink = true">+ Link</button>
+                                }
+                                @if (!showWaitingFor)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                                            @onclick="() => showWaitingFor = true">+ Warten auf</button>
+                                }
                             </div>
                         }
 
@@ -239,15 +265,45 @@ else
     private string? saveError;
     private int? loadedId;
 
-    // Optionales Link-Feld: eingeblendet, wenn ein Link gespeichert ist oder der
-    // Nutzer es hinzugefügt hat.
+    // Optionale Felder: eingeblendet, wenn ein Wert gespeichert ist oder der Nutzer
+    // sie hinzugefügt hat.
     private bool showLink;
+    private bool showWaitingFor;
+
+    // Formular aus dem Server-Stand befüllen. Auch NACH dem Speichern nötig: der Server
+    // kann Felder überstimmen – "Warten auf" erzwingt Pausiert, "Geplant Heute" setzt das
+    // Fälligkeitsdatum. Ohne das zeigte das Formular weiter den gewünschten statt den
+    // tatsächlichen Wert und schriebe ihn beim nächsten Speichern zurück.
+    private void FillEditModel(TaskResponseDto source)
+    {
+        editModel = new TaskEditModel
+        {
+            Title       = source.Title,
+            Description = source.Description,
+            DueDate     = source.DueDate,
+            StartTime   = source.StartTime,
+            EndTime     = source.EndTime,
+            Priority    = Enum.Parse<Priority>(source.Priority),
+            Status      = source.Status,
+            Link        = source.Link,
+            WaitingFor  = source.WaitingFor
+        };
+
+        showLink       = source.Link is not null;
+        showWaitingFor = source.WaitingFor is not null;
+    }
 
     // Feld entfernen heißt Wert leeren – wirksam wird das erst beim Speichern.
     private void RemoveLink()
     {
         showLink       = false;
         editModel.Link = null;
+    }
+
+    private void RemoveWaitingFor()
+    {
+        showWaitingFor       = false;
+        editModel.WaitingFor = null;
     }
 
     // Notizen zu diesem Task
@@ -277,18 +333,7 @@ else
         task = await Api.GetTaskAsync(Id);
         if (task is not null)
         {
-            editModel = new TaskEditModel
-            {
-                Title       = task.Title,
-                Description = task.Description,
-                DueDate     = task.DueDate,
-                StartTime   = task.StartTime,
-                EndTime     = task.EndTime,
-                Priority    = Enum.Parse<Priority>(task.Priority),
-                Status      = task.Status,
-                Link        = task.Link
-            };
-            showLink = task.Link is not null;
+            FillEditModel(task);
             notes       = await Api.GetNotesByTaskAsync(Id) ?? new();
             timeEntries = await Api.GetTimeEntriesAsync(Id) ?? new();
         }
@@ -330,11 +375,16 @@ else
             return;
         }
 
+        // Feld ausgeblendet oder leer → "Warten auf" löschen.
+        var waitingFor = showWaitingFor && !string.IsNullOrWhiteSpace(editModel.WaitingFor)
+            ? editModel.WaitingFor.Trim()
+            : null;
+
         var dto = new TaskUpdateDto(
             editModel.Title,
             string.IsNullOrWhiteSpace(editModel.Description) ? null : editModel.Description,
             editModel.DueDate, editModel.StartTime, editModel.EndTime,
-            editModel.Status, editModel.Priority, task.ProjectId, link);
+            editModel.Status, editModel.Priority, task.ProjectId, link, waitingFor);
 
         var updated = await Api.UpdateTaskAsync(task.Id, dto);
         isSaving = false;
@@ -347,6 +397,10 @@ else
 
         // Die API liefert beim Update keine Sub-Tasks/Projektnamen mit – lokal erhalten.
         task = updated with { SubTasks = task.SubTasks, ProjectName = task.ProjectName };
+
+        // Formular auf den tatsächlich gespeicherten Stand ziehen (der Server kann
+        // Status und Fälligkeit überstimmt haben).
+        FillEditModel(task);
 
         Toast.ShowSuccess("Gespeichert");
     }
@@ -446,5 +500,8 @@ else
 
         [System.ComponentModel.DataAnnotations.MaxLength(2048)]
         public string? Link { get; set; }
+
+        [System.ComponentModel.DataAnnotations.MaxLength(200)]
+        public string? WaitingFor { get; set; }
     }
 }

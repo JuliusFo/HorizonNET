@@ -30,7 +30,8 @@ public record TaskUpdateDto(
     WorkStatus Status,
     Priority Priority,
     int? ProjectId,
-    string? Link
+    string? Link,
+    string? WaitingFor
 );
 
 // ── Teil-Updates ────────────────────────────────────────────────────────────────
@@ -59,6 +60,8 @@ public record TaskResponseDto(
     string? ProjectName,
     // Optionaler externer Link; null = nicht gesetzt.
     string? Link,
+    // Worauf der Task wartet; null = nicht gesetzt.
+    string? WaitingFor,
     int SortOrder = 0,
     // Position in der Projektliste (nur Haupt-Tasks); getrennt von der
     // Kanban-Position SortOrder, siehe TaskItem.
