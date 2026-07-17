@@ -1,0 +1,188 @@
+@page "/sport/analysis"
+@inject ApiService Api
+
+<PageTitle>Auswertung – HorizonNET</PageTitle>
+
+<div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+    <div>
+        <h1 class="mb-1">Auswertung</h1>
+        <a href="sport" class="text-decoration-none small">← Zurück zum Training</a>
+    </div>
+    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+        <label class="form-label small text-muted mb-0">Zeitraum</label>
+        <select class="form-select form-select-sm w-auto" value="@days"
+                @onchange="e => ChangeRangeAsync(int.Parse(e.Value!.ToString()!))">
+            <option value="30">30 Tage</option>
+            <option value="90">90 Tage</option>
+            <option value="365">1 Jahr</option>
+        </select>
+    </div>
+</div>
+
+@if (loading)
+{
+    <p>Wird geladen…</p>
+}
+else if (WithData.Count == 0)
+{
+    <div class="alert alert-secondary">
+        In diesem Zeitraum ist nichts erfasst. <a href="sport">Jetzt trainieren</a>.
+    </div>
+}
+else
+{
+    @* Trainingshäufigkeit – die einzige Kennzahl über alle Übungen hinweg. Eine
+       "Einheit" ist ein Trainingstag (siehe docs/konzept-sport-tracking.md). *@
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="fw-semibold">Einheiten pro Woche</span>
+            <span class="small text-muted">@totalDays Trainingstage im Zeitraum</span>
+        </div>
+        <div class="card-body">
+            <RadzenChart Style="height:220px">
+                <RadzenColumnSeries Data="weeks" CategoryProperty="Label" ValueProperty="Count"
+                                    Title="Trainingstage" />
+                <RadzenCategoryAxis />
+                <RadzenValueAxis Step="1">
+                    <RadzenGridLines Visible="true" />
+                </RadzenValueAxis>
+            </RadzenChart>
+        </div>
+    </div>
+
+    @* Je Übung eine Kurve mit ihrem eigenen Leitwert. *@
+    <div class="row row-cols-1 row-cols-xl-2 g-3 mb-4">
+        @foreach (var item in WithData)
+        {
+            <div class="col" @key="item.Exercise.Id">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center gap-2">
+                        <a href="@($"sport/exercises/{item.Exercise.Id}")"
+                           class="fw-semibold text-truncate exercise-link">@item.Exercise.Name</a>
+                        <span class="small text-muted flex-shrink-0">
+                            @SportMath.MetricLabel(item.Exercise.Kind)
+                            @if (!item.Exercise.IsActive)
+                            {
+                                <span class="badge bg-secondary ms-1">inaktiv</span>
+                            }
+                        </span>
+                    </div>
+                    <div class="card-body py-2">
+                        <ExerciseProgressChart Kind="item.Exercise.Kind" Sets="item.Sets" Height="200" />
+
+                        <div class="d-flex justify-content-between small text-muted mt-2">
+                            <span>Einheiten: <strong>@item.Series.Count</strong></span>
+                            @if (SportMath.Best(item.Exercise.Kind, item.Series) is double best)
+                            {
+                                <span>Bestwert: <strong>@SportMath.FormatMetric(item.Exercise.Kind, best)</strong></span>
+                            }
+                            @if (item.Series.Count > 0)
+                            {
+                                <span>Zuletzt: <strong>@SportMath.FormatMetric(item.Exercise.Kind, item.Series[^1].Value)</strong></span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    @* Übungen ohne Daten im Zeitraum: bewusst nur als Hinweis, nicht als leerer Chart. *@
+    @if (WithoutData.Count > 0)
+    {
+        <p class="text-muted small">
+            Ohne Einträge in diesem Zeitraum: @string.Join(", ", WithoutData.Select(e => e.Name))
+        </p>
+    }
+
+    <a href="sport/bodyweight" class="btn btn-outline-secondary btn-sm">Körpergewichtskurve ansehen →</a>
+}
+
+@code {
+    private List<ExerciseResponseDto>? exercises;
+    private List<ExerciseSetResponseDto>? sets;
+    private List<WeekBar> weeks = new();
+    private int totalDays;
+    private bool loading = true;
+    private int days = 90;
+
+    // Je Übung ihre Sätze und die daraus berechnete Serie – einmal berechnet, damit
+    // Chart und Kennzahlen darunter denselben Stand zeigen.
+    private record Item(ExerciseResponseDto Exercise, List<ExerciseSetResponseDto> Sets, List<SportMath.DayMetric> Series);
+
+    private List<Item> WithData = new();
+
+    private List<ExerciseResponseDto> WithoutData =>
+        (exercises ?? []).Where(e => WithData.All(i => i.Exercise.Id != e.Id) && e.IsActive).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        exercises = await Api.GetExercisesAsync() ?? new();
+        await LoadAsync();
+        loading = false;
+    }
+
+    private async Task LoadAsync()
+    {
+        var from = DateTime.Today.AddDays(-days);
+        var to = DateTime.Today.AddDays(1);   // exklusiv → heute ist mit drin
+
+        // Ein Aufruf für alle Übungen statt einer je Übung – die Aufteilung passiert hier.
+        sets = await Api.GetExerciseSetsAsync(from, to) ?? new();
+
+        WithData = (exercises ?? [])
+            .Select(e => new
+            {
+                Exercise = e,
+                Sets = sets.Where(s => s.ExerciseId == e.Id).ToList()
+            })
+            .Where(x => x.Sets.Count > 0)
+            .Select(x => new Item(x.Exercise, x.Sets, SportMath.DailySeries(x.Exercise.Kind, x.Sets)))
+            .OrderBy(i => i.Exercise.SortOrder)
+            .ToList();
+
+        BuildWeeks(from);
+    }
+
+    // Trainingstage je Kalenderwoche. Wochen ohne Training bleiben mit 0 stehen –
+    // sonst rückten die Balken zusammen und eine Pause sähe aus wie keine.
+    private void BuildWeeks(DateTime from)
+    {
+        var trainingDays = (sets ?? [])
+            .Select(s => s.PerformedAt.Date)
+            .Distinct()
+            .ToHashSet();
+
+        totalDays = trainingDays.Count;
+
+        var start = StartOfWeek(from);
+        var result = new List<WeekBar>();
+
+        for (var week = start; week <= DateTime.Today; week = week.AddDays(7))
+        {
+            var end = week.AddDays(7);
+            result.Add(new WeekBar(
+                week.ToString("dd.MM."),
+                trainingDays.Count(d => d >= week && d < end)));
+        }
+
+        weeks = result;
+    }
+
+    private static DateTime StartOfWeek(DateTime date)
+    {
+        // Montag als Wochenstart (DayOfWeek zählt ab Sonntag).
+        var diff = ((int)date.DayOfWeek + 6) % 7;
+        return date.Date.AddDays(-diff);
+    }
+
+    private async Task ChangeRangeAsync(int newDays)
+    {
+        days = newDays;
+        loading = true;
+        await LoadAsync();
+        loading = false;
+    }
+
+    private record WeekBar(string Label, int Count);
+}

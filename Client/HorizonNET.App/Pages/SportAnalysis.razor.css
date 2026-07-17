@@ -1,0 +1,8 @@
+.exercise-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.exercise-link:hover {
+    text-decoration: underline;
+}

@@ -1,0 +1,143 @@
+@page "/sport/bodyweight"
+@inject ApiService Api
+@inject ToastService Toast
+
+<PageTitle>Körpergewicht – HorizonNET</PageTitle>
+
+<div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+    <div>
+        <h1 class="mb-1">Körpergewicht</h1>
+        <a href="sport" class="text-decoration-none small">← Zurück zum Training</a>
+    </div>
+    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+        <label class="form-label small text-muted mb-0">Zeitraum</label>
+        <select class="form-select form-select-sm w-auto" value="@days"
+                @onchange="e => ChangeRangeAsync(int.Parse(e.Value!.ToString()!))">
+            <option value="30">30 Tage</option>
+            <option value="90">90 Tage</option>
+            <option value="365">1 Jahr</option>
+        </select>
+    </div>
+</div>
+
+@if (entries is null)
+{
+    <p>Wird geladen…</p>
+}
+else if (entries.Count == 0)
+{
+    <div class="alert alert-secondary">
+        Noch nichts erfasst. Trag dein Gewicht <a href="sport">auf der Trainingsseite</a> ein.
+    </div>
+}
+else
+{
+    <div class="card mb-3">
+        <div class="card-body">
+            <RadzenChart>
+                <RadzenLineSeries Data="entries" CategoryProperty="MeasuredOn" ValueProperty="WeightKg"
+                                  Title="Körpergewicht (kg)" Smooth="true">
+                    <RadzenMarkers MarkerType="MarkerType.Circle" />
+                </RadzenLineSeries>
+                <RadzenCategoryAxis FormatString="{0:dd.MM.}" />
+                <RadzenValueAxis>
+                    <RadzenGridLines Visible="true" />
+                </RadzenValueAxis>
+            </RadzenChart>
+        </div>
+    </div>
+
+    <div class="row row-cols-1 row-cols-md-3 g-3 mb-4">
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-body py-2">
+                    <div class="small text-muted">Aktuell</div>
+                    <div class="fs-5 fw-semibold">@entries[^1].WeightKg.ToString("0.#") kg</div>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-body py-2">
+                    <div class="small text-muted">Veränderung im Zeitraum</div>
+                    <div class="fs-5 fw-semibold">@ChangeText</div>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-body py-2">
+                    <div class="small text-muted">Spanne</div>
+                    <div class="fs-5 fw-semibold">
+                        @entries.Min(e => e.WeightKg).ToString("0.#") – @entries.Max(e => e.WeightKg).ToString("0.#") kg
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h2 class="h5">Einträge</h2>
+    <ul class="list-group">
+        @foreach (var e in entries.OrderByDescending(x => x.MeasuredOn))
+        {
+            <li @key="e.Id" class="list-group-item d-flex justify-content-between align-items-center py-1">
+                <span>@e.MeasuredOn.ToString("dd.MM.yyyy")</span>
+                <span class="d-flex align-items-center gap-3">
+                    <span class="fw-semibold">@e.WeightKg.ToString("0.#") kg</span>
+                    <button class="btn btn-sm btn-outline-danger border-0" title="Löschen"
+                            @onclick="() => DeleteAsync(e)">🗑</button>
+                </span>
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    private List<BodyWeightResponseDto>? entries;
+    private int days = 90;
+
+    // Erster gegen letzten Wert – nicht Min/Max, sonst zeigte die Zahl die Schwankung
+    // statt der Entwicklung.
+    private string ChangeText
+    {
+        get
+        {
+            if (entries is null || entries.Count < 2) return "–";
+            var delta = entries[^1].WeightKg - entries[0].WeightKg;
+            var sign = delta > 0 ? "+" : "";
+            return $"{sign}{delta:0.#} kg";
+        }
+    }
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        var from = DateOnly.FromDateTime(DateTime.Today.AddDays(-days));
+        // Chronologisch vom Server – die Kurve kommt fertig sortiert an.
+        entries = await Api.GetBodyWeightAsync(from, DateOnly.FromDateTime(DateTime.Today)) ?? new();
+    }
+
+    private async Task ChangeRangeAsync(int newDays)
+    {
+        days = newDays;
+        entries = null;
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync(BodyWeightResponseDto entry)
+    {
+        if (!await Api.DeleteBodyWeightAsync(entry.Id)) return;
+
+        entries?.RemoveAll(e => e.Id == entry.Id);
+
+        Toast.ShowUndo($"{entry.WeightKg:0.#} kg vom {entry.MeasuredOn:dd.MM.} gelöscht", async () =>
+        {
+            // Wiederherstellen über denselben Weg wie das Eintragen: der Tag ist
+            // eindeutig, SetAsync macht aus dem gelöschten wieder einen aktiven Eintrag.
+            if (await Api.SetBodyWeightAsync(entry.MeasuredOn, entry.WeightKg) is null) return;
+            await LoadAsync();
+            await InvokeAsync(StateHasChanged);
+        });
+    }
+}

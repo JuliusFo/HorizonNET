@@ -1,0 +1,203 @@
+@page "/sport/exercises"
+@inject ApiService Api
+@inject ToastService Toast
+
+<PageTitle>Übungen – HorizonNET</PageTitle>
+
+<div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+    <div>
+        <h1 class="mb-1">Übungen</h1>
+        <a href="sport" class="text-decoration-none small">← Zurück zum Training</a>
+    </div>
+    <button class="btn btn-primary flex-shrink-0" @onclick="OpenNew">+ Neue Übung</button>
+</div>
+
+@if (exercises is null)
+{
+    <p>Wird geladen…</p>
+}
+else if (exercises.Count == 0)
+{
+    <p class="text-muted">
+        Noch keine Übungen. Leg deine erste an – etwa „Liegestütze" als Körpergewicht
+        oder „Laufen" als Ausdauer.
+    </p>
+}
+else
+{
+    <ul class="list-group mb-4">
+        @foreach (var ex in Active)
+        {
+            @ExerciseRow(ex)
+        }
+    </ul>
+
+    @* Inaktive stehen zugeklappt am Ende – gleiche Konvention wie erledigte Tasks
+       und die Spalten "Fertig"/"Abgebrochen" im Kanban-Board. *@
+    @if (Inactive.Count > 0)
+    {
+        <ul class="list-group mb-4">
+            <li class="list-group-item inactive-group">
+                <button type="button" class="inactive-group-toggle"
+                        @onclick="() => inactiveCollapsed = !inactiveCollapsed">
+                    <span class="inactive-group-caret">@(inactiveCollapsed ? "▸" : "▾")</span>
+                    <span>Inaktiv (@Inactive.Count)</span>
+                </button>
+            </li>
+            @if (!inactiveCollapsed)
+            {
+                @foreach (var ex in Inactive)
+                {
+                    @ExerciseRow(ex)
+                }
+            }
+        </ul>
+    }
+}
+
+<ExerciseEditDialog Visible="dialogVisible"
+                    Exercise="selected"
+                    OnSaved="HandleSavedAsync"
+                    OnClose="CloseDialog" />
+
+@code {
+    private List<ExerciseResponseDto>? exercises;
+    private ExerciseResponseDto? selected;
+    private bool dialogVisible;
+    private bool inactiveCollapsed = true;
+
+    // Ziehen zum Sortieren
+    private ExerciseResponseDto? dragged;
+    private int? dragOverId;
+
+    private List<ExerciseResponseDto> Active =>
+        (exercises ?? []).Where(e => e.IsActive).OrderBy(e => e.SortOrder).ToList();
+
+    private List<ExerciseResponseDto> Inactive =>
+        (exercises ?? []).Where(e => !e.IsActive).OrderBy(e => e.SortOrder).ToList();
+
+    protected override async Task OnInitializedAsync() =>
+        exercises = await Api.GetExercisesAsync() ?? new();
+
+    private RenderFragment ExerciseRow(ExerciseResponseDto ex) => __builder =>
+    {
+        <li @key="ex.Id"
+            class="list-group-item @(ex.IsActive ? "" : "exercise-inactive") @(dragOverId == ex.Id ? "exercise-drop-before" : "")"
+            draggable="@(ex.IsActive ? "true" : "false")"
+            @ondragstart="() => dragged = ex"
+            @ondragend="ResetDrag"
+            @ondragover:preventDefault="true"
+            @ondragover="() => { if (dragged is not null && ex.IsActive) dragOverId = ex.Id; }"
+            @ondrop="() => DropAsync(ex)">
+            <div class="d-flex justify-content-between align-items-center gap-2">
+                <div class="d-flex align-items-center gap-3 text-truncate">
+                    @if (ex.IsActive)
+                    {
+                        <span class="exercise-handle" title="Zum Sortieren ziehen">⠿</span>
+                    }
+                    <div class="text-truncate">
+                        <a href="@($"sport/exercises/{ex.Id}")" class="exercise-link fw-semibold">@ex.Name</a>
+                        <div class="small text-muted text-truncate">
+                            @ExerciseEditDialog.KindLabel(ex.Kind)
+                            @if (ex.Notes is not null)
+                            {
+                                <span> · @ex.Notes</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-1 flex-shrink-0">
+                    <button class="btn btn-sm btn-outline-primary" @onclick="() => OpenEdit(ex)"
+                            title="Bearbeiten">✎</button>
+                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(ex)"
+                            title="Löschen">🗑</button>
+                </div>
+            </div>
+        </li>
+    };
+
+    // ── Dialog ───────────────────────────────────────────────────────────────
+
+    private void OpenNew()
+    {
+        selected = null;
+        dialogVisible = true;
+    }
+
+    private void OpenEdit(ExerciseResponseDto ex)
+    {
+        selected = ex;
+        dialogVisible = true;
+    }
+
+    private void CloseDialog()
+    {
+        dialogVisible = false;
+        selected = null;
+    }
+
+    private async Task HandleSavedAsync(ExerciseResponseDto saved)
+    {
+        exercises ??= [];
+
+        // Ersetzen oder hinzufügen – der Dialog bedient beide Modi (Muster wie
+        // Home.HandleProjectSavedAsync).
+        var idx = exercises.FindIndex(e => e.Id == saved.Id);
+        if (idx >= 0) exercises[idx] = saved;
+        else exercises.Add(saved);
+
+        CloseDialog();
+        await Task.CompletedTask;
+    }
+
+    // ── Löschen ──────────────────────────────────────────────────────────────
+
+    private async Task DeleteAsync(ExerciseResponseDto ex)
+    {
+        if (!await Api.DeleteExerciseAsync(ex.Id)) return;
+
+        exercises?.RemoveAll(e => e.Id == ex.Id);
+
+        // Undo-Toast wie überall: Die Sätze der Übung sind mitgelöscht und kommen
+        // beim Wiederherstellen zusammen zurück.
+        Toast.ShowUndo($"{ex.Name} gelöscht", async () =>
+        {
+            if (!await Api.RestoreExerciseAsync(ex.Id)) return;
+            exercises = await Api.GetExercisesAsync() ?? exercises;
+            await InvokeAsync(StateHasChanged);
+        });
+    }
+
+    // ── Sortieren ────────────────────────────────────────────────────────────
+
+    private void ResetDrag()
+    {
+        dragged = null;
+        dragOverId = null;
+    }
+
+    private async Task DropAsync(ExerciseResponseDto target)
+    {
+        var source = dragged;
+        ResetDrag();
+
+        if (exercises is null || source is null || source.Id == target.Id) return;
+        if (!source.IsActive || !target.IsActive) return;   // nur innerhalb der aktiven
+
+        var ordered = Active;
+        ordered.RemoveAll(e => e.Id == source.Id);
+        var idx = ordered.FindIndex(e => e.Id == target.Id);
+        if (idx < 0) idx = ordered.Count;
+        ordered.Insert(idx, source);
+
+        // SortOrder lokal mitziehen, sonst rendert die Liste nach den alten Werten.
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            var withOrder = ordered[i] with { SortOrder = i };
+            var pos = exercises.FindIndex(e => e.Id == withOrder.Id);
+            if (pos >= 0) exercises[pos] = withOrder;
+        }
+
+        await Api.ReorderExercisesAsync(ordered.Select(e => e.Id).ToList());
+    }
+}

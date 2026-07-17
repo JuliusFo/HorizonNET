@@ -1,0 +1,522 @@
+@page "/sport"
+@inject ApiService Api
+@inject ToastService Toast
+
+<PageTitle>Sport – HorizonNET</PageTitle>
+
+<div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+    <h1 class="mb-0">Training</h1>
+    <div class="d-flex gap-2 flex-shrink-0">
+        <a href="sport/analysis" class="btn btn-sm btn-outline-secondary">Auswertung</a>
+        <a href="sport/history" class="btn btn-sm btn-outline-secondary">Verlauf</a>
+        <a href="sport/exercises" class="btn btn-sm btn-outline-secondary">Übungen</a>
+    </div>
+</div>
+
+@* ── Überblick über die letzten 30 Tage ──────────────────────────────────────
+   Bewusst flach gehalten: Dies ist die Erfassungsseite, die Übungskarten sollen
+   sichtbar bleiben. Der Zeitraum ist fest – die längere Sicht hat die Auswertung. *@
+<div class="row g-3 mb-4">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center py-2">
+                <span class="fw-semibold small">Gewichtsverlauf</span>
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-sm btn-outline-primary bw-add" @onclick="() => bodyWeightDialogOpen = true"
+                            title="Gewicht eintragen">+ kg</button>
+                    <a href="sport/bodyweight" class="small text-decoration-none">mehr →</a>
+                </div>
+            </div>
+            <div class="card-body py-2">
+                @if (overviewWeights is null)
+                {
+                    <p class="text-muted small mb-0">Wird geladen…</p>
+                }
+                else if (overviewWeights.Count == 0)
+                {
+                    <p class="text-muted small mb-0">Noch kein Gewicht erfasst.</p>
+                }
+                else
+                {
+                    <RadzenChart Style="height:190px">
+                        <RadzenLineSeries Data="overviewWeights" CategoryProperty="MeasuredOn"
+                                          ValueProperty="WeightKg" Title="kg" Smooth="true">
+                            <RadzenMarkers MarkerType="MarkerType.Circle" />
+                        </RadzenLineSeries>
+                        <RadzenCategoryAxis FormatString="{0:dd.MM.}" />
+                        <RadzenValueAxis>
+                            <RadzenGridLines Visible="true" />
+                        </RadzenValueAxis>
+                    </RadzenChart>
+                }
+            </div>
+        </div>
+    </div>
+
+    @* Raster statt gemeinsamer Kurve: Die Leitwerte der Arten sind nicht vergleichbar
+       (kg vs. Wiederholungen vs. min/km) – zählbar ist nur, WAS an welchem Tag lief.
+       Die Farbintensität trägt die Menge nach (Anzahl Sätze).
+       Zugleich die Tagesauswahl: Eine Zelle anzuklicken heißt "zeig mir diesen Tag". *@
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center py-2">
+                <span class="fw-semibold small">Übungen pro Tag</span>
+                <a href="sport/analysis" class="small text-decoration-none">mehr →</a>
+            </div>
+            <div class="card-body py-2">
+                @if (exercises is null || overviewSets is null)
+                {
+                    <p class="text-muted small mb-0">Wird geladen…</p>
+                }
+                else if (RasterExercises.Count == 0)
+                {
+                    <p class="text-muted small mb-0">Noch keine Übungen angelegt.</p>
+                }
+                else
+                {
+                    <div class="raster">
+                        @foreach (var ex in RasterExercises)
+                        {
+                            <div class="raster-row" @key="ex.Id">
+                                <span class="raster-label text-truncate" title="@ex.Name">@ex.Name</span>
+                                <div class="raster-cells">
+                                    @foreach (var d in RasterDays)
+                                    {
+                                        var count = SetCount(ex.Id, d);
+                                        var summary = count == 0 ? "nichts" : count == 1 ? "1 Satz" : $"{count} Sätze";
+                                        <button type="button"
+                                                class="raster-cell raster-level-@Level(count) @(d.Date == day.Date ? "raster-cell-selected" : "")"
+                                                title="@($"{d:dd.MM.yyyy}: {summary} – anklicken zum Anzeigen")"
+                                                aria-label="@($"{d:dd.MM.yyyy} anzeigen ({summary})")"
+                                                aria-current="@(d.Date == day.Date ? "date" : null)"
+                                                @onclick="() => GoToDayAsync(d)"></button>
+                                    }
+                                </div>
+                            </div>
+                        }
+                        <div class="raster-row raster-axis">
+                            <span class="raster-label"></span>
+                            <div class="d-flex justify-content-between small text-muted">
+                                <span>@RasterDays[0].ToString("dd.MM.")</span>
+                                <span>heute</span>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Welcher Tag unten steht. Gewählt wird im Raster oben – Schritt für Schritt über Pfeile
+   zu blättern war der Umweg zu einem Tag, den man dort ohnehin schon sieht.
+   "heute" bleibt: der Weg zurück ist häufig genug, um nicht nach der Spalte zu suchen. *@
+<div class="d-flex align-items-center gap-2 mb-4 flex-wrap">
+    <span class="fw-semibold">@day.ToString("dddd, dd.MM.yyyy")</span>
+    @if (day.Date != DateTime.Today)
+    {
+        <button class="btn btn-sm btn-link p-0" @onclick="() => GoToDayAsync(DateTime.Today)">heute</button>
+    }
+    <span class="small text-muted">· Tag im Raster oben wählen</span>
+</div>
+
+@* ── Übungen des Tages (11c) ─────────────────────────────────────────────── *@
+@if (exercises is null || sets is null)
+{
+    <p>Wird geladen…</p>
+}
+else if (ActiveExercises.Count == 0)
+{
+    <div class="alert alert-secondary">
+        Noch keine Übungen angelegt. <a href="sport/exercises">Leg deine erste an</a> –
+        etwa „Liegestütze" als Körpergewicht oder „Laufen" als Ausdauer.
+    </div>
+}
+else
+{
+    <div class="row row-cols-1 row-cols-lg-2 g-3">
+        @foreach (var ex in ActiveExercises)
+        {
+            var todays = SetsFor(ex.Id);
+            <div class="col" @key="ex.Id">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center gap-2">
+                        <a href="@($"sport/exercises/{ex.Id}")" class="fw-semibold text-truncate exercise-link">@ex.Name</a>
+                        @if (todays.Count > 0)
+                        {
+                            <span class="badge bg-secondary flex-shrink-0">@todays.Count @(todays.Count == 1 ? "Satz" : "Sätze")</span>
+                        }
+                    </div>
+
+                    <div class="card-body py-2">
+                        @if (todays.Count == 0)
+                        {
+                            <p class="text-muted small mb-2">
+                                @(day.Date == DateTime.Today ? "Heute noch nichts erfasst." : "An diesem Tag noch nichts erfasst.")
+                            </p>
+                        }
+                        else
+                        {
+                            <ul class="list-unstyled mb-2 set-list">
+                                @foreach (var s in todays)
+                                {
+                                    <li @key="s.Id" class="d-flex align-items-center gap-2">
+                                        <span class="text-muted small set-number">@s.SetNumber.</span>
+                                        <span class="flex-grow-1">@SportMath.Summary(s)</span>
+                                        @if (s.Rpe is int rpe)
+                                        {
+                                            <span class="badge bg-light text-muted border" title="Anstrengung">RPE @rpe</span>
+                                        }
+                                        <button class="btn btn-sm btn-link p-0 text-muted" title="Bearbeiten"
+                                                @onclick="() => OpenSet(s)">✎</button>
+                                    </li>
+                                }
+                            </ul>
+
+                            @* Tagesleitwert – dieselbe Kennzahl, die auch die Kurve zeichnet. *@
+                            @if (SportMath.DailyMetric(ex.Kind, todays) is double metric)
+                            {
+                                <div class="small text-muted mb-2">
+                                    @SportMath.MetricLabel(ex.Kind): <strong>@SportMath.FormatMetric(ex.Kind, metric)</strong>
+                                </div>
+                            }
+                        }
+
+                        @* Schnell-Erfassung: die Felder richten sich nach der Art. *@
+                        <div class="d-flex flex-wrap align-items-end gap-2">
+                            @if (ex.Kind is ExerciseKind.Strength or ExerciseKind.Bodyweight)
+                            {
+                                <div class="quick-field">
+                                    <label class="form-label small text-muted mb-0">Wdh</label>
+                                    <input type="number" class="form-control form-control-sm"
+                                           value="@Draft(ex.Id).Reps"
+                                           @onchange="e => Draft(ex.Id).Reps = ParseInt(e.Value)" />
+                                </div>
+                            }
+                            @if (ex.Kind is ExerciseKind.Strength)
+                            {
+                                <div class="quick-field">
+                                    <label class="form-label small text-muted mb-0">kg</label>
+                                    <input type="number" step="0.25" class="form-control form-control-sm"
+                                           value="@Num(Draft(ex.Id).WeightKg)"
+                                           @onchange="e => Draft(ex.Id).WeightKg = ParseDouble(e.Value)" />
+                                </div>
+                            }
+                            @if (ex.Kind is ExerciseKind.Endurance)
+                            {
+                                <div class="quick-field">
+                                    <label class="form-label small text-muted mb-0">km</label>
+                                    <input type="number" step="0.1" class="form-control form-control-sm"
+                                           value="@Num(Draft(ex.Id).DistanceKm)"
+                                           @onchange="e => Draft(ex.Id).DistanceKm = ParseDouble(e.Value)" />
+                                </div>
+                                <div class="quick-field">
+                                    <label class="form-label small text-muted mb-0">min</label>
+                                    <input type="number" class="form-control form-control-sm"
+                                           value="@Draft(ex.Id).Minutes"
+                                           @onchange="e => Draft(ex.Id).Minutes = ParseInt(e.Value)" />
+                                </div>
+                                <div class="quick-field">
+                                    <label class="form-label small text-muted mb-0">sek</label>
+                                    <input type="number" class="form-control form-control-sm"
+                                           value="@Draft(ex.Id).Seconds"
+                                           @onchange="e => Draft(ex.Id).Seconds = ParseInt(e.Value)" />
+                                </div>
+                            }
+                            <div class="quick-field">
+                                <label class="form-label small text-muted mb-0">RPE</label>
+                                <input type="number" min="1" max="10" class="form-control form-control-sm"
+                                       value="@Draft(ex.Id).Rpe"
+                                       @onchange="e => Draft(ex.Id).Rpe = ParseInt(e.Value)" />
+                            </div>
+
+                            <button class="btn btn-sm btn-primary" @onclick="() => AddSetAsync(ex)"
+                                    disabled="@(savingExerciseId == ex.Id)">+ Satz</button>
+
+                            @* Der schnellste Weg: noch mal dasselbe wie eben. *@
+                            @if (todays.Count > 0)
+                            {
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        @onclick="() => RepeatLastAsync(ex)"
+                                        disabled="@(savingExerciseId == ex.Id)"
+                                        title="Denselben Satz noch einmal">↻ wie letzter</button>
+                            }
+                        </div>
+
+                        @if (errors.TryGetValue(ex.Id, out var err))
+                        {
+                            <div class="alert alert-danger py-1 mt-2 mb-0 small">@err</div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<ExerciseSetDialog Visible="selectedSet is not null"
+                   Set="selectedSet"
+                   OnSaved="HandleSetSavedAsync"
+                   OnDeleted="HandleSetDeletedAsync"
+                   OnClose="@(() => selectedSet = null)" />
+
+@* Der angezeigte Tag ist der Vorschlag – nachtragen bleibt damit so leicht wie vorher. *@
+<BodyWeightDialog Visible="bodyWeightDialogOpen"
+                  Date="DateOnly.FromDateTime(day)"
+                  Existing="bodyWeightToday"
+                  OnSaved="HandleBodyWeightSaved"
+                  OnClose="@(() => bodyWeightDialogOpen = false)" />
+
+@code {
+    private DateTime day = DateTime.Today;
+
+    private List<ExerciseResponseDto>? exercises;
+    private List<ExerciseSetResponseDto>? sets;
+
+    private ExerciseSetResponseDto? selectedSet;
+    private int? savingExerciseId;
+    private readonly Dictionary<int, string> errors = new();
+
+    // Eingabestand je Übung; bleibt beim Tageswechsel bewusst stehen (gleiches Gewicht,
+    // andere Einheit ist der Normalfall).
+    private readonly Dictionary<int, SetDraft> drafts = new();
+
+    private bool bodyWeightDialogOpen;
+    private BodyWeightResponseDto? bodyWeightToday;
+
+    // ── Überblick (letzte 30 Tage, unabhängig vom gewählten Tag) ─────────────
+
+    private const int OverviewDays = 30;
+
+    private List<ExerciseSetResponseDto>? overviewSets;
+    private List<BodyWeightResponseDto>? overviewWeights;
+
+    // Fest bis heute – die Diagramme sind ein Rückblick, kein Ausschnitt um den
+    // gerade gewählten Tag. Sonst spränge die Kurve beim Blättern.
+    private static DateTime OverviewFrom => DateTime.Today.AddDays(-(OverviewDays - 1));
+
+    private List<DateTime> RasterDays { get; } =
+        Enumerable.Range(0, OverviewDays)
+                  .Select(i => DateTime.Today.AddDays(-(OverviewDays - 1) + i))
+                  .ToList();
+
+    // Aktive Übungen plus solche, die im Zeitraum trainiert wurden (auch archivierte) –
+    // sonst verschwände eine gerade archivierte Übung rückwirkend aus dem Rückblick.
+    private List<ExerciseResponseDto> RasterExercises =>
+        (exercises ?? [])
+            .Where(e => e.IsActive || (overviewSets ?? []).Any(s => s.ExerciseId == e.Id))
+            .OrderBy(e => e.SortOrder)
+            .ToList();
+
+    private int SetCount(int exerciseId, DateTime day) =>
+        (overviewSets ?? []).Count(s => s.ExerciseId == exerciseId && s.PerformedAt.Date == day.Date);
+
+    // Vier Stufen wie beim GitHub-Beitragsgraphen: Die Intensität trägt die Menge nach,
+    // die dem Raster sonst fehlen würde.
+    private static int Level(int count) => count switch
+    {
+        0 => 0,
+        1 => 1,
+        2 => 2,
+        _ => 3
+    };
+
+    private List<ExerciseResponseDto> ActiveExercises =>
+        (exercises ?? []).Where(e => e.IsActive).OrderBy(e => e.SortOrder).ToList();
+
+    private List<ExerciseSetResponseDto> SetsFor(int exerciseId) =>
+        (sets ?? []).Where(s => s.ExerciseId == exerciseId).OrderBy(s => s.SetNumber).ToList();
+
+    private SetDraft Draft(int exerciseId)
+    {
+        if (!drafts.TryGetValue(exerciseId, out var d))
+        {
+            d = new SetDraft();
+            drafts[exerciseId] = d;
+        }
+        return d;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        exercises = await Api.GetExercisesAsync() ?? new();
+        await LoadOverviewAsync();
+        await LoadDayAsync();
+    }
+
+    private async Task LoadOverviewAsync()
+    {
+        overviewSets = await Api.GetExerciseSetsAsync(OverviewFrom, DateTime.Today.AddDays(1)) ?? new();
+        overviewWeights = await Api.GetBodyWeightAsync(
+            DateOnly.FromDateTime(OverviewFrom), DateOnly.FromDateTime(DateTime.Today)) ?? new();
+    }
+
+    private async Task LoadDayAsync()
+    {
+        // 'to' ist exklusiv – ein ganzer Tag ist damit from=Tag, to=Tag+1.
+        sets = await Api.GetExerciseSetsAsync(day.Date, day.Date.AddDays(1)) ?? new();
+
+        var onDay = DateOnly.FromDateTime(day);
+        bodyWeightToday = (await Api.GetBodyWeightAsync(onDay, onDay))?.FirstOrDefault();
+    }
+
+    private async Task GoToDayAsync(DateTime target)
+    {
+        if (target > DateTime.Today) return;   // Zukunft trainiert niemand
+        if (target.Date == day.Date) return;   // Klick auf die markierte Spalte: nichts neu laden
+
+        day = target.Date;
+        errors.Clear();
+        await LoadDayAsync();
+    }
+
+    // ── Sätze erfassen ───────────────────────────────────────────────────────
+
+    private async Task AddSetAsync(ExerciseResponseDto ex)
+    {
+        var d = Draft(ex.Id);
+        await CreateAsync(ex, d.Reps, d.WeightKg, d.DistanceMeters, d.TotalSeconds, d.Rpe);
+    }
+
+    // "Wie letzter": legt sofort denselben Satz noch einmal an – der schnellste Weg
+    // zwischen zwei Sätzen und der eigentliche Sinn der Seite.
+    private async Task RepeatLastAsync(ExerciseResponseDto ex)
+    {
+        var last = SetsFor(ex.Id).LastOrDefault();
+        if (last is null) return;
+
+        await CreateAsync(ex, last.Reps, last.WeightKg, last.DistanceMeters, last.DurationSeconds, last.Rpe);
+    }
+
+    private async Task CreateAsync(ExerciseResponseDto ex, int? reps, double? weightKg,
+                                   int? distanceMeters, int? durationSeconds, int? rpe)
+    {
+        savingExerciseId = ex.Id;
+        errors.Remove(ex.Id);
+
+        // Beim Nachtragen älterer Tage die Uhrzeit von jetzt übernehmen – das Datum
+        // kommt vom angezeigten Tag.
+        var performedAt = day.Date == DateTime.Today
+            ? DateTime.Now
+            : day.Date.Add(DateTime.Now.TimeOfDay);
+
+        var (created, error) = await Api.CreateExerciseSetAsync(new ExerciseSetCreateDto(
+            ex.Id, performedAt, reps, weightKg, distanceMeters, durationSeconds, rpe, null));
+
+        savingExerciseId = null;
+
+        if (created is null)
+        {
+            // Klartext der API zeigen ("Kraftübungen brauchen Wiederholungen und Gewicht").
+            errors[ex.Id] = error ?? "Speichern fehlgeschlagen.";
+            return;
+        }
+
+        sets ??= [];
+        sets.Add(created);
+
+        // Überblick lokal mitziehen statt neu zu laden – beim Nachtragen sehr alter
+        // Tage liegt der Satz außerhalb des Fensters und gehört dort nicht hin.
+        if (created.PerformedAt.Date >= OverviewFrom.Date) overviewSets?.Add(created);
+    }
+
+    // ── Satz bearbeiten / löschen ────────────────────────────────────────────
+
+    private void OpenSet(ExerciseSetResponseDto s) => selectedSet = s;
+
+    private void HandleSetSavedAsync(ExerciseSetResponseDto saved)
+    {
+        if (sets is not null)
+        {
+            var idx = sets.FindIndex(s => s.Id == saved.Id);
+            if (idx >= 0) sets[idx] = saved;
+
+            // Zeitpunkt kann auf einen anderen Tag verschoben worden sein.
+            if (saved.PerformedAt.Date != day.Date) sets.RemoveAll(s => s.Id == saved.Id);
+        }
+
+        if (overviewSets is not null)
+        {
+            overviewSets.RemoveAll(s => s.Id == saved.Id);
+            if (saved.PerformedAt.Date >= OverviewFrom.Date) overviewSets.Add(saved);
+        }
+
+        selectedSet = null;
+    }
+
+    private void HandleSetDeletedAsync(int id)
+    {
+        var removed = sets?.FirstOrDefault(s => s.Id == id);
+        sets?.RemoveAll(s => s.Id == id);
+        overviewSets?.RemoveAll(s => s.Id == id);
+        selectedSet = null;
+
+        Toast.ShowUndo(removed is null ? "Satz gelöscht" : $"Satz gelöscht ({SportMath.Summary(removed)})",
+            async () =>
+            {
+                if (!await Api.RestoreExerciseSetAsync(id)) return;
+                await LoadDayAsync();
+                await LoadOverviewAsync();
+                await InvokeAsync(StateHasChanged);
+            });
+    }
+
+    // ── Körpergewicht ────────────────────────────────────────────────────────
+
+    private void HandleBodyWeightSaved(BodyWeightResponseDto saved)
+    {
+        // Der Dialog darf auf einen anderen Tag schreiben als den angezeigten – der
+        // gemerkte Tageswert gilt nur, wenn beide übereinstimmen.
+        if (saved.MeasuredOn == DateOnly.FromDateTime(day)) bodyWeightToday = saved;
+
+        // Kurve mitziehen: der Tag kann neu sein oder ein bestehender korrigiert werden.
+        if (overviewWeights is not null && saved.MeasuredOn >= DateOnly.FromDateTime(OverviewFrom))
+        {
+            overviewWeights.RemoveAll(w => w.MeasuredOn == saved.MeasuredOn);
+            overviewWeights.Add(saved);
+            overviewWeights.Sort((a, b) => a.MeasuredOn.CompareTo(b.MeasuredOn));
+        }
+
+        bodyWeightDialogOpen = false;
+    }
+
+    // ── Hilfen ───────────────────────────────────────────────────────────────
+
+    // Zahlen für <input type="number"> IMMER invariant formatieren: Das Element
+    // akzeptiert ausschließlich den Punkt als Dezimaltrennzeichen. Unter deutscher
+    // Kultur würde "12,5" als ungültig verworfen – der Browser zeigt dann stillschweigend
+    // ein leeres Feld, und der Wert wäre für den Nutzer spurlos weg.
+    private static string Num(double? value) =>
+        value?.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+
+    private static int? ParseInt(object? value) =>
+        int.TryParse(value?.ToString(), out var i) ? i : null;
+
+    private static double? ParseDouble(object? value)
+    {
+        var text = value?.ToString();
+        if (string.IsNullOrWhiteSpace(text)) return null;
+
+        return double.TryParse(text, System.Globalization.NumberStyles.Any,
+                               System.Globalization.CultureInfo.InvariantCulture, out var d)
+            ? d
+            : double.TryParse(text, out var d2) ? d2 : null;
+    }
+
+    // Eingabestand einer Schnell-Erfassung. km/min/sek sind die Anzeigeform;
+    // gespeichert werden Meter und Sekunden.
+    private class SetDraft
+    {
+        public int? Reps { get; set; }
+        public double? WeightKg { get; set; }
+        public double? DistanceKm { get; set; }
+        public int? Minutes { get; set; }
+        public int? Seconds { get; set; }
+        public int? Rpe { get; set; }
+
+        public int? DistanceMeters => DistanceKm is double km ? (int)Math.Round(km * 1000) : null;
+
+        public int? TotalSeconds =>
+            Minutes is null && Seconds is null ? null : (Minutes ?? 0) * 60 + (Seconds ?? 0);
+    }
+}

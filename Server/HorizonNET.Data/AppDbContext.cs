@@ -143,6 +143,45 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasQueryFilter(t => t.DeletedAt == null);
         });
 
+        modelBuilder.Entity<Exercise>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Name).IsRequired().HasMaxLength(200);
+            e.Property(x => x.Notes).HasMaxLength(1000);
+            e.Property(x => x.Kind).HasConversion<string>();
+
+            e.HasQueryFilter(x => x.DeletedAt == null);
+        });
+
+        modelBuilder.Entity<ExerciseSet>(e =>
+        {
+            e.HasKey(s => s.Id);
+            e.Property(s => s.Notes).HasMaxLength(1000);
+
+            // Sätze gehören zur Übung und gehen beim endgültigen Löschen mit.
+            e.HasOne(s => s.Exercise)
+                .WithMany(x => x.Sets)
+                .HasForeignKey(s => s.ExerciseId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Die Auswertung liest je Übung chronologisch – der häufigste Zugriff.
+            e.HasIndex(s => new { s.ExerciseId, s.PerformedAt });
+
+            // Passender Filter zum Soft-Delete der Übung (blendet Sätze gelöschter
+            // Übungen mit aus – vermeidet die EF-Filter-Warnung, siehe TimeEntry).
+            e.HasQueryFilter(s => s.DeletedAt == null && s.Exercise!.DeletedAt == null);
+        });
+
+        modelBuilder.Entity<BodyWeightEntry>(e =>
+        {
+            e.HasKey(b => b.Id);
+
+            // Höchstens ein Gewicht pro Tag; ein zweiter Eintrag überschreibt (Repository).
+            e.HasIndex(b => b.MeasuredOn).IsUnique();
+
+            e.HasQueryFilter(b => b.DeletedAt == null);
+        });
+
         modelBuilder.Entity<DailyTaskCompletion>(e =>
         {
             e.HasKey(c => c.Id);
@@ -183,6 +222,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TaskTemplate> TaskTemplates => Set<TaskTemplate>();
 
     public DbSet<TimeEntry> TimeEntries => Set<TimeEntry>();
+
+    public DbSet<Exercise> Exercises => Set<Exercise>();
+
+    public DbSet<ExerciseSet> ExerciseSets => Set<ExerciseSet>();
+
+    public DbSet<BodyWeightEntry> BodyWeightEntries => Set<BodyWeightEntry>();
 
     #endregion
 }

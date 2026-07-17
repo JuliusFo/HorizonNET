@@ -1,0 +1,131 @@
+/* Schmale Zahlenfelder der Schnell-Erfassung: Die Zeile soll auch mit vier Feldern
+   (km/min/sek/RPE) auf eine Kartenbreite passen. */
+.quick-field {
+    width: 4.5rem;
+}
+
+.quick-field input {
+    text-align: right;
+}
+
+/* Sitzt in einer schmalen Kartenkopfzeile neben "mehr →": Ein normaler btn-sm würde die
+   Zeile höher machen als die daneben. */
+.bw-add {
+    padding: 0 0.4rem;
+    font-size: 0.75rem;
+    line-height: 1.4;
+}
+
+.set-list li {
+    padding: 0.15rem 0;
+    border-bottom: 1px solid #f1f3f5;
+}
+
+.set-list li:last-child {
+    border-bottom: 0;
+}
+
+.set-number {
+    width: 1.2rem;
+    flex-shrink: 0;
+}
+
+.exercise-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.exercise-link:hover {
+    text-decoration: underline;
+}
+
+/* Raster "Übungen pro Tag": je Zeile eine Übung, je Spalte ein Tag. Muster wie der
+   Beitragsgraph auf GitHub – die Farbintensität trägt die Anzahl der Sätze. */
+.raster {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.raster-row {
+    display: grid;
+    grid-template-columns: 7rem 1fr;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.raster-label {
+    font-size: 0.8rem;
+    color: #495057;
+}
+
+/* Die 30 Spalten teilen sich die Restbreite gleichmäßig – dadurch passt das Raster
+   in jede Kartenbreite, ohne zu scrollen. */
+.raster-cells {
+    display: grid;
+    grid-template-columns: repeat(30, 1fr);
+    gap: 2px;
+}
+
+/* Zugleich Schaltfläche für die Tagesauswahl – daher der Button-Reset: Ohne ihn brächte
+   das <button> Rahmen und Innenabstand mit und spränge aus dem Quadrat. */
+.raster-cell {
+    aspect-ratio: 1;
+    border-radius: 2px;
+    background-color: #ebedef;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+}
+
+.raster-cell:hover {
+    outline: 1px solid #adb5bd;
+}
+
+/* Die markierte Zelle steht in jeder Zeile – zusammen ergeben sie die Spalte des
+   gewählten Tages. Ring nach außen statt Rahmen, sonst schrumpfte das farbige Feld. */
+.raster-cell-selected,
+.raster-cell-selected:hover {
+    outline: 2px solid #212529;
+    outline-offset: 1px;
+}
+
+/* Die Ringe der Nachbarzeilen dürfen sich nicht gegenseitig überdecken. */
+.raster-cell-selected {
+    position: relative;
+    z-index: 1;
+}
+
+.raster-level-1 {
+    background-color: rgba(13, 110, 253, 0.35);
+}
+
+.raster-level-2 {
+    background-color: rgba(13, 110, 253, 0.65);
+}
+
+.raster-level-3 {
+    background-color: rgba(13, 110, 253, 1);
+}
+
+.raster-axis {
+    margin-top: 0.15rem;
+}
+
+/* Schmale Schirme: Der Name kostet neben 30 Spalten zu viel Breite – bei 375 px blieben
+   knapp 4 px je Zelle. Deshalb Name über die Zeile stellen, dann bekommen die Tage die
+   volle Breite (~11 px je Zelle). */
+@media (max-width: 767.98px) {
+    .raster-row {
+        grid-template-columns: 1fr;
+        gap: 0.1rem;
+    }
+
+    .raster-label {
+        font-size: 0.75rem;
+    }
+
+    .raster {
+        gap: 0.5rem;
+    }
+}

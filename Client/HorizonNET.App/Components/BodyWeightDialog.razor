@@ -1,0 +1,131 @@
+@inject ApiService Api
+@inject ToastService Toast
+
+@* Gewichtserfassung als Dialog statt als Zeile auf der Trainingsseite: Das Gewicht wird
+   einmal am Tag eingetragen und braucht dort keinen Dauerplatz. Das Datum ist ein Feld,
+   weil der Dialog am Überblick hängt und nicht am gewählten Trainingstag. *@
+@if (Visible)
+{
+    <div class="bw-dialog-backdrop" @onclick="CloseAsync"></div>
+    <div class="bw-dialog">
+        <div class="bw-dialog-content" @onclick:stopPropagation="true">
+            <EditForm Model="model" OnValidSubmit="SaveAsync">
+                <div class="bw-dialog-header">
+                    <div class="fw-semibold">Gewicht eintragen</div>
+                    <button type="button" class="btn-close" @onclick="CloseAsync" aria-label="Schließen"></button>
+                </div>
+
+                <div class="bw-dialog-body">
+                    <div class="row g-2">
+                        <div class="col-7">
+                            <label class="form-label small text-muted mb-1">Datum</label>
+                            <InputDate class="form-control form-control-sm" TValue="DateOnly"
+                                       Value="model.MeasuredOn"
+                                       ValueChanged="OnDateChangedAsync"
+                                       ValueExpression="() => model.MeasuredOn"
+                                       max="@DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd")" />
+                        </div>
+                        <div class="col-5">
+                            <label class="form-label small text-muted mb-1">Gewicht (kg)</label>
+                            <InputNumber class="form-control form-control-sm text-end" @bind-Value="model.WeightKg"
+                                         step="0.1" autofocus />
+                        </div>
+                    </div>
+
+                    @* Was an dem Tag schon steht: sonst überschriebe man es unbemerkt. *@
+                    <div class="small text-muted mt-2">@HintText</div>
+
+                    @if (error is not null)
+                    {
+                        <div class="alert alert-danger py-1 mt-2 mb-0 small">@error</div>
+                    }
+                </div>
+
+                <div class="bw-dialog-footer">
+                    <a href="sport/bodyweight" class="small text-decoration-none align-self-center">Kurve ansehen →</a>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CloseAsync">Abbrechen</button>
+                        <button type="submit" class="btn btn-sm btn-primary" disabled="@(isSaving || model.WeightKg is null)">
+                            @(isSaving ? "Speichert…" : "Eintragen")
+                        </button>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+
+    /// <summary>Tag, der beim Öffnen vorgeschlagen wird – in der Regel der angezeigte Trainingstag.</summary>
+    [Parameter] public DateOnly Date { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+
+    /// <summary>Bereits erfasstes Gewicht für <see cref="Date"/>, falls die Seite es schon kennt.</summary>
+    [Parameter] public BodyWeightResponseDto? Existing { get; set; }
+
+    [Parameter] public EventCallback<BodyWeightResponseDto> OnSaved { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private FormModel model = new();
+    private BodyWeightResponseDto? existingForDate;
+    private bool isSaving;
+    private string? error;
+    private bool loaded;
+
+    private string HintText => existingForDate is not null
+        ? $"Für diesen Tag stehen {existingForDate.WeightKg:0.#} kg – Eintragen überschreibt den Wert."
+        : "Für diesen Tag ist noch nichts erfasst.";
+
+    protected override void OnParametersSet()
+    {
+        if (!Visible) { loaded = false; return; }
+        if (loaded) return;
+
+        loaded = true;
+        error = null;
+        existingForDate = Existing;
+        model = new FormModel { MeasuredOn = Date, WeightKg = Existing?.WeightKg };
+    }
+
+    // Anderer Tag heißt anderer Stand: den vorhandenen Wert nachladen, damit der Hinweis
+    // stimmt und ein Korrigieren nicht mit leerem Feld beginnt.
+    private async Task OnDateChangedAsync(DateOnly date)
+    {
+        model.MeasuredOn = date;
+        error = null;
+
+        existingForDate = (await Api.GetBodyWeightAsync(date, date))?.FirstOrDefault();
+        model.WeightKg = existingForDate?.WeightKg;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (model.WeightKg is not double kg) return;
+
+        isSaving = true;
+        error = null;
+
+        var saved = await Api.SetBodyWeightAsync(model.MeasuredOn, kg);
+
+        isSaving = false;
+
+        if (saved is null)
+        {
+            error = "Speichern fehlgeschlagen.";
+            return;
+        }
+
+        Toast.ShowSuccess($"{saved.WeightKg:0.#} kg eingetragen");
+        await OnSaved.InvokeAsync(saved);
+    }
+
+    private Task CloseAsync() => OnClose.InvokeAsync();
+
+    private class FormModel
+    {
+        public DateOnly MeasuredOn { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+        public double? WeightKg { get; set; }
+    }
+}

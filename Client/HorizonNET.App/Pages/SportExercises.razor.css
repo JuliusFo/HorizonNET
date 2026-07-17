@@ -1,0 +1,57 @@
+/* Ziehgriff und Einfügemarke – gleiche Optik wie in SubTaskList und ProjectDetail. */
+.exercise-handle {
+    cursor: grab;
+    color: #adb5bd;
+    user-select: none;
+}
+
+.exercise-handle:active {
+    cursor: grabbing;
+}
+
+.exercise-drop-before {
+    box-shadow: 0 -2px 0 -1px var(--bs-primary, #0d6efd);
+}
+
+.exercise-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.exercise-link:hover {
+    text-decoration: underline;
+}
+
+/* Inaktive Übungen: sichtbar, aber zurückgenommen. */
+.exercise-inactive {
+    background-color: #f8f9fa;
+    color: #6c757d;
+}
+
+/* Kopfzeile der Inaktiv-Gruppe – Muster wie die Erledigt-Gruppe in ProjectDetail. */
+.inactive-group {
+    padding: 0;
+    background-color: #f8f9fa;
+}
+
+.inactive-group-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 0;
+    background: none;
+    color: #6c757d;
+    font-size: 0.875rem;
+    text-align: left;
+}
+
+.inactive-group-toggle:hover {
+    color: #212529;
+}
+
+.inactive-group-caret {
+    width: 0.75rem;
+    flex-shrink: 0;
+}

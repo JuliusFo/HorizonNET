@@ -1,0 +1,147 @@
+@page "/sport/exercises/{Id:int}"
+@inject ApiService Api
+
+<PageTitle>@(exercise?.Name ?? "Übung") – HorizonNET</PageTitle>
+
+@if (loading)
+{
+    <p>Wird geladen…</p>
+}
+else if (exercise is null)
+{
+    <p class="text-muted">Übung nicht gefunden.</p>
+    <a href="sport/exercises" class="btn btn-outline-secondary btn-sm">Zur Übersicht</a>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+        <div>
+            <h1 class="mb-1">@exercise.Name</h1>
+            <div class="text-muted small">
+                @ExerciseEditDialog.KindLabel(exercise.Kind)
+                @if (!exercise.IsActive)
+                {
+                    <span class="badge bg-secondary ms-1">inaktiv</span>
+                }
+            </div>
+        </div>
+        <a href="sport/exercises" class="btn btn-sm btn-outline-secondary flex-shrink-0">← Übungen</a>
+    </div>
+
+    @if (exercise.Notes is not null)
+    {
+        <p class="text-muted mt-2">@exercise.Notes</p>
+    }
+
+    <div class="d-flex align-items-center gap-2 my-3">
+        <label class="form-label small text-muted mb-0">Zeitraum</label>
+        <select class="form-select form-select-sm w-auto" value="@days"
+                @onchange="e => ChangeRangeAsync(int.Parse(e.Value!.ToString()!))">
+            <option value="30">30 Tage</option>
+            <option value="90">90 Tage</option>
+            <option value="365">1 Jahr</option>
+        </select>
+    </div>
+
+    @if (points.Count == 0)
+    {
+        <div class="alert alert-secondary">
+            In diesem Zeitraum ist nichts erfasst.
+            <a href="sport">Jetzt eintragen</a>.
+        </div>
+    }
+    else
+    {
+        @* Der Leitwert hängt an der Art: 1RM / Wiederholungen / Pace. Die Kurve zeigt
+           je Trainingstag einen Punkt – nicht je Satz, sonst zappelt sie. *@
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="fw-semibold">@SportMath.MetricLabel(exercise.Kind)</span>
+                <span class="small text-muted">
+                    @if (SportMath.LowerIsBetter(exercise.Kind))
+                    {
+                        <text>weniger ist besser</text>
+                    }
+                    else
+                    {
+                        <text>mehr ist besser</text>
+                    }
+                </span>
+            </div>
+            <div class="card-body">
+                <ExerciseProgressChart Kind="exercise.Kind" Sets="sets" Height="300" />
+            </div>
+        </div>
+
+        <div class="row row-cols-1 row-cols-md-3 g-3 mb-4">
+            <div class="col">
+                <div class="card h-100">
+                    <div class="card-body py-2">
+                        <div class="small text-muted">Einheiten</div>
+                        <div class="fs-5 fw-semibold">@points.Count</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="card h-100">
+                    <div class="card-body py-2">
+                        <div class="small text-muted">Bestwert</div>
+                        <div class="fs-5 fw-semibold">@SportMath.FormatMetric(exercise.Kind, Best)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="card h-100">
+                    <div class="card-body py-2">
+                        <div class="small text-muted">Zuletzt</div>
+                        <div class="fs-5 fw-semibold">@SportMath.FormatMetric(exercise.Kind, points[^1].Value)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private ExerciseResponseDto? exercise;
+    private List<ExerciseSetResponseDto> sets = new();
+    private List<SportMath.DayMetric> points = new();
+    private bool loading = true;
+    private int days = 90;
+    private int? loadedId;
+
+    private double Best => SportMath.Best(exercise!.Kind, points) ?? 0;
+
+    // OnParametersSetAsync statt OnInitializedAsync: lädt neu beim Wechsel zwischen
+    // zwei Übungen (gleiche Komponenteninstanz, nur Id ändert sich).
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loadedId == Id) return;
+        loadedId = Id;
+        loading = true;
+
+        exercise = await Api.GetExerciseAsync(Id);
+        if (exercise is not null) await LoadPointsAsync();
+
+        loading = false;
+    }
+
+    private async Task LoadPointsAsync()
+    {
+        var from = DateTime.Today.AddDays(-days);
+        var to = DateTime.Today.AddDays(1);   // exklusiv → heute ist mit drin
+
+        sets = await Api.GetExerciseSetsAsync(from, to, Id) ?? new();
+
+        // Dieselbe Serie, die auch der Chart zeichnet – für Bestwert und "Zuletzt".
+        points = SportMath.DailySeries(exercise!.Kind, sets);
+    }
+
+    private async Task ChangeRangeAsync(int newDays)
+    {
+        days = newDays;
+        await LoadPointsAsync();
+    }
+}

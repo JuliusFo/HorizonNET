@@ -1,0 +1,194 @@
+@inject ApiService Api
+@inject ToastService Toast
+
+@* Bearbeiten eines einzelnen Satzes. Die Felder richten sich nach der Art der Übung –
+   ein Laufeintrag hat keine Wiederholungen. Angelegt wird nicht hier, sondern direkt
+   auf der Trainingsseite (dort zählt Tempo, nicht Vollständigkeit). *@
+@if (Visible && Set is not null)
+{
+    <div class="set-dialog-backdrop" @onclick="CloseAsync"></div>
+    <div class="set-dialog">
+        <div class="set-dialog-content" @onclick:stopPropagation="true">
+            <EditForm Model="model" OnValidSubmit="SaveAsync">
+                <div class="set-dialog-header">
+                    <div class="text-truncate">
+                        <div class="fw-semibold">Satz bearbeiten</div>
+                        <div class="small text-muted text-truncate">@Set.ExerciseName · Satz @Set.SetNumber</div>
+                    </div>
+                    <button type="button" class="btn-close" @onclick="CloseAsync" aria-label="Schließen"></button>
+                </div>
+
+                <div class="set-dialog-body">
+                    <div class="mb-3">
+                        <label class="form-label small text-muted mb-1">Zeitpunkt</label>
+                        <InputDate Type="InputDateType.DateTimeLocal" class="form-control form-control-sm"
+                                   @bind-Value="model.PerformedAt" />
+                    </div>
+
+                    @if (Set.Kind is ExerciseKind.Strength or ExerciseKind.Bodyweight)
+                    {
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label small text-muted mb-1">Wiederholungen</label>
+                                <InputNumber class="form-control form-control-sm" @bind-Value="model.Reps" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small text-muted mb-1">
+                                    @(Set.Kind == ExerciseKind.Strength ? "Gewicht (kg)" : "Zusatzgewicht (kg)")
+                                </label>
+                                <InputNumber class="form-control form-control-sm" @bind-Value="model.WeightKg" step="0.25" />
+                            </div>
+                        </div>
+                    }
+
+                    @if (Set.Kind is ExerciseKind.Endurance)
+                    {
+                        <div class="row g-2 mb-3">
+                            <div class="col-4">
+                                <label class="form-label small text-muted mb-1">Strecke (km)</label>
+                                <InputNumber class="form-control form-control-sm" @bind-Value="model.DistanceKm" step="0.1" />
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small text-muted mb-1">Minuten</label>
+                                <InputNumber class="form-control form-control-sm" @bind-Value="model.Minutes" />
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small text-muted mb-1">Sekunden</label>
+                                <InputNumber class="form-control form-control-sm" @bind-Value="model.Seconds" />
+                            </div>
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label small text-muted mb-1">Anstrengung (1–10)</label>
+                        <InputNumber class="form-control form-control-sm" @bind-Value="model.Rpe" min="1" max="10" />
+                    </div>
+
+                    <div>
+                        <label class="form-label small text-muted mb-1">Notiz</label>
+                        <InputText class="form-control form-control-sm" @bind-Value="model.Notes" />
+                    </div>
+
+                    @if (error is not null)
+                    {
+                        <div class="alert alert-danger py-1 mt-3 mb-0">@error</div>
+                    }
+                </div>
+
+                <div class="set-dialog-footer">
+                    <button type="button" class="btn btn-outline-danger" @onclick="DeleteAsync"
+                            disabled="@isSaving">Löschen</button>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary" @onclick="CloseAsync">Abbrechen</button>
+                        <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                            @(isSaving ? "Speichert…" : "Speichern")
+                        </button>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+
+    [Parameter] public ExerciseSetResponseDto? Set { get; set; }
+
+    [Parameter] public EventCallback<ExerciseSetResponseDto> OnSaved { get; set; }
+
+    [Parameter] public EventCallback<int> OnDeleted { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private SetFormModel model = new();
+    private bool isSaving;
+    private string? error;
+    private bool loaded;
+    private int? loadedId;
+
+    protected override void OnParametersSet()
+    {
+        if (!Visible || Set is null) { loaded = false; loadedId = null; return; }
+        if (loaded && loadedId == Set.Id) return;
+
+        loaded = true;
+        loadedId = Set.Id;
+        error = null;
+
+        model = new SetFormModel
+        {
+            PerformedAt = Set.PerformedAt,
+            Reps = Set.Reps,
+            WeightKg = Set.WeightKg,
+            // Meter/Sekunden sind die Speicherform; das Formular zeigt km und min:sec.
+            DistanceKm = Set.DistanceMeters is int m ? Math.Round(m / 1000.0, 3) : null,
+            Minutes = Set.DurationSeconds is int d ? d / 60 : null,
+            Seconds = Set.DurationSeconds is int d2 ? d2 % 60 : null,
+            Rpe = Set.Rpe,
+            Notes = Set.Notes
+        };
+    }
+
+    private async Task SaveAsync()
+    {
+        if (Set is null) return;
+
+        isSaving = true;
+        error = null;
+
+        var (saved, apiError) = await Api.UpdateExerciseSetAsync(Set.Id, new ExerciseSetUpdateDto(
+            model.PerformedAt,
+            model.Reps,
+            model.WeightKg,
+            model.DistanceKm is double km ? (int)Math.Round(km * 1000) : null,
+            model.TotalSeconds,
+            model.Rpe,
+            string.IsNullOrWhiteSpace(model.Notes) ? null : model.Notes.Trim()));
+
+        isSaving = false;
+
+        if (saved is null)
+        {
+            // Die typabhängige Regel der API im Klartext zeigen statt "hat nicht geklappt".
+            error = apiError;
+            return;
+        }
+
+        Toast.ShowSuccess("Gespeichert");
+        await OnSaved.InvokeAsync(saved);
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (Set is null) return;
+
+        var id = Set.Id;
+        if (!await Api.DeleteExerciseSetAsync(id))
+        {
+            error = "Löschen fehlgeschlagen.";
+            return;
+        }
+
+        await OnDeleted.InvokeAsync(id);
+    }
+
+    private Task CloseAsync() => OnClose.InvokeAsync();
+
+    private class SetFormModel
+    {
+        public DateTime PerformedAt { get; set; } = DateTime.Now;
+        public int? Reps { get; set; }
+        public double? WeightKg { get; set; }
+        public double? DistanceKm { get; set; }
+        public int? Minutes { get; set; }
+        public int? Seconds { get; set; }
+        public int? Rpe { get; set; }
+        public string? Notes { get; set; }
+
+        // Dauer nur, wenn überhaupt etwas eingegeben wurde – sonst null (die API
+        // verlangt bei Ausdauer Strecke ODER Dauer, nicht zwingend beides).
+        public int? TotalSeconds =>
+            Minutes is null && Seconds is null ? null : (Minutes ?? 0) * 60 + (Seconds ?? 0);
+    }
+}

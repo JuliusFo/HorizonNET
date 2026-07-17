@@ -1,0 +1,185 @@
+@inject ApiService Api
+@inject ToastService Toast
+
+@* Dialog zum Anlegen UND Bearbeiten einer Übung. Visible steuert die Sichtbarkeit;
+   Exercise = null bedeutet "neue Übung" – Muster wie ProjectEditDialog. *@
+@if (Visible)
+{
+    <div class="ex-dialog-backdrop" @onclick="CloseAsync"></div>
+    <div class="ex-dialog">
+        <div class="ex-dialog-content" @onclick:stopPropagation="true">
+            <EditForm Model="model" OnValidSubmit="SaveAsync">
+                <DataAnnotationsValidator />
+
+                <div class="ex-dialog-header">
+                    <h5 class="mb-0">@(IsNew ? "Neue Übung" : "Übung bearbeiten")</h5>
+                    <button type="button" class="btn-close" @onclick="CloseAsync" aria-label="Schließen"></button>
+                </div>
+
+                <div class="ex-dialog-body">
+                    <div class="mb-3">
+                        <label class="form-label">Name *</label>
+                        <InputText @ref="nameInput" class="form-control" @bind-Value="model.Name"
+                                   placeholder="z. B. Kurzhantel Bankdrücken" />
+                        <ValidationMessage For="() => model.Name" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Art</label>
+                        <InputSelect class="form-select" @bind-Value="model.Kind" disabled="@(!IsNew)">
+                            @foreach (var k in Enum.GetValues<ExerciseKind>())
+                            {
+                                <option value="@k">@KindLabel(k)</option>
+                            }
+                        </InputSelect>
+                        <div class="form-text small">
+                            @KindHint(model.Kind)
+                            @if (!IsNew)
+                            {
+                                <text> Die Art lässt sich nachträglich nicht ändern – sie bestimmt,
+                                welche Felder die bereits erfassten Sätze belegen.</text>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Hinweis</label>
+                        <InputTextArea class="form-control" rows="2" @bind-Value="model.Notes"
+                                       placeholder="z. B. Ellenbogen eng am Körper" />
+                    </div>
+
+                    @if (!IsNew)
+                    {
+                        <div class="form-check">
+                            <InputCheckbox class="form-check-input" id="exActive" @bind-Value="model.IsActive" />
+                            <label class="form-check-label" for="exActive">Aktiv</label>
+                            <div class="form-text small">
+                                Inaktive Übungen verschwinden aus der Erfassung; Historie und
+                                Auswertung bleiben erhalten.
+                            </div>
+                        </div>
+                    }
+
+                    @if (error is not null)
+                    {
+                        <div class="alert alert-danger py-1 mt-3 mb-0">@error</div>
+                    }
+                </div>
+
+                <div class="ex-dialog-footer">
+                    <button type="button" class="btn btn-outline-secondary" @onclick="CloseAsync">Abbrechen</button>
+                    <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                        @(isSaving ? "Speichert…" : IsNew ? "Anlegen" : "Speichern")
+                    </button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+
+    // Zu bearbeitende Übung; null = Anlege-Modus.
+    [Parameter] public ExerciseResponseDto? Exercise { get; set; }
+
+    // Liefert die angelegte ODER aktualisierte Übung (schließt den Dialog).
+    [Parameter] public EventCallback<ExerciseResponseDto> OnSaved { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private ExerciseFormModel model = new();
+    private InputText? nameInput;
+    private bool isSaving;
+    private string? error;
+    private bool loaded;
+    private int? loadedId;
+    private bool focusPending;
+
+    private bool IsNew => Exercise is null;
+
+    public static string KindLabel(ExerciseKind kind) => kind switch
+    {
+        ExerciseKind.Strength => "Kraft (Wiederholungen + Gewicht)",
+        ExerciseKind.Bodyweight => "Körpergewicht (Wiederholungen)",
+        ExerciseKind.Endurance => "Ausdauer (Strecke + Dauer)",
+        _ => kind.ToString()
+    };
+
+    private static string KindHint(ExerciseKind kind) => kind switch
+    {
+        ExerciseKind.Strength => "Für Hanteln & Geräte. Fortschritt = geschätztes 1RM.",
+        ExerciseKind.Bodyweight => "Für Liegestütze & Co. Fortschritt = Wiederholungen.",
+        ExerciseKind.Endurance => "Für Laufen & Radfahren. Fortschritt = Pace.",
+        _ => string.Empty
+    };
+
+    protected override void OnParametersSet()
+    {
+        if (!Visible) { loaded = false; loadedId = null; return; }
+        if (loaded && loadedId == Exercise?.Id) return;
+
+        loaded = true;
+        loadedId = Exercise?.Id;
+        error = null;
+        focusPending = true;
+
+        model = Exercise is null
+            ? new ExerciseFormModel()
+            : new ExerciseFormModel
+            {
+                Name = Exercise.Name,
+                Kind = Exercise.Kind,
+                Notes = Exercise.Notes,
+                IsActive = Exercise.IsActive
+            };
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!focusPending) return;
+        focusPending = false;
+
+        if (nameInput?.Element is ElementReference el) await el.FocusAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        isSaving = true;
+        error = null;
+
+        var notes = string.IsNullOrWhiteSpace(model.Notes) ? null : model.Notes.Trim();
+
+        var saved = IsNew
+            ? await Api.CreateExerciseAsync(new ExerciseCreateDto(model.Name.Trim(), model.Kind, notes))
+            : await Api.UpdateExerciseAsync(Exercise!.Id,
+                  new ExerciseUpdateDto(model.Name.Trim(), notes, model.IsActive));
+
+        isSaving = false;
+
+        if (saved is null)
+        {
+            error = IsNew ? "Anlegen fehlgeschlagen." : "Speichern fehlgeschlagen.";
+            return;
+        }
+
+        Toast.ShowSuccess(IsNew ? $"„{saved.Name}\" angelegt" : "Gespeichert");
+        await OnSaved.InvokeAsync(saved);
+    }
+
+    private Task CloseAsync() => OnClose.InvokeAsync();
+
+    private class ExerciseFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Name ist erforderlich.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(200)]
+        public string Name { get; set; } = string.Empty;
+
+        public ExerciseKind Kind { get; set; } = ExerciseKind.Strength;
+
+        [System.ComponentModel.DataAnnotations.MaxLength(1000)]
+        public string? Notes { get; set; }
+
+        public bool IsActive { get; set; } = true;
+    }
+}

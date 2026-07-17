@@ -1,0 +1,36 @@
+@* Fortschrittskurve einer Übung. Der gezeigte Leitwert hängt an der Art der Übung
+   (1RM / Wiederholungen / Pace) – die Regel dazu steht in SportMath, damit Übungs-Detail
+   und Auswertung dieselbe Kurve zeichnen. *@
+@if (Series.Count == 0)
+{
+    <p class="text-muted small mb-0">In diesem Zeitraum ist nichts erfasst.</p>
+}
+else
+{
+    <RadzenChart Style="@($"height:{Height}px")">
+        <RadzenLineSeries Data="Series" CategoryProperty="Day" ValueProperty="Display"
+                          Title="@SportMath.MetricLabel(Kind)" Smooth="false">
+            <RadzenMarkers MarkerType="MarkerType.Circle" />
+        </RadzenLineSeries>
+        <RadzenCategoryAxis FormatString="{0:dd.MM.}" />
+        <RadzenValueAxis>
+            <RadzenGridLines Visible="true" />
+        </RadzenValueAxis>
+    </RadzenChart>
+}
+
+@code {
+    [Parameter, EditorRequired] public ExerciseKind Kind { get; set; }
+
+    // Bereits geladene Sätze der Übung im gewünschten Zeitraum.
+    [Parameter, EditorRequired] public IEnumerable<ExerciseSetResponseDto> Sets { get; set; } = [];
+
+    [Parameter] public int Height { get; set; } = 260;
+
+    // Die Serie steht auch dem Aufrufer zur Verfügung (Bestwert, "Zuletzt"), damit sie
+    // nicht zweimal berechnet wird.
+    public List<SportMath.DayMetric> Series { get; private set; } = new();
+
+    protected override void OnParametersSet() =>
+        Series = SportMath.DailySeries(Kind, Sets);
+}

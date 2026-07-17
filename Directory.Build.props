@@ -8,12 +8,13 @@
     Version anheben = nur diese eine Zeile ändern (optional zusätzlich `git tag vX.Y.Z`).
     <Version> setzt AssemblyVersion (X.Y.Z.0), FileVersion und InformationalVersion (X.Y.Z).
 
-    Startwert war 0.9.0 ("langsam Richtung 1.0"); 0.10.0 nach Phase 10. Der ursprüngliche
-    Plan (1.0.0 nach Phase 9, siehe docs/konzept-versionierung.md) wurde bewusst verworfen –
-    die 1.0 kommt später. Minor zählt weiter hoch: nach 0.10.0 folgt 0.11.0, nicht 0.2.
+    Startwert war 0.9.0 ("langsam Richtung 1.0"); 0.10.0 nach Phase 10, 0.11.0 nach Phase 11.
+    Der ursprüngliche Plan (1.0.0 nach Phase 9, siehe docs/konzept-versionierung.md) wurde
+    bewusst verworfen – die 1.0 kommt später. Minor zählt weiter hoch: nach 0.11.0 folgt
+    0.12.0, nicht 0.2.
   -->
   <PropertyGroup>
-    <Version>0.10.0</Version>
+    <Version>0.11.0</Version>
   </PropertyGroup>
 
 </Project>

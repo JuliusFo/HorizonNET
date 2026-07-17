@@ -1,0 +1,152 @@
+@page "/sport/history"
+@inject ApiService Api
+@inject ToastService Toast
+
+<PageTitle>Verlauf – HorizonNET</PageTitle>
+
+<div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+    <div>
+        <h1 class="mb-1">Verlauf</h1>
+        <a href="sport" class="text-decoration-none small">← Zurück zum Training</a>
+    </div>
+    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+        <a href="sport/analysis" class="btn btn-sm btn-outline-secondary">Auswertung</a>
+        <label class="form-label small text-muted mb-0 ms-2">Zeitraum</label>
+        <select class="form-select form-select-sm w-auto" value="@days"
+                @onchange="e => ChangeRangeAsync(int.Parse(e.Value!.ToString()!))">
+            <option value="30">30 Tage</option>
+            <option value="90">90 Tage</option>
+            <option value="365">1 Jahr</option>
+        </select>
+    </div>
+</div>
+
+@if (sets is null)
+{
+    <p>Wird geladen…</p>
+}
+else if (sets.Count == 0)
+{
+    <p class="text-muted">In diesem Zeitraum ist nichts erfasst.</p>
+}
+else
+{
+    @* Nach Tagen gruppiert – eine "Einheit" ist schlicht ein Trainingstag. *@
+    @foreach (var group in Days)
+    {
+        <div class="card mb-3" @key="group.Key">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="fw-semibold">@group.Key.ToString("dddd, dd.MM.yyyy")</span>
+                <span class="small text-muted">
+                    @group.Count() @(group.Count() == 1 ? "Satz" : "Sätze")
+                    @if (BodyWeightOn(group.Key) is double kg)
+                    {
+                        <span> · @kg.ToString("0.#") kg</span>
+                    }
+                </span>
+            </div>
+            <div class="card-body py-2">
+                @foreach (var perExercise in group.GroupBy(s => new { s.ExerciseId, s.ExerciseName, s.Kind })
+                                                  .OrderBy(g => g.Key.ExerciseName))
+                {
+                    var list = perExercise.OrderBy(s => s.SetNumber).ToList();
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <a href="@($"sport/exercises/{perExercise.Key.ExerciseId}")"
+                               class="fw-semibold exercise-link">@perExercise.Key.ExerciseName</a>
+                            @if (SportMath.DailyMetric(perExercise.Key.Kind, list) is double metric)
+                            {
+                                <span class="small text-muted">
+                                    @SportMath.MetricLabel(perExercise.Key.Kind):
+                                    <strong>@SportMath.FormatMetric(perExercise.Key.Kind, metric)</strong>
+                                </span>
+                            }
+                        </div>
+                        <ul class="list-unstyled mb-0 ms-3 small">
+                            @foreach (var s in list)
+                            {
+                                <li @key="s.Id" class="d-flex align-items-center gap-2">
+                                    <span class="text-muted">@s.SetNumber.</span>
+                                    <span class="flex-grow-1">@SportMath.Summary(s)</span>
+                                    @if (s.Rpe is int rpe)
+                                    {
+                                        <span class="text-muted">RPE @rpe</span>
+                                    }
+                                    @if (s.Notes is not null)
+                                    {
+                                        <span class="text-muted fst-italic text-truncate">@s.Notes</span>
+                                    }
+                                    <button class="btn btn-sm btn-link p-0 text-muted" title="Bearbeiten"
+                                            @onclick="() => selectedSet = s">✎</button>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+}
+
+<ExerciseSetDialog Visible="selectedSet is not null"
+                   Set="selectedSet"
+                   OnSaved="HandleSetSaved"
+                   OnDeleted="HandleSetDeleted"
+                   OnClose="@(() => selectedSet = null)" />
+
+@code {
+    private List<ExerciseSetResponseDto>? sets;
+    private List<BodyWeightResponseDto>? weights;
+    private ExerciseSetResponseDto? selectedSet;
+    private int days = 30;
+
+    // Neueste Einheit zuerst.
+    private IEnumerable<IGrouping<DateTime, ExerciseSetResponseDto>> Days =>
+        (sets ?? []).GroupBy(s => s.PerformedAt.Date).OrderByDescending(g => g.Key);
+
+    private double? BodyWeightOn(DateTime date) =>
+        weights?.FirstOrDefault(w => w.MeasuredOn == DateOnly.FromDateTime(date))?.WeightKg;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        var from = DateTime.Today.AddDays(-days);
+        var to = DateTime.Today.AddDays(1);   // exklusiv → heute ist mit drin
+
+        sets = await Api.GetExerciseSetsAsync(from, to) ?? new();
+        weights = await Api.GetBodyWeightAsync(DateOnly.FromDateTime(from), DateOnly.FromDateTime(DateTime.Today)) ?? new();
+    }
+
+    private async Task ChangeRangeAsync(int newDays)
+    {
+        days = newDays;
+        sets = null;
+        await LoadAsync();
+    }
+
+    private void HandleSetSaved(ExerciseSetResponseDto saved)
+    {
+        if (sets is not null)
+        {
+            var idx = sets.FindIndex(s => s.Id == saved.Id);
+            if (idx >= 0) sets[idx] = saved;
+        }
+        selectedSet = null;
+    }
+
+    private void HandleSetDeleted(int id)
+    {
+        var removed = sets?.FirstOrDefault(s => s.Id == id);
+        sets?.RemoveAll(s => s.Id == id);
+        selectedSet = null;
+
+        Toast.ShowUndo(removed is null ? "Satz gelöscht" : $"Satz gelöscht ({SportMath.Summary(removed)})",
+            async () =>
+            {
+                if (!await Api.RestoreExerciseSetAsync(id)) return;
+                await LoadAsync();
+                await InvokeAsync(StateHasChanged);
+            });
+    }
+}
