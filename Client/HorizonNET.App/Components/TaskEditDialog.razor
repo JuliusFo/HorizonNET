@@ -74,6 +74,56 @@
                             </InputSelect>
                         </div>
                     </div>
+
+                    @* Optionale Felder Link / "Warten auf" – nur im Bearbeiten-Modus:
+                       TaskCreateDto kennt sie nicht, also erst nach dem Anlegen setzbar.
+                       Bewusst hierher (in den Editor) gezogen, damit die Detailseite reine
+                       Ansicht bleibt und diese Felder trotzdem editierbar sind. *@
+                    @if (!IsNew)
+                    {
+                        @if (showLink)
+                        {
+                            <div class="mt-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label class="form-label mb-0">Link</label>
+                                    <button type="button" class="btn-close btn-sm" @onclick="RemoveLink"
+                                            title="Feld entfernen"></button>
+                                </div>
+                                <InputText class="form-control" @bind-Value="editModel.Link" placeholder="https://…" />
+                            </div>
+                        }
+                        @if (showWaitingFor)
+                        {
+                            <div class="mt-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label class="form-label mb-0">Warten auf</label>
+                                    <button type="button" class="btn-close btn-sm" @onclick="RemoveWaitingFor"
+                                            title="Feld entfernen"></button>
+                                </div>
+                                <InputText class="form-control" @bind-Value="editModel.WaitingFor"
+                                           placeholder="z. B. Rückmeldung von Anna" />
+                                @if (Task!.WaitingFor is null)
+                                {
+                                    <div class="form-text small">Setzt den Task beim Speichern auf „Pausiert".</div>
+                                }
+                            </div>
+                        }
+                        @if (!showLink || !showWaitingFor)
+                        {
+                            <div class="d-flex flex-wrap gap-2 mt-3">
+                                @if (!showLink)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                                            @onclick="() => showLink = true">+ Link</button>
+                                }
+                                @if (!showWaitingFor)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                                            @onclick="() => showWaitingFor = true">+ Warten auf</button>
+                                }
+                            </div>
+                        }
+                    }
                     @if (editError is not null)
                     {
                         <div class="alert alert-danger py-1 mt-3 mb-0">@editError</div>
@@ -151,6 +201,11 @@
     private int? loadedTaskId;
     private bool focusPending;
 
+    // Optionale Felder: eingeblendet, wenn ein Wert gespeichert ist oder der Nutzer
+    // sie hinzugefügt hat (nur Bearbeiten-Modus).
+    private bool showLink;
+    private bool showWaitingFor;
+
     private bool IsNew => Task is null;
 
     protected override void OnParametersSet()
@@ -167,9 +222,11 @@
 
         if (IsNew)
         {
-            subTasks     = new();
-            editModel    = new TaskEditModel();  // Vorbelegung: Geplant, Priorität Mittel
-            focusPending = true;                 // direkt lostippen können
+            subTasks       = new();
+            editModel      = new TaskEditModel();  // Vorbelegung: Geplant, Priorität Mittel
+            showLink       = false;
+            showWaitingFor = false;
+            focusPending   = true;                 // direkt lostippen können
             return;
         }
 
@@ -182,8 +239,26 @@
             StartTime   = Task.StartTime,
             EndTime     = Task.EndTime,
             Priority    = Enum.Parse<Priority>(Task.Priority),
-            Status      = Task.Status
+            Status      = Task.Status,
+            Link        = Task.Link,
+            WaitingFor  = Task.WaitingFor
         };
+
+        showLink       = Task.Link is not null;
+        showWaitingFor = Task.WaitingFor is not null;
+    }
+
+    // Feld entfernen heißt Wert leeren – wirksam wird das erst beim Speichern.
+    private void RemoveLink()
+    {
+        showLink       = false;
+        editModel.Link = null;
+    }
+
+    private void RemoveWaitingFor()
+    {
+        showWaitingFor       = false;
+        editModel.WaitingFor = null;
     }
 
     // Fokus erst nach dem Render: vorher gibt es das Eingabefeld noch nicht.
@@ -215,14 +290,29 @@
         }
         else
         {
-            // Die optionalen Felder zeigt der Dialog nicht an – bestehende Werte unverändert
-            // durchreichen, sonst löscht das Speichern hier, was auf der Detailseite gesetzt
-            // wurde. (Task.WaitingFor bleibt gleich → die Pausiert-Regel greift nicht.)
+            // Feld ausgeblendet oder leer → Link löschen; sonst getrimmt übernehmen.
+            var link = showLink && !string.IsNullOrWhiteSpace(editModel.Link)
+                ? editModel.Link.Trim()
+                : null;
+
+            if (link is not null && !TaskLink.IsValid(link))
+            {
+                editError = "Link muss mit http:// oder https:// beginnen.";
+                isSaving  = false;
+                await Sound.ErrorAsync();
+                return;
+            }
+
+            // Feld ausgeblendet oder leer → "Warten auf" löschen (Server zieht Pausiert nach).
+            var waitingFor = showWaitingFor && !string.IsNullOrWhiteSpace(editModel.WaitingFor)
+                ? editModel.WaitingFor.Trim()
+                : null;
+
             saved = await Api.UpdateTaskAsync(Task!.Id, new TaskUpdateDto(
                 editModel.Title, description,
                 editModel.DueDate, editModel.StartTime, editModel.EndTime,
                 editModel.Status, editModel.Priority, Task.ProjectId,
-                Task.Link, Task.WaitingFor));
+                link, waitingFor));
         }
 
         isSaving = false;
@@ -334,5 +424,11 @@
         public DateTime? EndTime { get; set; }
         public Priority Priority { get; set; } = Priority.Medium;
         public WorkStatus Status { get; set; } = WorkStatus.Planned;
+
+        [System.ComponentModel.DataAnnotations.MaxLength(2048)]
+        public string? Link { get; set; }
+
+        [System.ComponentModel.DataAnnotations.MaxLength(200)]
+        public string? WaitingFor { get; set; }
     }
 }
