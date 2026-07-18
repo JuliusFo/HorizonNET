@@ -363,8 +363,11 @@ else
     {
         if (noteEditor is not null) await noteEditor.FlushAsync();
 
-        // Neue Notiz direkt mit diesem Task verknüpft anlegen.
-        var created = await Api.CreateNoteAsync(new NoteCreateDto("Neue Notiz", null, TaskItemId: Id));
+        // Neue Notiz direkt mit Task UND dessen Projekt verknüpfen – die Zuordnung ist
+        // sonst nur halb gesetzt (Task ja, Projekt nein), obwohl der Task zu einem
+        // Projekt gehört.
+        var created = await Api.CreateNoteAsync(
+            new NoteCreateDto("Neue Notiz", null, TaskItemId: Id, ProjectId: task.ProjectId));
         if (created is null || notes is null) return;
 
         notes.Insert(0, NoteListItemDto.From(created));

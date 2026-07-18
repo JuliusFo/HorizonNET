@@ -32,23 +32,43 @@
     private string CssClass => string.IsNullOrEmpty(Class) ? "project-select" : $"project-select {Class}";
 
     private int? currentValue;
+    private List<ProjectResponseDto> allProjects = new();
+    private Dictionary<int, string> wsNames = new();
     private List<ProjectOption> options = new();
     private record ProjectOption(int Id, string Label, string? Color);
     private static readonly StringComparer NameComparer = StringComparer.CurrentCultureIgnoreCase;
 
-    protected override void OnParametersSet() => currentValue = Value;
+    protected override void OnParametersSet()
+    {
+        // Wechselt die Auswahl auf ein anderes Projekt, die Optionen neu bauen: nur so
+        // bleibt ein bereits zugeordnetes, inaktives Projekt sichtbar (siehe BuildOptions).
+        var changed = currentValue != Value;
+        currentValue = Value;
+        if (changed && allProjects.Count > 0) BuildOptions();
+    }
 
     protected override async Task OnInitializedAsync()
     {
         await ProjectState.EnsureLoadedAsync();
         await WorkspaceState.EnsureLoadedAsync();
 
-        var wsNames = (WorkspaceState.Workspaces ?? [])
+        wsNames = (WorkspaceState.Workspaces ?? [])
             .ToDictionary(w => w.Id, w => w.Name);
+        allProjects = ProjectState.Projects ?? [];
 
-        // Sortiert nach Arbeitsbereichsname (A-Z), dann Projektname (A-Z);
-        // Label = „Arbeitsbereich - Projekt" (ohne Arbeitsbereich nur der Projektname).
-        options = (ProjectState.Projects ?? [])
+        BuildOptions();
+    }
+
+    // Nur aktive Projekte zur Auswahl anbieten – pausierte und archivierte gehören nicht
+    // in eine Neuzuweisung. Ausnahme: das aktuell zugeordnete Projekt bleibt immer dabei,
+    // sonst zeigte das Dropdown bei einer Notiz an einem archivierten Projekt „leer" an,
+    // obwohl eine Zuordnung besteht.
+    // Sortiert nach Arbeitsbereichsname (A-Z), dann Projektname (A-Z);
+    // Label = „Arbeitsbereich - Projekt" (ohne Arbeitsbereich nur der Projektname).
+    private void BuildOptions()
+    {
+        options = allProjects
+            .Where(p => p.Status == "Active" || p.Id == currentValue)
             .Select(p => new
             {
                 p.Id,
