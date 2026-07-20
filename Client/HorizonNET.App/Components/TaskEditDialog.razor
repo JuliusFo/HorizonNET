@@ -75,6 +75,20 @@
                         </div>
                     </div>
 
+                    @* Projekt – nur bei bestehenden Haupt-Tasks: Sub-Tasks tragen immer das
+                       Projekt ihres Haupt-Tasks, und beim Anlegen kommt es aus dem Kontext
+                       (DefaultProjectId). Leeren verschiebt den Task zurück in die Inbox. *@
+                    @if (!IsNew && Task!.ParentTaskId is null)
+                    {
+                        <div class="mt-3">
+                            @* d-block: die Radzen-Auswahl ist inline-block, sonst rutscht das Label daneben. *@
+                            <label class="form-label d-block">Projekt</label>
+                            <ProjectSelect @bind-Value="editModel.ProjectId"
+                                           Placeholder="— kein Projekt (Inbox) —"
+                                           Class="project-select-block" />
+                        </div>
+                    }
+
                     @* Optionale Felder Link / "Warten auf" – nur im Bearbeiten-Modus:
                        TaskCreateDto kennt sie nicht, also erst nach dem Anlegen setzbar.
                        Bewusst hierher (in den Editor) gezogen, damit die Detailseite reine
@@ -241,7 +255,8 @@
             Priority    = Enum.Parse<Priority>(Task.Priority),
             Status      = Task.Status,
             Link        = Task.Link,
-            WaitingFor  = Task.WaitingFor
+            WaitingFor  = Task.WaitingFor,
+            ProjectId   = Task.ProjectId
         };
 
         showLink       = Task.Link is not null;
@@ -311,7 +326,7 @@
             saved = await Api.UpdateTaskAsync(Task!.Id, new TaskUpdateDto(
                 editModel.Title, description,
                 editModel.DueDate, editModel.StartTime, editModel.EndTime,
-                editModel.Status, editModel.Priority, Task.ProjectId,
+                editModel.Status, editModel.Priority, editModel.ProjectId,
                 link, waitingFor));
         }
 
@@ -346,7 +361,7 @@
             editModel.Title,
             string.IsNullOrWhiteSpace(editModel.Description) ? null : editModel.Description,
             editModel.Priority,
-            Task.ProjectId));
+            editModel.ProjectId));
 
         isSaving = false;
 
@@ -416,6 +431,7 @@
         public DateTime? EndTime { get; set; }
         public Priority Priority { get; set; } = Priority.Medium;
         public WorkStatus Status { get; set; } = WorkStatus.Planned;
+        public int? ProjectId { get; set; }
 
         [System.ComponentModel.DataAnnotations.MaxLength(2048)]
         public string? Link { get; set; }

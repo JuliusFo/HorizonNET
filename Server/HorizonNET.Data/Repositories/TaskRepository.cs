@@ -89,6 +89,7 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         if (existing is null) return null;
 
         var previousWaitingFor = existing.WaitingFor;
+        var previousProjectId  = existing.ProjectId;
 
         existing.Title = updated.Title;
         existing.Description = updated.Description;
@@ -96,6 +97,7 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         existing.WaitingFor = updated.WaitingFor;
         existing.Priority = updated.Priority;
         existing.ProjectId = updated.ProjectId;
+        await MoveSubTasksToProjectAsync(existing, previousProjectId, updated.ProjectId);
         ApplySchedule(existing, updated.DueDate, updated.StartTime, updated.EndTime);
         existing.UpdatedAt = DateTime.Now;
 
@@ -140,11 +142,31 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         var existing = await context.Tasks.FindAsync(id);
         if (existing is null) return null;
 
+        var previousProjectId = existing.ProjectId;
         existing.ProjectId = projectId;
         existing.UpdatedAt = DateTime.Now;
+        await MoveSubTasksToProjectAsync(existing, previousProjectId, projectId);
 
         await context.SaveChangesAsync();
         return await GetByIdAsync(id) ?? existing;
+    }
+
+    // Sub-Tasks tragen immer die ProjectId ihres Haupt-Tasks – sie erben sie beim Anlegen.
+    // Beim Umhängen müssen sie deshalb mitwandern. Sonst blieben sie im alten Projekt
+    // zurück und würden beim Löschen JENES Projekts mit gelöscht, obwohl ihr Haupt-Task
+    // längst woanders lebt (ProjectRepository.DeleteAsync greift über die ProjectId).
+    // Gespeichert wird vom Aufrufer.
+    private async Task MoveSubTasksToProjectAsync(TaskItem task, int? previousProjectId, int? projectId)
+    {
+        if (previousProjectId == projectId) return;   // nichts umgehängt
+        if (task.ParentTaskId is not null) return;    // ein Sub-Task hat selbst keine
+
+        var subTasks = await context.Tasks
+            .Where(t => t.ParentTaskId == task.Id)
+            .ToListAsync();
+
+        foreach (var sub in subTasks)
+            sub.ProjectId = projectId;
     }
 
     // Statuswechsel samt der daran hängenden Regeln. Gemeinsamer Kern von UpdateAsync,
