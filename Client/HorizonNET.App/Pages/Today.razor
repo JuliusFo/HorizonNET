@@ -231,9 +231,8 @@
         var updated = await Api.SetTaskScheduleAsync(task.Id, DateTime.Today, task.StartTime, task.EndTime);
         if (updated is null || allTasks is null) return;
 
-        // API liefert beim Update keinen Projektnamen mit – lokal erhalten.
         var idx = allTasks.FindIndex(t => t.Id == task.Id);
-        if (idx >= 0) allTasks[idx] = updated with { ProjectName = task.ProjectName };
+        if (idx >= 0) allTasks[idx] = updated;
     }
 
     // ── Daily Tasks ──────────────────────────────────────────────────────────

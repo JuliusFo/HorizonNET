@@ -328,15 +328,7 @@
         if (editModel.Status == WorkStatus.Done && !wasDone)
             await Sound.SuccessAsync();
 
-        if (IsNew)
-        {
-            Toast.ShowSuccess($"„{saved.Title}\" angelegt");
-        }
-        else
-        {
-            // Die API liefert beim Update keine Sub-Tasks mit – lokalen Stand erhalten.
-            saved = saved with { SubTasks = subTasks.Count > 0 ? subTasks.ToList() : null };
-        }
+        if (IsNew) Toast.ShowSuccess($"„{saved.Title}\" angelegt");
 
         await OnSaved.InvokeAsync(saved);
     }

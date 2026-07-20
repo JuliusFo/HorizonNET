@@ -295,17 +295,12 @@ else
 
     private void HandleTaskSaved(TaskResponseDto saved)
     {
-        // Der Dialog erhält die Sub-Tasks; den Projektnamen liefert die Update-API nicht
-        // mit – aus dem bisherigen Stand übernehmen.
-        task = saved with { ProjectName = task?.ProjectName ?? saved.ProjectName };
+        task = saved;
         editDialogVisible = false;
     }
 
     // Live-Aktualisierung (Sub-Tasks im Dialog geändert) – Dialog bleibt offen.
-    private void HandleTaskUpdated(TaskResponseDto updated)
-    {
-        task = updated with { ProjectName = task?.ProjectName ?? updated.ProjectName };
-    }
+    private void HandleTaskUpdated(TaskResponseDto updated) => task = updated;
 
     private void HandleTaskDeleted(int id)
     {
@@ -319,8 +314,7 @@ else
     // mitgeändert („In Arbeit" bzw. „Pausiert").
     private async Task HandleTimerChangedAsync(TaskResponseDto updated)
     {
-        // Sub-Tasks/Projektname liefert der Timer-Endpunkt nicht mit – lokal erhalten.
-        task        = updated with { SubTasks = task?.SubTasks, ProjectName = task?.ProjectName };
+        task        = updated;
         timeEntries = await Api.GetTimeEntriesAsync(Id) ?? new();
     }
 
@@ -367,7 +361,7 @@ else
         // sonst nur halb gesetzt (Task ja, Projekt nein), obwohl der Task zu einem
         // Projekt gehört.
         var created = await Api.CreateNoteAsync(
-            new NoteCreateDto("Neue Notiz", null, TaskItemId: Id, ProjectId: task.ProjectId));
+            new NoteCreateDto("Neue Notiz", null, TaskItemId: Id, ProjectId: task?.ProjectId));
         if (created is null || notes is null) return;
 
         notes.Insert(0, NoteListItemDto.From(created));

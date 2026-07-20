@@ -21,7 +21,13 @@ public class ProjectRepository(AppDbContext context) : IProjectRepository
 
     public async Task<Project?> UpdateAsync(int id, Project updated)
     {
-        var existing = await context.Projects.FindAsync(id);
+        // Tasks mitladen wie in GetAll/GetById: Die Antwort trägt die Task-Zähler
+        // (das DTO zählt p.Tasks). Mit FindAsync bliebe die Sammlung leer, die Antwort
+        // meldete 0 Tasks – und der Aufrufer, der seine Liste damit aktualisiert,
+        // verlöre den Fortschritt der Projektkarte bis zum nächsten Laden.
+        var existing = await context.Projects
+            .Include(p => p.Tasks)
+            .FirstOrDefaultAsync(p => p.Id == id);
         if (existing is null) return null;
 
         existing.Name = updated.Name;

@@ -493,9 +493,7 @@ else
         var parent = tasks.FirstOrDefault(t => t.Id == task.Id);
         if (parent is not null)
         {
-            // Die API liefert beim Update keine Sub-Tasks mit – lokalen Stand erhalten,
-            // sonst verschwinden die Sub-Task-Zeilen bis zum nächsten Laden.
-            tasks[tasks.IndexOf(parent)] = updated with { SubTasks = parent.SubTasks };
+            tasks[tasks.IndexOf(parent)] = updated;
         }
         else
         {
