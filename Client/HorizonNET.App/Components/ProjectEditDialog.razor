@@ -1,6 +1,7 @@
 @inject ApiService Api
 @inject WorkspaceState WorkspaceState
 @inject IStringLocalizer<Enums> EnumL
+@inject ToastService Toast
 
 @* Dialog zum Anlegen UND Bearbeiten eines Projekts (leichtgewichtiges Overlay,
    kein JS-Interop – Muster wie TaskEditDialog).
@@ -160,6 +161,8 @@
             error = "Projekt konnte nicht gespeichert werden.";
             return;
         }
+
+        Toast.ShowSuccess(IsNew ? $"„{saved.Name}\" angelegt" : "Gespeichert");
 
         await OnSaved.InvokeAsync(saved);
     }

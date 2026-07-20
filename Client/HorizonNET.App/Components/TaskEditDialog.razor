@@ -343,7 +343,7 @@
         if (editModel.Status == WorkStatus.Done && !wasDone)
             await Sound.SuccessAsync();
 
-        if (IsNew) Toast.ShowSuccess($"„{saved.Title}\" angelegt");
+        Toast.ShowSuccess(IsNew ? $"„{saved.Title}\" angelegt" : "Gespeichert");
 
         await OnSaved.InvokeAsync(saved);
     }
