@@ -8,13 +8,16 @@
 
   <ItemGroup>
     <PackageReference Include="Google.Apis.Auth" Version="1.75.0" />
-    <PackageReference Include="Google.Apis.Calendar.v3" Version="1.75.0.4182" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9">
+    <PackageReference Include="Google.Apis.Calendar.v3" Version="1.75.0.4206" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
+    <!-- Override des transitiven Microsoft.OpenApi (2.0.0) wegen GHSA-v5pm-xwqc-g5wc;
+         gepatcht ab 2.7.5. Microsoft.AspNetCore.OpenApi 10.0.10 zieht weiterhin 2.0.0. -->
+    <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Scalar.AspNetCore" Version="2.16.5" />
+    <PackageReference Include="Scalar.AspNetCore" Version="2.16.15" />
   </ItemGroup>
 
   <ItemGroup>
