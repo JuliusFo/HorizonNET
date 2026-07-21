@@ -5,4 +5,5 @@
   <Project Path="HorizonNET.Api/HorizonNET.Api.csproj" />
   <Project Path="HorizonNET.Data/HorizonNET.Data.csproj" />
   <Project Path="HorizonNET.Domain/HorizonNET.Domain.csproj" />
+  <Project Path="HorizonNET.Tests/HorizonNET.Tests.csproj" />
 </Solution>

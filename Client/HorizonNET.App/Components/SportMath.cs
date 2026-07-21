@@ -16,7 +16,8 @@ public static class SportMath
     // Geschätzte Maximalkraft (1RM) nach Epley: Gewicht × (1 + Wdh / 30).
     // Der Sinn: eine EINZIGE vergleichbare Zahl, auch wenn mal 3×12 mit 10 kg und mal
     // 3×8 mit 15 kg trainiert wird – ohne sie vergleicht man Äpfel mit Birnen.
-    // Bei genau einer Wiederholung liefert die Formel exakt das Gewicht.
+    // Es ist bewusst eine SCHÄTZUNG: Epley überschätzt bei einer einzelnen Wiederholung
+    // um rund 3 % (100 kg × 1 → 103,3), Wdh = 1 wird nicht als Sonderfall behandelt.
     public static double? EstimatedOneRepMax(ExerciseSetResponseDto s)
     {
         if (s.Reps is not > 0 || s.WeightKg is not > 0) return null;

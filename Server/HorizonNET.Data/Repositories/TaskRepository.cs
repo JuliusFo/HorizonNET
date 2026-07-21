@@ -9,12 +9,21 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
 {
     // Zeiten werden überall mitgeladen: die Antwort-DTOs melden erfasste und laufende
     // Zeit an jedem Task (inkl. Sub-Tasks), damit jede Ansicht die Uhr zeigen kann.
+    //
+    // AsSplitQuery bei allen vier Lesepfaden: Sie laden DREI Sammlungen gleichzeitig
+    // (TimeEntries, SubTasks und deren TimeEntries). In einer einzigen Abfrage ergäbe das
+    // ein Kreuzprodukt – Zeilen = Zeiteinträge × Sub-Tasks × deren Zeiteinträge, mit dem
+    // Task-Rumpf in jeder Zeile dupliziert. Bei wenig erfasster Zeit fällt das nicht auf,
+    // wächst aber mit jedem Zeiteintrag. Getrennte Abfragen kosten hier nur ein paar
+    // Roundtrips gegen eine lokale SQLite-Datei.
+    // (Bewusst hier statt global: einfache Includes anderswo fahren mit EINER Abfrage besser.)
     public async Task<IEnumerable<TaskItem>> GetAllAsync() =>
         await context.Tasks
             .Include(t => t.Project)
             .Where(t => t.ParentTaskId == null)
             .Include(t => t.TimeEntries)
             .Include(t => t.SubTasks).ThenInclude(s => s.TimeEntries)
+            .AsSplitQuery()
             .ToListAsync();
 
     public async Task<IEnumerable<TaskItem>> GetByProjectIdAsync(int projectId) =>
@@ -22,6 +31,7 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
             .Where(t => t.ProjectId == projectId && t.ParentTaskId == null)
             .Include(t => t.TimeEntries)
             .Include(t => t.SubTasks).ThenInclude(s => s.TimeEntries)
+            .AsSplitQuery()
             .ToListAsync();
 
     public async Task<IEnumerable<TaskItem>> GetInboxAsync() =>
@@ -29,6 +39,7 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
             .Where(t => t.ProjectId == null && t.ParentTaskId == null)
             .Include(t => t.TimeEntries)
             .Include(t => t.SubTasks).ThenInclude(s => s.TimeEntries)
+            .AsSplitQuery()
             .ToListAsync();
 
     public async Task<TaskItem?> GetByIdAsync(int id) =>
@@ -36,6 +47,7 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
             .Include(t => t.Project)
             .Include(t => t.TimeEntries)
             .Include(t => t.SubTasks).ThenInclude(s => s.TimeEntries)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(t => t.Id == id);
 
     public async Task<TaskItem> CreateAsync(TaskItem task)
