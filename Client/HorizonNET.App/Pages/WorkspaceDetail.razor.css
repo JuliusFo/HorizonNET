@@ -222,6 +222,27 @@
     text-decoration: underline;
 }
 
+/* "Warten auf" steht vollständig auf der Karte (kein text-truncate). Flex mit
+   align-items:flex-start hält Folgezeilen bündig unter dem Text statt unter dem Symbol –
+   ein hängender Einzug, der mehrzeilige Werte lesbar hält. */
+.kanban-card-waiting {
+    display: flex;
+    gap: 0.3rem;
+    align-items: flex-start;
+}
+
+.kanban-card-waiting-icon {
+    flex: 0 0 auto;
+}
+
+/* min-width:0 erlaubt dem Text überhaupt erst zu schrumpfen (Flex-Kind), overflow-wrap
+   bricht auch lange Zeichenketten ohne Leerzeichen um – etwa eine Ticket-URL, die sonst
+   die Karte und damit die ganze Spalte breiter zöge. */
+.kanban-card-waiting-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
 /* Trennlinie zwischen Task und Sub-Tasks (wie im Edit-Dialog) */
 .kanban-card-divider {
     margin: 0.5rem 0 0.4rem;

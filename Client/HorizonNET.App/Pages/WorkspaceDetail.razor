@@ -125,7 +125,7 @@ else
 
                 <div class="kanban-column @(isCollapsed ? "collapsed" : "") @(dragOverStatus == status ? "drop-active" : "")"
                      @ondragover:preventDefault="true"
-                     @ondragover="() => { if (draggedTask is not null) { dragOverStatus = status; dragOverTaskId = null; } }"
+                     @ondragover="() => OnDragOverColumn(status)"
                      @ondrop="() => DropOnColumnAsync(status)">
 
                     <div class="kanban-column-header">
@@ -158,13 +158,20 @@ else
                             @foreach (var task in columnTasks)
                             {
                                 var color = ProjectColor(task.ProjectId);
-                                <div class="kanban-card @(dragOverTaskId == task.Id ? "drop-before" : "")" draggable="true"
+                                @* @key: Beim Umsortieren (Drag & Drop, Statuswechsel) ordnet Blazor
+                                   die Elemente sonst nach POSITION zu und schreibt die Inhalte um,
+                                   statt die vorhandene Karte zu verschieben. Mit stabiler Id bleibt
+                                   die Identität erhalten – und es ist die Voraussetzung, falls das
+                                   Ziehen später eine JS-Bibliothek übernimmt, die DOM-Knoten selbst
+                                   bewegt. *@
+                                <div @key="task.Id"
+                                     class="kanban-card @(dragOverTaskId == task.Id ? "drop-before" : "")" draggable="true"
                                      style="@(color is not null ? $"border-color:{color};background-color:{color}1A;" : "")"
                                      @ondragstart="() => draggedTask = task"
                                      @ondragend="() => { draggedTask = null; dragOverStatus = null; dragOverTaskId = null; }"
                                      @ondragover:preventDefault="true"
                                      @ondragover:stopPropagation="true"
-                                     @ondragover="() => { if (draggedTask is not null) { dragOverStatus = status; dragOverTaskId = task.Id; } }">
+                                     @ondragover="() => OnDragOverCard(status, task.Id)">
                                     <div class="kanban-card-title">
                                         <span class="kanban-card-title-main">
                                             <PriorityIndicator Value="@task.Priority" />
@@ -196,11 +203,17 @@ else
                                     {
                                         <div class="small text-muted mt-1">📅 @task.DueDate.Value.ToString("dd.MM.yyyy")</div>
                                     }
-                                    @* title als Rückfall: lange Werte kürzt text-truncate ab. *@
+                                    @* Bewusst NICHT gekürzt: Worauf ein Task wartet, ist der Grund
+                                       seines Stillstands – den will man auf einen Blick lesen, auch
+                                       über mehrere Zeilen. Der Titel schreibt "Wartet auf:" aus,
+                                       was das Symbol allein nur andeutet. *@
                                     @if (task.WaitingFor is not null)
                                     {
-                                        <div class="small text-muted text-truncate mt-1"
-                                             title="@($"Wartet auf: {task.WaitingFor}")">⏳ @task.WaitingFor</div>
+                                        <div class="small text-muted mt-1 kanban-card-waiting"
+                                             title="@($"Wartet auf: {task.WaitingFor}")">
+                                            <span class="kanban-card-waiting-icon" aria-hidden="true">⏳</span>
+                                            <span class="kanban-card-waiting-text">@task.WaitingFor</span>
+                                        </div>
                                     }
                                     @if (task.SubTasks is { Count: > 0 })
                                     {
@@ -216,7 +229,7 @@ else
                                             <ul class="kanban-subtask-list">
                                                 @foreach (var sub in task.SubTasks)
                                                 {
-                                                    <li class="kanban-subtask-item">
+                                                    <li @key="sub.Id" class="kanban-subtask-item">
                                                         <input type="checkbox" class="form-check-input mt-0"
                                                                checked="@sub.IsCompleted"
                                                                @onclick:stopPropagation="true"
@@ -271,6 +284,46 @@ else
     private TaskResponseDto? draggedTask;
     private WorkStatus? dragOverStatus;
     private int? dragOverTaskId;   // Karte, vor der eingefügt wird (null = ans Ende)
+
+    // ── Rendern während des Ziehens drosseln ─────────────────────────────────
+    // dragover feuert fortlaufend (viele Male pro Sekunde), und Blazor rendert nach JEDEM
+    // behandelten Event die ganze Komponente neu – hier also 7 Spalten samt Karten, inkl.
+    // der LINQ-Filterung je Spalte. Die Einfügemarke ändert sich dabei aber nur, wenn man
+    // eine ANDERE Karte bzw. Spalte überfährt. Alle übrigen Events unterdrücken wir:
+    // Der Handler merkt an, dass sich nichts geändert hat, ShouldRender überspringt genau
+    // das eine folgende Rendern. (Gleiches Muster wie im NoteEditor beim Tippen.)
+    private bool skipNextRender;
+
+    protected override bool ShouldRender()
+    {
+        if (skipNextRender) { skipNextRender = false; return false; }
+        return true;
+    }
+
+    private void OnDragOverCard(WorkStatus status, int taskId)
+    {
+        // Kein Zug im Gange oder Marke steht schon richtig → nichts zu zeichnen.
+        if (draggedTask is null || (dragOverStatus == status && dragOverTaskId == taskId))
+        {
+            skipNextRender = true;
+            return;
+        }
+
+        dragOverStatus = status;
+        dragOverTaskId = taskId;
+    }
+
+    private void OnDragOverColumn(WorkStatus status)
+    {
+        if (draggedTask is null || (dragOverStatus == status && dragOverTaskId is null))
+        {
+            skipNextRender = true;
+            return;
+        }
+
+        dragOverStatus = status;
+        dragOverTaskId = null;   // ans Ende der Spalte
+    }
 
     // Bearbeiten-Dialog (geteilte Komponente)
     private TaskResponseDto? selectedTask;
