@@ -36,6 +36,12 @@ public class Note
 
     public Project? Project { get; set; }
 
+    // Optionale Ablage in einem manuell angelegten Ordner. Unabhängig von Projekt/Task:
+    // die Ordner sind eine zweite Sicht, keine Alternative zur fachlichen Zuordnung.
+    public int? NoteFolderId { get; set; }
+
+    public NoteFolder? NoteFolder { get; set; }
+
     // Soft-Delete: null = aktiv (siehe TaskItem.DeletedAt).
     public DateTime? DeletedAt { get; set; }
 }

@@ -39,6 +39,13 @@ else
                             FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
                             Placeholder="— kein Task —" class="note-assign-task" />
 
+            @* Ablage im selbst angelegten Ordner – unabhängig von Projekt/Task. *@
+            <RadzenDropDown TValue="int?" Data="folderOptions" TextProperty="Label" ValueProperty="Id"
+                            @bind-Value="selectedFolderId" Change="OnAssignmentChanged"
+                            AllowFiltering="true" AllowClear="true" Disabled="readOnly"
+                            FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                            Placeholder="— kein Ordner —" class="note-assign-folder" />
+
             <span class="text-muted ms-auto">Geändert: @loaded.UpdatedAt.ToString("dd.MM.yyyy HH:mm:ss")</span>
         </div>
 
@@ -91,8 +98,13 @@ else
     // Zuordnung (Projekt/Task) – aus der geladenen Notiz übernommen, per Dropdown änderbar.
     private int? selectedProjectId;
     private int? selectedTaskId;
+    private int? selectedFolderId;
     private List<TaskResponseDto> allTasks = new();
     private List<TaskOption> taskOptions = new();
+
+    // Manuelle Ordner mit vollem Pfad ("Ideen / 2026"), damit gleichnamige Unterordner
+    // in der flachen Auswahlliste unterscheidbar bleiben.
+    private List<TaskOption> folderOptions = new();
 
     // Auswahl-Eintrag für das Task-Dropdown (Sub-Tasks mit ↳ gekennzeichnet).
     private record TaskOption(int Id, string Label);
@@ -103,9 +115,20 @@ else
     {
         allTasks = await Api.GetTasksAsync() ?? new();
         RebuildTaskOptions();
+        await LoadFolderOptionsAsync();
 
         linkModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/noteLinks.js");
         await linkModule.InvokeVoidAsync("attach");
+    }
+
+    // Alle Ordner mit vollem Pfad – die Aufbereitung teilen wir uns mit der
+    // Notizen-Seite, damit beide dieselbe Beschriftung zeigen.
+    private async Task LoadFolderOptionsAsync()
+    {
+        var folders = await Api.GetNoteFoldersAsync() ?? new();
+        folderOptions = NoteFolderPaths.Options(folders)
+            .Select(o => new TaskOption(o.Id, o.Label))
+            .ToList();
     }
 
     // Ist ein Projekt gewählt, nur dessen Tasks anbieten – sonst alle.
@@ -168,11 +191,16 @@ else
         editorValue       = content; // nur hier setzen → Editor schreibt den DOM nur beim Wechsel
         selectedProjectId = Note.ProjectId;
         selectedTaskId    = Note.TaskItemId;
+        selectedFolderId  = Note.NoteFolderId;
         state             = SaveState.Saved;
         savedAt           = null;
 
         // Task-Auswahl auf das Projekt der geladenen Notiz einschränken.
         RebuildTaskOptions();
+
+        // Ordner bei jedem Notiz-Wechsel frisch holen: Sie werden nebenan in der
+        // Seitenleiste angelegt und umbenannt, sonst stünde hier ein veralteter Name.
+        await LoadFolderOptionsAsync();
 
         await AcquireLockAsync(force: false);
     }
@@ -234,6 +262,7 @@ else
         editorValue       = content;
         selectedProjectId = fresh.ProjectId;
         selectedTaskId    = fresh.TaskItemId;
+        selectedFolderId  = fresh.NoteFolderId;
         state             = SaveState.Saved;
         savedAt           = null;
         RebuildTaskOptions();
@@ -310,7 +339,8 @@ else
         state = SaveState.Saving;
         await InvokeAsync(StateHasChanged);
 
-        var dto = new NoteUpdateDto(title.Trim(), content, selectedTaskId, selectedProjectId);
+        var dto = new NoteUpdateDto(title.Trim(), content, selectedTaskId, selectedProjectId,
+                                    NoteFolderId: selectedFolderId);
         var updated = await Api.UpdateNoteAsync(loaded.Id, dto);
 
         if (updated is null)

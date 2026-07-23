@@ -10,6 +10,7 @@ public static class TrashItemTypes
     public const string Task      = "task";
     public const string Note      = "note";
     public const string DailyTask = "dailytask";
+    public const string NoteFolder = "notefolder";
 }
 
 // Ein soft-gelöschter Eintrag im Papierkorb.

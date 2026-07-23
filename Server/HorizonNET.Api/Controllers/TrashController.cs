@@ -15,6 +15,7 @@ public class TrashController(
     IProjectRepository projects,
     ITaskRepository tasks,
     INoteRepository notes,
+    INoteFolderRepository noteFolders,
     IDailyTaskRepository dailyTasks) : ControllerBase
 {
     [HttpGet]
@@ -36,6 +37,9 @@ public class TrashController(
 
         items.AddRange((await dailyTasks.GetDeletedAsync()).Select(d => new TrashItemDto(
             TrashItemTypes.DailyTask, d.Id, d.Title, d.Project?.Name, d.DeletedAt!.Value)));
+
+        items.AddRange((await noteFolders.GetDeletedAsync()).Select(f => new TrashItemDto(
+            TrashItemTypes.NoteFolder, f.Id, f.Name, null, f.DeletedAt!.Value)));
 
         // Zuletzt gelöscht zuerst, typübergreifend.
         return Ok(items.OrderByDescending(i => i.DeletedAt));
@@ -63,6 +67,8 @@ public class TrashController(
             await notes.PurgeAsync(n.Id);
         foreach (var d in await dailyTasks.GetDeletedAsync())
             await dailyTasks.PurgeAsync(d.Id);
+        foreach (var f in await noteFolders.GetDeletedAsync())
+            await noteFolders.PurgeAsync(f.Id);
         foreach (var w in await workspaces.GetDeletedAsync())
             await workspaces.PurgeAsync(w.Id);
 
@@ -77,6 +83,7 @@ public class TrashController(
         TrashItemTypes.Task      => await tasks.PurgeAsync(id),
         TrashItemTypes.Note      => await notes.PurgeAsync(id),
         TrashItemTypes.DailyTask => await dailyTasks.PurgeAsync(id),
+        TrashItemTypes.NoteFolder => await noteFolders.PurgeAsync(id),
         _ => null
     };
 }

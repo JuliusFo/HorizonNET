@@ -36,6 +36,19 @@
     white-space: nowrap;
 }
 
+/* Schlanke Zeile im Ordnerbaum: eine Zeile, kein Fettdruck, keine Trennlinie.
+   Der Eintrag soll sich dem Baum unterordnen, nicht mit den Ordnerzeilen konkurrieren. */
+.note-list-item.compact {
+    padding: 0.2rem 0.5rem;
+    border-bottom: 0;
+}
+
+.note-list-item.compact .note-list-title {
+    font-weight: 400;
+    font-size: 0.82rem;
+    color: #495057;
+}
+
 .note-list-snippet {
     font-size: 0.8rem;
     color: #6c757d;

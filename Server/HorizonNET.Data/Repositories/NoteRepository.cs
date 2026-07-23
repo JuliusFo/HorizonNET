@@ -50,6 +50,7 @@ public class NoteRepository(AppDbContext context) : INoteRepository
         existing.Content = updated.Content;
         existing.TaskItemId = updated.TaskItemId;
         existing.ProjectId = updated.ProjectId;
+        existing.NoteFolderId = updated.NoteFolderId;
         existing.Thumbnail = updated.Thumbnail;
         // Kind bewusst NICHT übernehmen – die Art einer Notiz bleibt, wie sie angelegt wurde.
         existing.UpdatedAt = DateTime.Now;

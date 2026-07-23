@@ -14,14 +14,14 @@ public class NotesController(INoteRepository repo) : ControllerBase
     private static NoteResponseDto ToDto(Note n) =>
         new(n.Id, n.Title, n.Content, n.CreatedAt, n.UpdatedAt,
             n.TaskItemId, n.TaskItem?.Title, n.ProjectId, n.Project?.Name,
-            n.Kind, n.Thumbnail);
+            n.Kind, n.Thumbnail, n.NoteFolderId);
 
     // Schlankes Listen-DTO: kein Content, dafür ein serverseitiger Snippet (nur HTML).
     private static NoteListItemDto ToListItem(Note n) =>
         new(n.Id, n.Title,
             n.Kind == NoteKind.Html ? NoteSnippet.From(n.Content) : null,
             n.UpdatedAt, n.Kind, n.Thumbnail,
-            n.TaskItemId, n.TaskItem?.Title, n.ProjectId, n.Project?.Name);
+            n.TaskItemId, n.TaskItem?.Title, n.ProjectId, n.Project?.Name, n.NoteFolderId);
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
@@ -62,7 +62,8 @@ public class NotesController(INoteRepository repo) : ControllerBase
             TaskItemId = dto.TaskItemId,
             ProjectId = dto.ProjectId,
             Kind = dto.Kind,
-            Thumbnail = dto.Thumbnail
+            Thumbnail = dto.Thumbnail,
+            NoteFolderId = dto.NoteFolderId
         };
         var created = await repo.CreateAsync(note);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, ToDto(created));
@@ -77,7 +78,8 @@ public class NotesController(INoteRepository repo) : ControllerBase
             Content = dto.Content ?? string.Empty,
             TaskItemId = dto.TaskItemId,
             ProjectId = dto.ProjectId,
-            Thumbnail = dto.Thumbnail
+            Thumbnail = dto.Thumbnail,
+            NoteFolderId = dto.NoteFolderId
         });
         if (updated is null) return NotFound();
         return Ok(ToDto(updated));

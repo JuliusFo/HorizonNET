@@ -9,7 +9,9 @@ public record NoteCreateDto(
     int? ProjectId = null,
     // Kind wird nur beim Anlegen gesetzt (danach unveränderlich). Thumbnail nur bei Zeichnungen.
     NoteKind Kind = NoteKind.Html,
-    string? Thumbnail = null
+    string? Thumbnail = null,
+    // Ablage in einem manuellen Ordner – unabhängig von Projekt/Task.
+    int? NoteFolderId = null
 );
 
 public record NoteUpdateDto(
@@ -18,7 +20,8 @@ public record NoteUpdateDto(
     int? TaskItemId = null,
     int? ProjectId = null,
     // Kind bewusst NICHT im Update-DTO – eine Notiz wird nicht in eine Zeichnung umgewandelt.
-    string? Thumbnail = null
+    string? Thumbnail = null,
+    int? NoteFolderId = null
 );
 
 public record NoteResponseDto(
@@ -32,7 +35,8 @@ public record NoteResponseDto(
     int? ProjectId = null,
     string? ProjectName = null,
     NoteKind Kind = NoteKind.Html,
-    string? Thumbnail = null
+    string? Thumbnail = null,
+    int? NoteFolderId = null
 );
 
 // Schlanke Variante für Listen (9e): OHNE Content – bei Zeichnungen kann das SVG
@@ -48,7 +52,8 @@ public record NoteListItemDto(
     int? TaskItemId = null,
     string? TaskItemTitle = null,
     int? ProjectId = null,
-    string? ProjectName = null
+    string? ProjectName = null,
+    int? NoteFolderId = null
 )
 {
     // Baut das Listen-Item aus einer vollen Notiz – genutzt vom Client, um die Liste
@@ -57,5 +62,5 @@ public record NoteListItemDto(
         new(n.Id, n.Title,
             n.Kind == NoteKind.Html ? NoteSnippet.From(n.Content) : null,
             n.UpdatedAt, n.Kind, n.Thumbnail,
-            n.TaskItemId, n.TaskItemTitle, n.ProjectId, n.ProjectName);
+            n.TaskItemId, n.TaskItemTitle, n.ProjectId, n.ProjectName, n.NoteFolderId);
 }

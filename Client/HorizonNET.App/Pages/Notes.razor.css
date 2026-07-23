@@ -21,6 +21,45 @@
     border-bottom: 1px solid #dee2e6;
 }
 
+/* Trennt die beiden Sichten in der Seitenleiste: oben die abgeleiteten Ordner,
+   darunter die selbst angelegten. */
+.notes-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    padding: 0.35rem 0.5rem;
+    border-top: 1px solid #dee2e6;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: #868e96;
+}
+
+.notes-section-add {
+    font-size: 1rem;
+    line-height: 1;
+    text-decoration: none;
+}
+
+/* Inline-Formular für Anlegen, Umbenennen und Verschieben eines Ordners.
+   Untereinander statt nebeneinander: Name, Zielordner und zwei Knöpfe passen in einer
+   20rem breiten Leiste nicht in eine Zeile. */
+.note-folder-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.35rem 0.5rem;
+}
+
+.note-folder-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.25rem;
+}
+
 /* Split-Button „Neue Notiz / Neue Zeichnung". Bootstrap-JS (Popper) ist nicht
    eingebunden, daher wird das Menü hier selbst positioniert. */
 .new-note-group {

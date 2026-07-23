@@ -90,7 +90,29 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasForeignKey(n => n.ProjectId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            // Ordner: Beim endgültigen Entfernen eines Ordners bleibt die Notiz erhalten
+            // und landet wieder auf oberster Ebene.
+            e.HasOne(n => n.NoteFolder)
+                .WithMany()
+                .HasForeignKey(n => n.NoteFolderId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             e.HasQueryFilter(n => n.DeletedAt == null);
+        });
+
+        modelBuilder.Entity<NoteFolder>(e =>
+        {
+            e.HasKey(f => f.Id);
+            e.Property(f => f.Name).IsRequired().HasMaxLength(200);
+
+            // Selbstreferenz wie bei TaskItem.ParentTask: kein DB-Cascade, die
+            // Löschkaskade macht das Repository (Soft-Delete mit gemeinsamem Zeitstempel).
+            e.HasOne(f => f.ParentFolder)
+                .WithMany(f => f.Children)
+                .HasForeignKey(f => f.ParentFolderId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            e.HasQueryFilter(f => f.DeletedAt == null);
         });
 
         modelBuilder.Entity<DailyTask>(e =>
@@ -214,6 +236,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<GoogleConnection> GoogleConnections => Set<GoogleConnection>();
 
     public DbSet<Note> Notes => Set<Note>();
+
+    public DbSet<NoteFolder> NoteFolders => Set<NoteFolder>();
 
     public DbSet<DailyTask> DailyTasks => Set<DailyTask>();
 

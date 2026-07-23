@@ -9,7 +9,7 @@
     {
         @foreach (var n in Notes)
         {
-            <button type="button" class="note-list-item @(SelectedId == n.Id ? "active" : "")"
+            <button type="button" class="note-list-item @(Compact ? "compact" : "") @(SelectedId == n.Id ? "active" : "")"
                     @onclick="() => OnSelect.InvokeAsync(n)">
                 <div class="note-list-title">
                     @if (n.Kind == NoteKind.Drawing)
@@ -19,29 +19,35 @@
                     @(string.IsNullOrWhiteSpace(n.Title) ? "(ohne Titel)" : n.Title)
                 </div>
 
-                @* Zeichnung: Vorschaubild statt Text-Snippet (das SVG liegt nicht in der Liste). *@
-                @if (n.Kind == NoteKind.Drawing)
+                @* Im schlanken Modus bleibt nur der Titel: Im Ordnerbaum sagen Vorschau,
+                   Task- und Projekt-Marke nichts, was der Pfad darüber nicht schon zeigt –
+                   sie machen die Einrückung nur unlesbar. *@
+                @if (!Compact)
                 {
-                    @if (!string.IsNullOrEmpty(n.Thumbnail))
+                    @* Zeichnung: Vorschaubild statt Text-Snippet (das SVG liegt nicht in der Liste). *@
+                    @if (n.Kind == NoteKind.Drawing)
                     {
-                        <img class="note-list-thumb" src="@n.Thumbnail" alt="" />
+                        @if (!string.IsNullOrEmpty(n.Thumbnail))
+                        {
+                            <img class="note-list-thumb" src="@n.Thumbnail" alt="" />
+                        }
                     }
+                    else if (!string.IsNullOrEmpty(n.Snippet))
+                    {
+                        <div class="note-list-snippet">@n.Snippet</div>
+                    }
+                    <div class="note-list-meta">
+                        @if (n.TaskItemTitle is not null)
+                        {
+                            <span class="note-list-tag">🗒 @n.TaskItemTitle</span>
+                        }
+                        @if (n.ProjectName is not null)
+                        {
+                            <span class="note-list-tag">📁 @n.ProjectName</span>
+                        }
+                        <span class="note-list-date">@n.UpdatedAt.ToString("dd.MM.yy HH:mm")</span>
+                    </div>
                 }
-                else if (!string.IsNullOrEmpty(n.Snippet))
-                {
-                    <div class="note-list-snippet">@n.Snippet</div>
-                }
-                <div class="note-list-meta">
-                    @if (n.TaskItemTitle is not null)
-                    {
-                        <span class="note-list-tag">🗒 @n.TaskItemTitle</span>
-                    }
-                    @if (n.ProjectName is not null)
-                    {
-                        <span class="note-list-tag">📁 @n.ProjectName</span>
-                    }
-                    <span class="note-list-date">@n.UpdatedAt.ToString("dd.MM.yy HH:mm")</span>
-                </div>
             </button>
         }
     }
@@ -52,4 +58,9 @@
     [Parameter] public int? SelectedId { get; set; }
     [Parameter] public EventCallback<NoteListItemDto> OnSelect { get; set; }
     [Parameter] public string EmptyText { get; set; } = "Keine Notizen.";
+
+    // Schlank = nur der Titel. Für den Ordnerbaum, wo der Pfad die Zuordnung schon zeigt.
+    // Die flache Trefferliste der Suche bleibt bewusst ausführlich: Dort fehlt der Baum
+    // als Kontext, und wer im Text sucht, will den Treffer im Ausschnitt sehen.
+    [Parameter] public bool Compact { get; set; }
 }

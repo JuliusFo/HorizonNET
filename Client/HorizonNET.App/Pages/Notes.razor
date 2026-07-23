@@ -2,6 +2,8 @@
 @page "/notes/{Id:int}"
 @inject ApiService Api
 @inject ToastService Toast
+@inject ProjectState ProjectState
+@inject WorkspaceState WorkspaceState
 
 <PageTitle>Notizen – HorizonNET</PageTitle>
 
@@ -42,13 +44,12 @@
 
             <input class="form-control form-control-sm mb-2" placeholder="Suchen…"
                    @bind="search" @bind:event="oninput" />
+            @* „Ohne Zuordnung" / „Mit Projekt" / „Mit Task" sind entfallen: Das leistet
+               jetzt der Ordnerbaum, und zwar genauer. *@
             <select class="form-select form-select-sm" @bind="filter">
                 <option value="all">Alle</option>
                 <option value="html">Nur Notizen</option>
                 <option value="drawing">Nur Zeichnungen</option>
-                <option value="none">Ohne Zuordnung</option>
-                <option value="project">Mit Projekt</option>
-                <option value="task">Mit Task</option>
             </select>
         </div>
 
@@ -56,10 +57,88 @@
         {
             <p class="p-2 text-muted">Wird geladen…</p>
         }
+        else if (!string.IsNullOrWhiteSpace(search))
+        {
+            @* Während der Suche eine flache Trefferliste: Im Baum müsste man sonst raten,
+               in welchem zugeklappten Ordner ein Treffer steckt. *@
+            <NoteList Notes="Filtered" SelectedId="selected?.Id" OnSelect="SelectAsync"
+                      EmptyText="Keine Treffer." />
+        }
+        else if (Tree.Count == 0)
+        {
+            <p class="p-2 text-muted">Noch keine Notizen.</p>
+        }
         else
         {
-            <NoteList Notes="Filtered" SelectedId="selected?.Id" OnSelect="SelectAsync"
-                      EmptyText="@(notes.Count == 0 ? "Noch keine Notizen." : "Keine Treffer.")" />
+            <NoteTree Nodes="Tree" Collapsed="collapsed"
+                      SelectedId="selected?.Id" OnSelect="SelectAsync" />
+
+            @* Zweiter, unabhängiger Bereich: die selbst angelegten Ordner. Bewusst NICHT
+               mit der Sicht oben vermischt – eine Notiz kann in einem Ordner liegen und
+               trotzdem an einem Projekt hängen. Beides gleichzeitig zu zeigen ist kein
+               Widerspruch, sondern zwei Sichten auf dieselbe Notiz. *@
+            <div class="notes-section-header">
+                <span>Meine Ordner</span>
+                <button type="button" class="btn btn-sm btn-link p-0 notes-section-add"
+                        @onclick="() => BeginCreateFolder(null)" title="Ordner anlegen">+</button>
+            </div>
+
+            @* Ein Formular für Anlegen UND Umbenennen: Ein Eingabefeld mitten in den
+               rekursiven Baum zu setzen wäre deutlich fummeliger als diese eine Zeile. *@
+            @if (folderForm != FolderFormMode.None)
+            {
+                <div class="note-folder-form">
+                    <input class="form-control form-control-sm" placeholder="Ordnername…"
+                           @bind="folderFormName" @bind:event="oninput"
+                           @onkeydown="OnFolderFormKeyAsync" />
+
+                    @* Zielordner. Beim Bearbeiten fehlen hier der Ordner selbst und seine
+                       Nachfahren – die lehnte der Server ohnehin ab (kein Ordner unter
+                       sich selbst), und ein Ziel anzubieten, das nicht geht, wäre unfair. *@
+                    <select class="form-select form-select-sm"
+                            value="@(folderFormParentId?.ToString() ?? "")"
+                            @onchange="OnFolderParentChanged">
+                        <option value="">— oberste Ebene —</option>
+                        @foreach (var option in FolderParentOptions)
+                        {
+                            <option value="@option.Id">@option.Label</option>
+                        }
+                    </select>
+
+                    <div class="note-folder-form-actions">
+                        <button type="button" class="btn btn-sm btn-primary"
+                                @onclick="SubmitFolderFormAsync"
+                                disabled="@string.IsNullOrWhiteSpace(folderFormName)">
+                            @(folderForm == FolderFormMode.Create ? "Anlegen" : "Speichern")
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                @onclick="CloseFolderForm">Abbrechen</button>
+                    </div>
+                </div>
+            }
+
+            @if (FolderTree.Count == 0)
+            {
+                <p class="px-2 py-1 mb-0 text-muted small">Noch keine Ordner.</p>
+            }
+            else
+            {
+                <NoteTree Nodes="FolderTree" Collapsed="collapsed"
+                          SelectedId="selected?.Id" OnSelect="SelectAsync">
+                    <NodeActions Context="node">
+                        <div class="note-tree-actions">
+                            <button type="button" class="btn btn-sm btn-link p-0 px-1"
+                                    @onclick="() => BeginCreateFolder(FolderIdOf(node))"
+                                    title="Unterordner anlegen">+</button>
+                            <button type="button" class="btn btn-sm btn-link p-0 px-1"
+                                    @onclick="() => BeginEditFolder(node)"
+                                    title="Umbenennen / verschieben">✎</button>
+                            <button type="button" class="btn btn-sm btn-link p-0 px-1 text-danger"
+                                    @onclick="() => DeleteFolderAsync(node)" title="Ordner löschen">🗑</button>
+                        </div>
+                    </NodeActions>
+                </NoteTree>
+            }
         }
     </div>
 
@@ -88,6 +167,151 @@
     private string filter = "all";
     private bool newMenuOpen;   // Split-Dropdown „Neue Notiz / Neue Zeichnung"
 
+    // Zugeklappte Ordner des Baums (leer = alles offen). Bewusst nur Seitenzustand.
+    private readonly HashSet<string> collapsed = new();
+
+    // Nachschlagewerke für den abgeleiteten Baum. Projekt/Arbeitsbereich kommen aus dem
+    // geteilten State; die Tasks brauchen wir, weil eine Notiz an einem Task hängen kann,
+    // ohne selbst ein Projekt zu tragen – dann erbt sie es von ihrem Task.
+    private Dictionary<int, NoteTreeBuilder.ProjectRef> projectRefs = new();
+    private Dictionary<int, int?> taskProjects = new();
+
+    private List<NoteTreeBuilder.Node> Tree =>
+        NoteTreeBuilder.Build(Filtered, projectRefs, taskProjects);
+
+    // ── Manuelle Ordner ──────────────────────────────────────────────────────
+
+    private List<NoteFolderResponseDto> folders = new();
+
+    private List<NoteTreeBuilder.Node> FolderTree =>
+        NoteTreeBuilder.BuildFolders(Filtered, folders);
+
+    private enum FolderFormMode { None, Create, Edit }
+
+    private FolderFormMode folderForm = FolderFormMode.None;
+    private int? folderFormParentId;   // Zielordner (null = oberste Ebene)
+    private int folderFormId;          // beim Bearbeiten: betroffener Ordner
+    private string folderFormName = string.Empty;
+
+    // Ausgangswerte, um beim Speichern nur das tatsächlich Geänderte zu schicken –
+    // Umbenennen und Verschieben sind serverseitig getrennte Aufrufe.
+    private string folderFormOriginalName = string.Empty;
+    private int? folderFormOriginalParentId;
+
+    // Beim Bearbeiten den Ordner selbst und seine Nachfahren ausblenden.
+    private List<NoteFolderPaths.Option> FolderParentOptions =>
+        NoteFolderPaths.Options(folders, folderForm == FolderFormMode.Edit ? folderFormId : null);
+
+    private void OnFolderParentChanged(ChangeEventArgs e)
+    {
+        var raw = e.Value?.ToString();
+        folderFormParentId = string.IsNullOrEmpty(raw) ? null : int.Parse(raw);
+    }
+
+    // Der Baum kennt nur Schlüssel der Form "folder:{id}".
+    private static int FolderIdOf(NoteTreeBuilder.Node node) =>
+        int.TryParse(node.Key.AsSpan("folder:".Length), out var id) ? id : 0;
+
+    private void BeginCreateFolder(int? parentId)
+    {
+        folderForm         = FolderFormMode.Create;
+        folderFormParentId = parentId;
+        folderFormName     = string.Empty;
+    }
+
+    private void BeginEditFolder(NoteTreeBuilder.Node node)
+    {
+        var id = FolderIdOf(node);
+        var folder = folders.FirstOrDefault(f => f.Id == id);
+
+        folderForm                   = FolderFormMode.Edit;
+        folderFormId                 = id;
+        folderFormName               = folder?.Name ?? node.Label;
+        folderFormParentId           = folder?.ParentFolderId;
+        folderFormOriginalName       = folderFormName;
+        folderFormOriginalParentId   = folderFormParentId;
+    }
+
+    private void CloseFolderForm()
+    {
+        folderForm     = FolderFormMode.None;
+        folderFormName = string.Empty;
+    }
+
+    private async Task OnFolderFormKeyAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SubmitFolderFormAsync();
+        else if (e.Key == "Escape") CloseFolderForm();
+    }
+
+    private async Task SubmitFolderFormAsync()
+    {
+        var name = folderFormName.Trim();
+        if (name.Length == 0) return;
+
+        if (folderForm == FolderFormMode.Create)
+        {
+            var created = await Api.CreateNoteFolderAsync(new NoteFolderCreateDto(name, folderFormParentId));
+            if (created is null) { Toast.ShowError("Ordner konnte nicht angelegt werden."); return; }
+
+            folders.Add(created);
+            Toast.ShowSuccess($"Ordner „{created.Name}\" angelegt");
+        }
+        else
+        {
+            // Nur schicken, was sich geändert hat – Umbenennen und Verschieben sind
+            // getrennte Endpunkte (am Verschieben hängt die Zyklusprüfung).
+            var nameGeaendert   = name != folderFormOriginalName;
+            var parentGeaendert = folderFormParentId != folderFormOriginalParentId;
+
+            if (!nameGeaendert && !parentGeaendert) { CloseFolderForm(); return; }
+
+            if (nameGeaendert && await Api.RenameNoteFolderAsync(folderFormId, name) is null)
+            {
+                Toast.ShowError("Umbenennen fehlgeschlagen.");
+                return;
+            }
+
+            if (parentGeaendert && await Api.MoveNoteFolderAsync(folderFormId, folderFormParentId) is null)
+            {
+                Toast.ShowError("Verschieben fehlgeschlagen.");
+                await ReloadFoldersAsync();   // Anzeige wieder auf den Serverstand bringen
+                return;
+            }
+
+            await ReloadFoldersAsync();
+            Toast.ShowSuccess("Gespeichert");
+        }
+
+        CloseFolderForm();
+    }
+
+    // Der Ordner verschwindet samt Unterordnern, die Notizen darin bleiben – sie rutschen
+    // solange in die abgeleitete Sicht. Undo holt beides zurück, weil die Zuordnung der
+    // Notizen stehen bleibt (siehe NoteFolder.DeletedAt).
+    private async Task DeleteFolderAsync(NoteTreeBuilder.Node node)
+    {
+        var id = FolderIdOf(node);
+        if (!await Api.DeleteNoteFolderAsync(id))
+        {
+            Toast.ShowError("Ordner konnte nicht gelöscht werden.");
+            return;
+        }
+
+        await ReloadFoldersAsync();
+        if (folderForm != FolderFormMode.None) CloseFolderForm();
+
+        Toast.ShowUndo($"Ordner „{node.Label}\" gelöscht", async () =>
+        {
+            if (!await Api.RestoreNoteFolderAsync(id)) return;
+            await ReloadFoldersAsync();
+            await InvokeAsync(StateHasChanged);
+        });
+    }
+
+    private async Task ReloadFoldersAsync() =>
+        folders = await Api.GetNoteFoldersAsync() ?? new();
+
     // Sichert offene Änderungen des gerade sichtbaren Editors (HTML oder Zeichnung).
     private async Task FlushActiveAsync()
     {
@@ -98,6 +322,8 @@
     protected override async Task OnParametersSetAsync()
     {
         notes ??= await Api.GetNotesAsync() ?? new();
+        await EnsureLookupsAsync();
+        if (folders.Count == 0) await ReloadFoldersAsync();
 
         // Beim Aufruf mit Id die passende Notiz vorauswählen (Content per GET nachladen).
         if (Id is int id && selected?.Id != id && notes.Any(n => n.Id == id))
@@ -107,14 +333,36 @@
         }
     }
 
+    // Einmalig: Projekte, Arbeitsbereiche und die Task→Projekt-Zuordnung für den Baum.
+    private async Task EnsureLookupsAsync()
+    {
+        if (projectRefs.Count > 0 || taskProjects.Count > 0) return;
+
+        await ProjectState.EnsureLoadedAsync();
+        await WorkspaceState.EnsureLoadedAsync();
+
+        var workspaceNames = (WorkspaceState.Workspaces ?? []).ToDictionary(w => w.Id, w => w.Name);
+
+        projectRefs = (ProjectState.Projects ?? []).ToDictionary(
+            p => p.Id,
+            p => new NoteTreeBuilder.ProjectRef(
+                p.Id,
+                p.Name,
+                p.WorkspaceId is int wid && workspaceNames.TryGetValue(wid, out var ws) ? ws : null));
+
+        // Sub-Tasks mitnehmen: Auch an ihnen kann eine Notiz hängen.
+        var tasks = await Api.GetTasksAsync() ?? new();
+        taskProjects = tasks
+            .SelectMany(t => new[] { t }.Concat(t.SubTasks ?? []))
+            .GroupBy(t => t.Id)
+            .ToDictionary(g => g.Key, g => g.First().ProjectId);
+    }
+
     private List<NoteListItemDto> Filtered => (notes ?? new())
         .Where(n => filter switch
         {
             "html"    => n.Kind == NoteKind.Html,
             "drawing" => n.Kind == NoteKind.Drawing,
-            "none"    => n.TaskItemId is null && n.ProjectId is null,
-            "project" => n.ProjectId is not null,
-            "task"    => n.TaskItemId is not null,
             _         => true
         })
         // Ohne Content in der Liste wird über Titel + Snippet gesucht; die Volltextsuche

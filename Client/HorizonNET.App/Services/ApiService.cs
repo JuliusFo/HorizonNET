@@ -294,6 +294,42 @@ public class ApiService(HttpClient http)
         return string.IsNullOrWhiteSpace(text) ? "Speichern fehlgeschlagen." : text.Trim('"');
     }
 
+    // ── Notiz-Ordner (manuelle Ablage) ─────────────────────────────────────────
+
+    public Task<List<NoteFolderResponseDto>?> GetNoteFoldersAsync() =>
+        http.GetFromJsonAsync<List<NoteFolderResponseDto>>("api/note-folders");
+
+    public async Task<NoteFolderResponseDto?> CreateNoteFolderAsync(NoteFolderCreateDto dto)
+    {
+        var response = await http.PostAsJsonAsync("api/note-folders", dto);
+        return response.IsSuccessStatusCode
+            ? await response.Content.ReadFromJsonAsync<NoteFolderResponseDto>()
+            : null;
+    }
+
+    public async Task<NoteFolderResponseDto?> RenameNoteFolderAsync(int id, string name)
+    {
+        var response = await http.PutAsJsonAsync($"api/note-folders/{id}/name", new NoteFolderRenameDto(name));
+        return response.IsSuccessStatusCode
+            ? await response.Content.ReadFromJsonAsync<NoteFolderResponseDto>()
+            : null;
+    }
+
+    // null = auf die oberste Ebene. Liefert null, wenn das Ziel ein Nachfahre wäre.
+    public async Task<NoteFolderResponseDto?> MoveNoteFolderAsync(int id, int? parentFolderId)
+    {
+        var response = await http.PutAsJsonAsync($"api/note-folders/{id}/parent", new NoteFolderMoveDto(parentFolderId));
+        return response.IsSuccessStatusCode
+            ? await response.Content.ReadFromJsonAsync<NoteFolderResponseDto>()
+            : null;
+    }
+
+    public async Task<bool> DeleteNoteFolderAsync(int id) =>
+        (await http.DeleteAsync($"api/note-folders/{id}")).IsSuccessStatusCode;
+
+    public async Task<bool> RestoreNoteFolderAsync(int id) =>
+        (await http.PostAsync($"api/note-folders/{id}/restore", null)).IsSuccessStatusCode;
+
     // ── Notizen ────────────────────────────────────────────────────────────────
 
     public Task<List<NoteListItemDto>?> GetNotesAsync() =>
@@ -476,6 +512,7 @@ public class ApiService(HttpClient http)
         TrashItemTypes.Task      => RestoreTaskAsync(id),
         TrashItemTypes.Note      => RestoreNoteAsync(id),
         TrashItemTypes.DailyTask => RestoreDailyTaskAsync(id),
+        TrashItemTypes.NoteFolder => RestoreNoteFolderAsync(id),
         _ => Task.FromResult(false)
     };
 
