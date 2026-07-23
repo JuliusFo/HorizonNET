@@ -35,19 +35,31 @@ public class VersionState(ApiService api, ToastService toast, IJSRuntime js)
     }
 
     // Beim App-Start aufrufen: warnt einmalig bei Versatz mit „Neu laden"-Toast.
-    // Verglichen wird die volle InformationalVersion inkl. Commit – so werden auch
-    // zwei Builds derselben Nummer als unterschiedlich erkannt.
     public async Task CheckForMismatchAsync()
     {
         await EnsureApiLoadedAsync();
         if (warned || ApiVersion is null) return;
         warned = true;
 
-        if (!string.Equals(ClientVersion, ApiVersion.Version, StringComparison.OrdinalIgnoreCase))
+        if (IsMismatch(ClientVersion, ApiVersion.Version))
             toast.ShowUpdate(
                 "Neue Version verfügbar. Bitte neu laden.",
                 () => js.InvokeVoidAsync("location.reload").AsTask());
     }
+
+    // Verglichen wird NUR die Nummer (X.Y.Z), nicht der angehängte Commit.
+    //
+    // Vorher lief der Vergleich über die volle InformationalVersion. Das schlug beim
+    // Entwickeln dauerhaft an, weil Client und API praktisch immer aus unterschiedlichen
+    // Builds derselben Version stammen – und Neuladen konnte daran nichts ändern, denn
+    // beide Werte sind einkompiliert. Der Toast war damit ein Dauerzustand statt eines
+    // Signals. Anschlagen soll er beim echten Versionssprung.
+    //
+    // Bewusst statisch und ohne Abhängigkeiten: So liegt die Regel an einer Stelle und
+    // ist prüfbar, ohne den ganzen Dienst zu bauen.
+    public static bool IsMismatch(string clientVersion, string? apiVersion) =>
+        apiVersion is not null
+        && !string.Equals(Short(clientVersion), Short(apiVersion), StringComparison.OrdinalIgnoreCase);
 
     private static string Short(string version)
     {
