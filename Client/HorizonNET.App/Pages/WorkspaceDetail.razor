@@ -172,10 +172,17 @@ else
                                                title="Zur Detailseite">@task.Title</a>
                                             @* Der Link steht nur als Symbol: eine URL ist zu lang
                                                für die Karte, "Warten auf" bekommt unten eine
-                                               eigene Zeile mit Klartext. *@
+                                               eigene Zeile mit Klartext. Das Symbol öffnet die
+                                               hinterlegte Adresse in einem neuen Tab – die volle
+                                               URL zeigt der Tooltip.
+                                               draggable="false": Ein Anker ist von sich aus
+                                               ziehbar; ohne das zöge ein Zug am Symbol die URL,
+                                               statt die Karte in eine andere Spalte zu schieben. *@
                                             @if (TaskLink.IsValid(task.Link))
                                             {
-                                                <span class="kanban-card-badge" title="@task.Link">🔗</span>
+                                                <a href="@task.Link" target="_blank" rel="noopener noreferrer"
+                                                   draggable="false" class="kanban-card-badge"
+                                                   title="@($"Link öffnen: {task.Link}")">🔗</a>
                                             }
                                         </span>
                                         <button type="button" class="btn btn-sm btn-outline-primary btn-icon"

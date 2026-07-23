@@ -199,11 +199,17 @@
     line-height: 1.2;
 }
 
-/* Merkmal-Symbole (z. B. hinterlegter Link) neben dem Kartentitel. */
+/* Merkmal-Symbole (z. B. hinterlegter Link) neben dem Kartentitel. Als Link gedacht:
+   kein cursor:default mehr (der Browser zeigt die Hand), keine Unterstreichung – das
+   Symbol soll unauffällig bleiben und beim Hover nur kräftiger werden. */
 .kanban-card-badge {
     font-size: 0.75rem;
     opacity: 0.7;
-    cursor: default;
+    text-decoration: none;
+}
+
+.kanban-card-badge:hover {
+    opacity: 1;
 }
 
 /* Titel-Link zur Detailseite: sieht aus wie der Kartentext, unterstreicht beim Hover. */
