@@ -54,18 +54,7 @@
             </div>
         }
 
-        @* Laufende Zeiterfassung – überall sichtbar, damit kein Timer vergessen wird. *@
-        @if (Timers.Running is not null)
-        {
-            <div class="nav-item px-3">
-                <NavLink class="nav-link nav-timer" href="@($"tasks/{Timers.Running.TaskItemId}")">
-                    <span class="nav-timer-dot" aria-hidden="true"></span>
-                    <span class="nav-timer-title text-truncate">@Timers.Running.TaskTitle</span>
-                    <span class="nav-timer-clock">@TimeDisplay.Clock(DateTime.Now - Timers.Running.StartedAt)</span>
-                </NavLink>
-            </div>
-        }
-
+        @* Die laufende Zeiterfassung steht in der Kopfzeile (RunningTimerIndicator). *@
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="calendar">
                 <span class="bi bi-calendar3-nav-menu" aria-hidden="true"></span> Kalender
@@ -96,14 +85,10 @@
 
 @inject ProjectState ProjectState
 @inject WorkspaceState WorkspaceState
-@inject TimerState Timers
 @implements IDisposable
 
 @code {
     private bool collapseNavMenu = true;
-
-    // Tickt die Anzeige des laufenden Timers sekündlich weiter.
-    private System.Timers.Timer? ticker;
 
     private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
 
@@ -133,20 +118,9 @@
     {
         ProjectState.OnChange += HandleChanged;
         WorkspaceState.OnChange += HandleChanged;
-        Timers.OnChange += HandleChanged;
-
-        // Ticker vor den Netzwerkaufrufen aufsetzen: scheitert einer davon, läuft die
-        // Uhr des Timers trotzdem, sobald ein Timer gemeldet wird.
-        ticker = new System.Timers.Timer(1000);
-        ticker.Elapsed += (_, _) =>
-        {
-            if (Timers.Running is not null) InvokeAsync(StateHasChanged);
-        };
-        ticker.Start();
 
         await ProjectState.EnsureLoadedAsync();
         await WorkspaceState.EnsureLoadedAsync();
-        await Timers.EnsureLoadedAsync();
     }
 
     private void HandleChanged() => InvokeAsync(StateHasChanged);
@@ -160,8 +134,5 @@
     {
         ProjectState.OnChange -= HandleChanged;
         WorkspaceState.OnChange -= HandleChanged;
-        Timers.OnChange -= HandleChanged;
-        ticker?.Stop();
-        ticker?.Dispose();
     }
 }

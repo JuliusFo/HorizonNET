@@ -1,0 +1,58 @@
+@inject TimerState Timers
+@implements IDisposable
+
+@* Laufende Zeiterfassung in der Kopfzeile – überall sichtbar, damit kein Timer vergessen
+   wird. Eigene Komponente statt Markup im Layout: Sie bringt Ticker und Abonnement selbst
+   mit, sodass MainLayout nichts von der Timer-Mechanik wissen muss.
+   Läuft nichts, rendert sie nichts. *@
+@if (Timers.Running is { } running)
+{
+    var laufend = DateTime.Now - running.StartedAt;
+
+    <a class="running-timer" href="@($"tasks/{running.TaskItemId}")"
+       title="@($"Zeiterfassung läuft: {running.TaskTitle}")">
+        <span class="running-timer-dot" aria-hidden="true"></span>
+        <span class="running-timer-title">@running.TaskTitle</span>
+        <span class="running-timer-clock">@TimeDisplay.Clock(laufend)</span>
+
+        @* Gesamtzeit nur, wenn es überhaupt frühere Intervalle gibt – sonst stünde
+           dieselbe Zeit zweimal da. Format wie auf der Detailseite (TimeDisplay.Short),
+           damit die Zahl an beiden Stellen gleich aussieht. *@
+        @if (running.TrackedSeconds > 0)
+        {
+            <span class="running-timer-total">
+                (@TimeDisplay.Short(TimeSpan.FromSeconds(running.TrackedSeconds) + laufend) gesamt)
+            </span>
+        }
+    </a>
+}
+
+@code {
+    // Tickt die Anzeige sekündlich weiter.
+    private System.Timers.Timer? ticker;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Timers.OnChange += HandleChanged;
+
+        // Ticker vor dem Netzwerkaufruf aufsetzen: Scheitert der, läuft die Uhr trotzdem,
+        // sobald ein Timer gemeldet wird.
+        ticker = new System.Timers.Timer(1000);
+        ticker.Elapsed += (_, _) =>
+        {
+            if (Timers.Running is not null) InvokeAsync(StateHasChanged);
+        };
+        ticker.Start();
+
+        await Timers.EnsureLoadedAsync();
+    }
+
+    private void HandleChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Timers.OnChange -= HandleChanged;
+        ticker?.Stop();
+        ticker?.Dispose();
+    }
+}

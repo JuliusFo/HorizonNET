@@ -1,0 +1,59 @@
+/* Sitzt in der Kopfzeile neben "About". Bewusst OHNE feste Obergrenze: In der Zeile ist
+   reichlich Platz, und ein abgeschnittener Task-Titel hilft niemandem. min-width:0 lässt
+   das Element trotzdem schrumpfen, wenn das Fenster eng wird – dann greift die Kürzung
+   am Titel, während Uhr und Summe stehen bleiben. */
+.running-timer {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+    color: #212529;
+}
+
+/* Pulsierender Punkt: signalisiert "läuft gerade" auch ohne auf die Ziffern zu schauen. */
+.running-timer-dot {
+    flex: 0 0 auto;
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    background-color: #dc3545;
+    animation: running-timer-pulse 2s ease-in-out infinite;
+}
+
+@keyframes running-timer-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.35; }
+}
+
+/* min-width:0 erlaubt dem Titel als Flex-Kind erst zu schrumpfen. */
+.running-timer-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* tabular-nums: Sonst zappelt die Uhr bei jeder Sekunde in der Breite. */
+.running-timer-clock {
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+/* Gesamtzeit tritt hinter die laufende Uhr zurück: Die Uhr ist das, was sich gerade
+   bewegt, die Summe nur Einordnung. */
+.running-timer-total {
+    flex: 0 0 auto;
+    font-size: 0.85em;
+    color: #6c757d;
+    white-space: nowrap;
+}
+
+/* Auf schmalen Schirmen teilen sich Suche und Uhr die Zeile – dann nur die Uhr,
+   Titel und Summe stehen ohnehin im Tooltip bzw. auf der Detailseite. */
+@media (max-width: 640.98px) {
+    .running-timer-title,
+    .running-timer-total {
+        display: none;
+    }
+}

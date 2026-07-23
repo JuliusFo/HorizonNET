@@ -217,35 +217,3 @@
     }
 }
 
-/* Laufende Zeiterfassung: pulsierender Punkt + Uhr, rechts der Task-Titel. */
-.nav-item ::deep a.nav-timer {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.nav-timer-dot {
-    display: inline-block;
-    width: 0.6rem;
-    height: 0.6rem;
-    border-radius: 50%;
-    background-color: #dc3545;
-    flex-shrink: 0;
-    animation: nav-timer-pulse 2s ease-in-out infinite;
-}
-
-@keyframes nav-timer-pulse {
-    0%, 100% { opacity: 1; }
-    50%      { opacity: 0.35; }
-}
-
-.nav-timer-title {
-    flex-grow: 1;
-    min-width: 0;
-}
-
-.nav-timer-clock {
-    font-variant-numeric: tabular-nums;
-    font-weight: 600;
-    flex-shrink: 0;
-}

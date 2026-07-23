@@ -217,14 +217,22 @@ public class TasksController(
         return Ok(ToDto(updated));
     }
 
-    // Der aktuell laufende Timer (systemweit höchstens einer) – für die Navigation.
+    // Der aktuell laufende Timer (systemweit höchstens einer) – für die Kopfzeile.
     [HttpGet("timer/running")]
     public async Task<IActionResult> GetRunningTimer()
     {
         var running = await timeEntries.GetRunningAsync();
         if (running is null) return Ok(null);
 
-        return Ok(new RunningTimerDto(running.TaskItemId, running.TaskItem.Title, running.StartedAt));
+        // Nur die abgeschlossenen Intervalle summieren – wie in ToDto. Das laufende
+        // zählt die Anzeige aus StartedAt selbst weiter.
+        var entries = await timeEntries.GetByTaskAsync(running.TaskItemId);
+        var tracked = (int)entries
+            .Where(e => e.EndedAt is not null)
+            .Sum(e => (e.EndedAt!.Value - e.StartedAt).TotalSeconds);
+
+        return Ok(new RunningTimerDto(
+            running.TaskItemId, running.TaskItem.Title, running.StartedAt, tracked));
     }
 
     // Alle Intervalle eines Tasks (Detailseite).
