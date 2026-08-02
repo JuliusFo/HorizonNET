@@ -1,5 +1,6 @@
 using System.Reflection;
 using HorizonNET.Api.Services;
+using Microsoft.AspNetCore.DataProtection;
 using HorizonNET.Data;
 using HorizonNET.Data.Repositories;
 using HorizonNET.Domain.Interfaces;
@@ -26,6 +27,29 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
 // Eingebaute .NET 10 OpenAPI-Unterstützung
 builder.Services.AddOpenApi();
 
+// Schlüsselmaterial für verschlüsselte Spalten (Phase 12a, siehe EncryptedConverter).
+// Der Ring liegt bewusst AUSSERHALB des Repos – Standard ist %LOCALAPPDATA%\HorizonNET\keys,
+// überschreibbar per DataProtection:KeyRingPath.
+//
+// ⚠ Dieser Ordner gehört ins Backup. Ohne ihn sind alle verschlüsselten Werte verloren,
+// und es gibt keinen Wiederherstellungsweg (siehe docs/konzept-journal.md).
+var keyRingPath = builder.Configuration["DataProtection:KeyRingPath"]
+    ?? Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "HorizonNET", "keys");
+
+var dataProtection = builder.Services.AddDataProtection()
+    // Fester Name: Er geht in die Schlüsselableitung ein. Ändert er sich, lässt sich
+    // Bestehendes nicht mehr entschlüsseln.
+    .SetApplicationName("HorizonNET")
+    .PersistKeysToFileSystem(new DirectoryInfo(keyRingPath));
+
+// Zusätzlich ans Windows-Benutzerkonto binden: Der Schlüsselring allein nützt dann
+// nichts, wenn jemand nur die Dateien kopiert. Bei einem späteren Umzug auf Linux
+// (Container) muss das durch ein Zertifikat ersetzt werden.
+if (OperatingSystem.IsWindows())
+    dataProtection.ProtectKeysWithDpapi();
+
 // EF Core mit SQLite – Datenbankpfad aus appsettings.json
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -49,12 +73,22 @@ builder.Services.AddScoped<GoogleCalendarService>();
 
 var app = builder.Build();
 
-// OpenAPI-JSON-Endpunkt und Scalar-UI bereitstellen
-app.MapOpenApi();
-app.MapScalarApiReference(options =>
+// OpenAPI-JSON-Endpunkt und Scalar-UI – nur in der Entwicklung. In Produktion wäre das
+// eine vollständige, anonym lesbare Beschreibung der gesamten API (Phase 12a).
+if (app.Environment.IsDevelopment())
 {
-    options.Title = "HorizonNET API";
-});
+    app.MapOpenApi();
+    app.MapScalarApiReference(options =>
+    {
+        options.Title = "HorizonNET API";
+    });
+}
+else
+{
+    // HSTS bewusst nur außerhalb der Entwicklung: Der Header gilt lange und würde sonst
+    // localhost im Browser dauerhaft auf HTTPS festnageln.
+    app.UseHsts();
+}
 
 app.UseCors();
 app.UseHttpsRedirection();

@@ -15,6 +15,9 @@
     <!-- In-Memory-SQLite für die Repository-Tests: echtes relationales Verhalten
          (FK, Cascade, Query-Filter) statt des vereinfachten InMemory-Providers. -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.10" />
+    <!-- Der AppDbContext braucht einen IDataProtectionProvider für verschlüsselte
+         Spalten; im Test genügt ein flüchtiger Provider ohne Schlüsseldateien. -->
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup>

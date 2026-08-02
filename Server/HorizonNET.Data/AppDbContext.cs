@@ -1,10 +1,19 @@
 using HorizonNET.Domain.Entities;
 using HorizonNET.Shared.Transfer.Enums;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 
 namespace HorizonNET.Data;
 
-public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
+// dataProtection liefert die Schlüssel für verschlüsselte Spalten (siehe EncryptedConverter).
+// Bewusst ein Pflichtparameter ohne Default: Ein stiller Rückfall auf Klartext, weil die
+// Registrierung irgendwann vergessen wird, wäre der schlimmste denkbare Fehlerfall.
+//
+// Hinweis: EF cachet das Modell je Kontext-Typ, der Konverter hält also den beim ersten
+// Modellaufbau erzeugten Protector fest. In der App unkritisch (DataProtection ist ein
+// Singleton); in Tests deshalb einen gemeinsamen Provider verwenden (siehe TestDatabase).
+public class AppDbContext(DbContextOptions<AppDbContext> options, IDataProtectionProvider dataProtection)
+    : DbContext(options)
 {
     #region Creation
 
@@ -64,7 +73,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<GoogleConnection>(e =>
         {
             e.HasKey(c => c.Id);
-            e.Property(c => c.RefreshToken).IsRequired();
+
+            // Der Refresh-Token ist ein langlebiger Schlüssel zum Google-Konto und liegt
+            // deshalb verschlüsselt in der DB (Phase 12a). Nachsichtig, weil der Bestand
+            // aus der Zeit davor noch Klartext ist – siehe EncryptedConverter.Lenient.
+            e.Property(c => c.RefreshToken).IsRequired()
+                .HasConversion(EncryptedConverter.Lenient(
+                    dataProtection.CreateProtector("HorizonNET.GoogleConnection.RefreshToken")));
+
             e.Property(c => c.Email).HasMaxLength(320);
         });
 
