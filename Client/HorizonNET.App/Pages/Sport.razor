@@ -470,11 +470,17 @@ else
         if (saved.MeasuredOn == DateOnly.FromDateTime(day)) bodyWeightToday = saved;
 
         // Kurve mitziehen: der Tag kann neu sein oder ein bestehender korrigiert werden.
+        // Bewusst eine NEUE Liste statt In-Place-Änderung: Radzen berechnet die Kategorie-
+        // Achse (die Datumswerte) nur bei geänderter Datenreferenz neu. Bei einem neuen Tag
+        // hinkte sie sonst hinterher – der frische Punkt landete außerhalb der Achse und die
+        // Kurve knickte zurück (erst ein Reload richtete es). Siehe auch SportBodyWeight.
         if (overviewWeights is not null && saved.MeasuredOn >= DateOnly.FromDateTime(OverviewFrom))
         {
-            overviewWeights.RemoveAll(w => w.MeasuredOn == saved.MeasuredOn);
-            overviewWeights.Add(saved);
-            overviewWeights.Sort((a, b) => a.MeasuredOn.CompareTo(b.MeasuredOn));
+            overviewWeights = overviewWeights
+                .Where(w => w.MeasuredOn != saved.MeasuredOn)
+                .Append(saved)
+                .OrderBy(w => w.MeasuredOn)
+                .ToList();
         }
 
         bodyWeightDialogOpen = false;

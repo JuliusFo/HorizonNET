@@ -129,7 +129,10 @@ else
     {
         if (!await Api.DeleteBodyWeightAsync(entry.Id)) return;
 
-        entries?.RemoveAll(e => e.Id == entry.Id);
+        // Neue Liste statt In-Place-Entfernen: Sonst behält der Chart die Kategorie des
+        // gelöschten Tages auf der Achse und zeichnet erst nach einem Reload sauber
+        // (gleiche Ursache wie beim Eintragen in Sport.razor).
+        entries = entries?.Where(e => e.Id != entry.Id).ToList();
 
         Toast.ShowUndo($"{entry.WeightKg:0.#} kg vom {entry.MeasuredOn:dd.MM.} gelöscht", async () =>
         {
