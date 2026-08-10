@@ -15,15 +15,26 @@
     <!-- In-Memory-SQLite für die Repository-Tests: echtes relationales Verhalten
          (FK, Cascade, Query-Filter) statt des vereinfachten InMemory-Providers. -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.10" />
-    <!-- Der AppDbContext braucht einen IDataProtectionProvider für verschlüsselte
-         Spalten; im Test genügt ein flüchtiger Provider ohne Schlüsseldateien. -->
-    <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="10.0.10" />
+    <!-- Der AppDbContext braucht einen IDataProtectionProvider für verschlüsselte Spalten;
+         im Test genügt ein flüchtiger Provider ohne Schlüsseldateien. Das Paket steht nicht
+         mehr einzeln hier: Seit der FrameworkReference unten liefert Microsoft.AspNetCore.App
+         es mit, und eine zusätzliche PackageReference darauf meldet NU1510. -->
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\HorizonNET.Data\HorizonNET.Data.csproj" />
     <ProjectReference Include="..\HorizonNET.Domain\HorizonNET.Domain.csproj" />
     <ProjectReference Include="..\..\Shared\HorizonNET.Shared.Transfer\HorizonNET.Shared.Transfer.csproj" />
+    <!-- Die Controller werden direkt instanziiert (kein TestServer, kein HTTP): Getestet
+         wird, was ein Controller aus der Anfrage macht, bevor er das Repository ruft –
+         genau dort saß der Fehler, der Link und "Warten auf" beim Timer-Klick löschte. -->
+    <ProjectReference Include="..\HorizonNET.Api\HorizonNET.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Nötig, um gegen ControllerBase/IActionResult zu kompilieren: Die Referenz auf ein
+         Web-SDK-Projekt bringt das ASP.NET-Core-Framework nicht von selbst mit. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>
