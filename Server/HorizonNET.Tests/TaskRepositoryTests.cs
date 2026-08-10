@@ -66,6 +66,28 @@ public class TaskRepositoryTests
         Assert.Null((await assert.TimeEntries.SingleAsync(e => e.TaskItemId == b)).EndedAt);
     }
 
+    // Das Teil-Update rührt ausschließlich den Status an. Klingt selbstverständlich, war
+    // es aber nicht: Der Timer-Knopf lief einmal über den Vollersatz UpdateAsync und
+    // schickte dabei nur die Felder mit, die er kannte – Link und "Warten auf" waren nach
+    // einem Klick auf ▶ gelöscht. Wer SetStatusAsync je auf UpdateAsync umbaut, merkt es hier.
+    [Fact]
+    public async Task SetStatus_KeepsFieldsItWasNotAskedToChange()
+    {
+        using var db = new TestDatabase();
+        var id = await SeedTaskAsync(
+            db, WorkStatus.Planned, waitingFor: "Rückmeldung von Anna", link: "https://example.org/ticket/1");
+
+        using (var act = db.NewContext())
+            await new TaskRepository(act).SetStatusAsync(id, WorkStatus.InProgress);
+
+        using var assert = db.NewContext();
+        var task = (await assert.Tasks.FindAsync(id))!;
+        Assert.Equal(WorkStatus.InProgress, task.Status);
+        Assert.Equal("Rückmeldung von Anna", task.WaitingFor);
+        Assert.Equal("https://example.org/ticket/1", task.Link);
+        Assert.Equal("Task", task.Title);
+    }
+
     // ── Fälligkeit bei "Geplant Heute" ───────────────────────────────────────────
     // Der Statuswechsel setzt das Fälligkeitsdatum auf heute – aber nur beim WECHSEL,
     // sonst zöge jedes spätere Speichern eines länger geplanten Tasks sein Datum auf heute.
@@ -253,10 +275,14 @@ public class TaskRepositoryTests
 
     private static async Task<int> SeedTaskAsync(
         TestDatabase db, WorkStatus status,
-        bool withRunningTimer = false, DateTime? dueDate = null, string? waitingFor = null)
+        bool withRunningTimer = false, DateTime? dueDate = null,
+        string? waitingFor = null, string? link = null)
     {
         using var ctx = db.NewContext();
-        var task = new TaskItem { Title = "Task", Status = status, DueDate = dueDate, WaitingFor = waitingFor };
+        var task = new TaskItem
+        {
+            Title = "Task", Status = status, DueDate = dueDate, WaitingFor = waitingFor, Link = link
+        };
         ctx.Tasks.Add(task);
         await ctx.SaveChangesAsync();
 

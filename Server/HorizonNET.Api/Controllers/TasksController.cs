@@ -185,14 +185,18 @@ public class TasksController(
     // Start/Stop laufen über den Status: "In Arbeit" startet den Timer, jeder Wechsel
     // weg davon stoppt ihn (siehe TaskRepository). Damit bleibt die Kopplung an genau
     // einer Stelle, egal ob der Nutzer den Status ändert oder den Timer-Knopf drückt.
+    //
+    // Bewusst über das Teil-Update SetStatusAsync und NICHT über UpdateAsync: Wer den
+    // Timer drückt, will nur den Status ändern und schickt die übrigen Felder gar nicht
+    // mit. Der Vollersatz würde alles, was der Aufrufer nicht kennt, mit null
+    // überschreiben – genau das hat hier einmal Link und "Warten auf" gelöscht.
 
     [HttpPost("{id:int}/timer/start")]
     public async Task<IActionResult> StartTimer(int id)
     {
-        var task = await repo.GetByIdAsync(id);
-        if (task is null) return NotFound();
+        var updated = await repo.SetStatusAsync(id, WorkStatus.InProgress);
+        if (updated is null) return NotFound();
 
-        var updated = await SetStatusAsync(task, WorkStatus.InProgress);
         return Ok(ToDto(updated));
     }
 
@@ -213,7 +217,9 @@ public class TasksController(
             return Ok(ToDto(reloaded!));
         }
 
-        var updated = await SetStatusAsync(task, WorkStatus.Paused);
+        var updated = await repo.SetStatusAsync(id, WorkStatus.Paused);
+        if (updated is null) return NotFound();
+
         return Ok(ToDto(updated));
     }
 
@@ -243,23 +249,6 @@ public class TasksController(
         return Ok(entries.Select(e => new TimeEntryResponseDto(
             e.Id, e.TaskItemId, e.StartedAt, e.EndedAt,
             (int)(e.EndedAt is null ? 0 : (e.EndedAt.Value - e.StartedAt).TotalSeconds))));
-    }
-
-    // Statuswechsel über das Repository – dort hängt die Timer-Kopplung dran.
-    private async Task<TaskItem> SetStatusAsync(TaskItem task, WorkStatus status)
-    {
-        var updated = await repo.UpdateAsync(task.Id, new TaskItem
-        {
-            Title = task.Title,
-            Description = task.Description,
-            DueDate = task.DueDate,
-            StartTime = task.StartTime,
-            EndTime = task.EndTime,
-            Status = status,
-            Priority = task.Priority,
-            ProjectId = task.ProjectId
-        });
-        return updated!;
     }
 
     [HttpDelete("{id:int}")]
