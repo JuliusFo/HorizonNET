@@ -54,6 +54,10 @@ public interface ITaskRepository
     // Globale Suche über Titel und Beschreibung (für die Kommandopalette).
     Task<IEnumerable<TaskItem>> SearchAsync(string query, int limit);
 
+    // An diesem Tag abgeschlossene Tasks (für den Tagesrückblick im Journal), inkl.
+    // Projekt. Stützt sich auf CompletedAt – siehe dort zur Genauigkeit bei Altdaten.
+    Task<IEnumerable<TaskItem>> GetCompletedOnAsync(DateOnly date);
+
     // Soft-gelöschte Tasks (für den Papierkorb), aber nur eigenständig gelöschte
     // "Wurzeln": Tasks, die als Teil desselben Vorgangs mit ihrem Projekt oder
     // Eltern-Task gelöscht wurden, kommen dort automatisch mit zurück und tauchen

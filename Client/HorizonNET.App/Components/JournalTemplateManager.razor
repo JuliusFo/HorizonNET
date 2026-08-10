@@ -1,0 +1,159 @@
+@inject ApiService Api
+@inject ToastService Toast
+@inject ConfirmService Confirm
+
+@* Verwaltung der Journal-Vorlagen (Einstellungen). Anlegen und Bearbeiten laufen über
+   dasselbe Formular – Muster wie beim TaskTemplateManager. *@
+@if (templates is null)
+{
+    <p class="text-muted small mb-0">Wird geladen…</p>
+}
+else
+{
+    @if (templates.Count == 0)
+    {
+        <p class="text-muted small">Noch keine Vorlagen. Sie erscheinen im Journal als
+            Leiste über dem Text und setzen ihre Leitfragen per Klick ein.</p>
+    }
+    else
+    {
+        <ul class="list-group mb-3">
+            @foreach (var t in templates)
+            {
+                <li class="list-group-item d-flex justify-content-between align-items-center gap-2">
+                    <span class="d-flex flex-column text-truncate">
+                        <span class="fw-semibold">@t.Name</span>
+                        <span class="text-muted small text-truncate">@NoteSnippet.From(t.Content, 90)</span>
+                    </span>
+                    <span class="d-flex gap-1 flex-shrink-0">
+                        <button class="btn btn-sm btn-outline-primary btn-icon" @onclick="() => StartEdit(t)"
+                                title="Bearbeiten">✎</button>
+                        <button class="btn btn-sm btn-outline-danger btn-icon" @onclick="() => DeleteAsync(t)"
+                                title="Löschen">🗑</button>
+                    </span>
+                </li>
+            }
+        </ul>
+    }
+
+    @if (showForm)
+    {
+        <div class="card card-body bg-light">
+            <div class="mb-2">
+                <label class="form-label small mb-1">Name *</label>
+                <input class="form-control form-control-sm" @bind="formName"
+                       placeholder="z. B. Abendrückblick" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label small mb-1">Leitfragen</label>
+                @* Eigene, knappe Werkzeugleiste wie im Journal – eine Vorlage braucht
+                   Überschriften und Listen, sonst nichts. *@
+                <RadzenHtmlEditor @bind-Value="formContent" style="height: 14rem;">
+                    <RadzenHtmlEditorUndo />
+                    <RadzenHtmlEditorRedo />
+                    <RadzenHtmlEditorSeparator />
+                    <RadzenHtmlEditorBold />
+                    <RadzenHtmlEditorItalic />
+                    <RadzenHtmlEditorSeparator />
+                    <RadzenHtmlEditorUnorderedList />
+                    <RadzenHtmlEditorOrderedList />
+                    <RadzenHtmlEditorSeparator />
+                    <RadzenHtmlEditorRemoveFormat />
+                </RadzenHtmlEditor>
+            </div>
+
+            @if (errorMessage is not null)
+            {
+                <div class="alert alert-danger py-1">@errorMessage</div>
+            }
+
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-primary" @onclick="SaveAsync"
+                        disabled="@(isSaving || string.IsNullOrWhiteSpace(formName))">
+                    @(isSaving ? "Speichert…" : "Speichern")
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelForm">Abbrechen</button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <button class="btn btn-sm btn-outline-primary" @onclick="StartCreate">+ Neue Vorlage</button>
+    }
+}
+
+@code {
+    private List<JournalTemplateResponseDto>? templates;
+
+    private bool showForm;
+    private bool isSaving;
+    private string? errorMessage;
+
+    // null = Anlegen, sonst die Id der bearbeiteten Vorlage.
+    private int? editingId;
+    private int editingSortOrder;
+    private string formName = string.Empty;
+    private string formContent = string.Empty;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => templates = await Api.GetJournalTemplatesAsync() ?? new();
+
+    private void StartCreate()
+    {
+        editingId = null;
+        editingSortOrder = 0;
+        formName = string.Empty;
+        formContent = string.Empty;
+        errorMessage = null;
+        showForm = true;
+    }
+
+    private void StartEdit(JournalTemplateResponseDto t)
+    {
+        editingId = t.Id;
+        editingSortOrder = t.SortOrder;
+        formName = t.Name;
+        formContent = t.Content;
+        errorMessage = null;
+        showForm = true;
+    }
+
+    private void CancelForm()
+    {
+        showForm = false;
+        errorMessage = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(formName)) return;
+
+        isSaving = true;
+        errorMessage = null;
+
+        var saved = editingId is int id
+            ? await Api.UpdateJournalTemplateAsync(
+                id, new JournalTemplateUpdateDto(formName, formContent, editingSortOrder)) is not null
+            : await Api.CreateJournalTemplateAsync(
+                new JournalTemplateCreateDto(formName, formContent)) is not null;
+
+        if (saved) await ReloadAsync();
+        else errorMessage = "Vorlage konnte nicht gespeichert werden.";
+
+        isSaving = false;
+        if (errorMessage is null) showForm = false;
+    }
+
+    private async Task DeleteAsync(JournalTemplateResponseDto t)
+    {
+        if (!await Confirm.ShowAsync("Vorlage löschen?", $"„{t.Name}“ wird entfernt."))
+            return;
+
+        if (!await Api.DeleteJournalTemplateAsync(t.Id)) return;
+
+        await ReloadAsync();
+        Toast.ShowSuccess("Vorlage gelöscht.");
+    }
+}

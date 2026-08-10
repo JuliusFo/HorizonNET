@@ -168,6 +168,89 @@ public class TaskRepositoryTests
 
     // ── Seed-Helfer ──────────────────────────────────────────────────────────────
 
+    // ── Erledigt-Zeitstempel (Phase 14h) ─────────────────────────────────────────
+    // Trägt den Tagesrückblick im Journal. UpdatedAt taugte dafür nicht: Ein späteres
+    // Umbenennen hätte den Task in der Rückschau auf den falschen Tag verschoben.
+
+    [Fact]
+    public async Task SetStatus_ToDone_SetsCompletedAt()
+    {
+        using var db = new TestDatabase();
+        var id = await SeedTaskAsync(db, WorkStatus.Planned);
+
+        using (var act = db.NewContext())
+            await new TaskRepository(act).SetStatusAsync(id, WorkStatus.Done);
+
+        using var assert = db.NewContext();
+        Assert.NotNull((await assert.Tasks.FindAsync(id))!.CompletedAt);
+    }
+
+    [Fact]
+    public async Task SetStatus_ReopeningDoneTask_ClearsCompletedAt()
+    {
+        using var db = new TestDatabase();
+        var id = await SeedTaskAsync(db, WorkStatus.Planned);
+
+        using (var act = db.NewContext())
+            await new TaskRepository(act).SetStatusAsync(id, WorkStatus.Done);
+
+        using (var act = db.NewContext())
+            await new TaskRepository(act).SetStatusAsync(id, WorkStatus.InProgress);
+
+        using var assert = db.NewContext();
+        Assert.Null((await assert.Tasks.FindAsync(id))!.CompletedAt);
+    }
+
+    // Der entscheidende Test: Nur der WECHSEL setzt den Zeitstempel. Sonst wäre die
+    // Spalte genauso unzuverlässig wie das UpdatedAt, das sie ersetzen soll.
+    [Fact]
+    public async Task SetStatus_DoneTwice_KeepsFirstCompletedAt()
+    {
+        using var db = new TestDatabase();
+        var id = await SeedTaskAsync(db, WorkStatus.Planned);
+
+        DateTime first;
+        using (var act = db.NewContext())
+            first = (await new TaskRepository(act).SetStatusAsync(id, WorkStatus.Done))!.CompletedAt!.Value;
+
+        await Task.Delay(20);
+
+        using (var act = db.NewContext())
+            await new TaskRepository(act).SetStatusAsync(id, WorkStatus.Done);
+
+        using var assert = db.NewContext();
+        Assert.Equal(first, (await assert.Tasks.FindAsync(id))!.CompletedAt);
+    }
+
+    [Fact]
+    public async Task GetCompletedOn_ReturnsOnlyThatDay()
+    {
+        using var db = new TestDatabase();
+        var heute = await SeedTaskAsync(db, WorkStatus.Planned);
+        var gestern = await SeedTaskAsync(db, WorkStatus.Planned);
+
+        using (var act = db.NewContext())
+        {
+            var repo = new TaskRepository(act);
+            await repo.SetStatusAsync(heute, WorkStatus.Done);
+            await repo.SetStatusAsync(gestern, WorkStatus.Done);
+        }
+
+        // Einen der beiden auf gestern zurückdatieren.
+        using (var act = db.NewContext())
+        {
+            var task = await act.Tasks.FindAsync(gestern);
+            task!.CompletedAt = DateTime.Now.AddDays(-1);
+            await act.SaveChangesAsync();
+        }
+
+        using var assert = db.NewContext();
+        var treffer = await new TaskRepository(assert)
+            .GetCompletedOnAsync(DateOnly.FromDateTime(DateTime.Now));
+
+        Assert.Equal([heute], treffer.Select(t => t.Id));
+    }
+
     private static async Task<int> SeedTaskAsync(
         TestDatabase db, WorkStatus status,
         bool withRunningTimer = false, DateTime? dueDate = null, string? waitingFor = null)

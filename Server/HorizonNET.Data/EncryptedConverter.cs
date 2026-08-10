@@ -24,6 +24,13 @@ public static class EncryptedConverter
         new(plain => protector.Protect(plain),
             stored => protector.Unprotect(stored));
 
+    // Wie Strict, aber für Spalten, die null sein dürfen (Titel, Stimmungsnotiz).
+    // Eigene Überladung, weil ein ValueConverter<string, string> an einer string?-Property
+    // CS8620 auslöst. null bleibt null – verschlüsselt wird nur echter Inhalt.
+    public static ValueConverter<string?, string?> StrictNullable(IDataProtector protector) =>
+        new(plain => plain == null ? null : protector.Protect(plain),
+            stored => stored == null ? null : protector.Unprotect(stored));
+
     // Nachsichtig: Nicht entschlüsselbare Werte werden zu string.Empty statt zur Exception.
     // Ausschließlich für Werte, die sich jederzeit neu beschaffen lassen – konkret der
     // Google-Refresh-Token. Dessen Alt-Bestand liegt noch im Klartext in der DB und würde

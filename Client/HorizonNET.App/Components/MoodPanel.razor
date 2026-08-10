@@ -1,0 +1,301 @@
+@using System.Globalization
+@inject ApiService Api
+@inject ConfirmService Confirm
+
+@* Stimmungen eines Tages: erfassen, sehen, ändern. Mehrere pro Tag sind der Punkt –
+   erst der Verlauf ("früh mies, abends gut") trägt die Information.
+
+   Reihenfolge der Bedienung ist Absicht: Ein Klick auf ein Emoji legt sofort einen
+   Eintrag an. Energie und Notiz klappen erst danach auf und bleiben optional. Ein
+   Formular mit drei Pflichtfeldern wird bei schlechter Stimmung nicht ausgefüllt –
+   also genau dann nicht, wenn der Datenpunkt am meisten wert wäre.
+
+   Der Zeitstrahl läuft SENKRECHT (oben früh, unten spät): Die Komponente steht in einer
+   schmalen Seitenleiste, dort hätte eine 18-Stunden-Achse quer nur wenige Pixel je
+   Stunde. Senkrecht liest es sich wie eine Tagesspalte im Kalender. *@
+<div class="mood-panel">
+    <div class="mood-bar">
+        <span class="mood-bar-label text-muted small">@BarLabel</span>
+        <div class="mood-bar-buttons">
+            @foreach (var value in MoodScale.Values)
+            {
+                <button type="button" class="mood-button" disabled="@busy"
+                        style="--mood-color: @MoodScale.Color(value);"
+                        title="@MoodScale.Label(value)" @onclick="() => AddAsync(value)">
+                    @MoodScale.Emoji(value)
+                </button>
+            }
+        </div>
+    </div>
+
+    @* Bei null Einträgen bleibt es bei der Emoji-Zeile – ein leeres Achsenkreuz wäre
+       nur optischer Lärm. *@
+    @if (Ordered.Count > 0)
+    {
+        <div class="mood-timeline" style="height: @(N(PlotHeight))px;">
+            @* Stundenbeschriftung als HTML: <text> ist in Razor ein Steuer-Tag und lässt
+               sich nicht als SVG-Element schreiben. Die Skala stimmt trotzdem, weil das
+               SVG in Pixeln rechnet (viewBox = tatsächliche Größe, keine Skalierung). *@
+            <div class="mood-hours">
+                @foreach (var hour in TickHours)
+                {
+                    <span class="mood-hour" style="top: @(N(Y(hour)))px;">@hour.ToString("00")</span>
+                }
+            </div>
+
+            <svg class="mood-plot" width="@N(BandWidth)" height="@N(PlotHeight)"
+                 viewBox="0 0 @N(BandWidth) @N(PlotHeight)"
+                 role="img" aria-label="Stimmungsverlauf des Tages">
+                @* Eine durchgehende senkrechte Achse als Rückgrat. Ohne sie schweben die
+                   Punkte im Nichts – das war der Hauptgrund, warum der Bereich unruhig
+                   wirkte. Rasterlinien gibt es bewusst keine: Jeder Punkt trägt seine
+                   Uhrzeit direkt daneben, Linien wären reine Wiederholung. *@
+                <line x1="@N(Spine)" y1="0" x2="@N(Spine)" y2="@N(PlotHeight)" class="mood-axis" />
+
+                @foreach (var m in Ordered)
+                {
+                    <circle cx="@N(Spine)" cy="@N(Y(m.RecordedAt.TimeOfDay.TotalHours))"
+                            r="@(m.Id == selectedId ? "9" : "6.5")"
+                            fill="@MoodScale.Color(m.Mood)"
+                            class="mood-point @(m.Id == selectedId ? "is-selected" : "")"
+                            @onclick="() => Select(m.Id)">
+                        <title>@m.RecordedAt.ToString("HH:mm") – @MoodScale.Label(m.Mood)</title>
+                    </circle>
+                }
+            </svg>
+
+            @* Beschriftung rechts neben dem jeweiligen Punkt. Liegen zwei Stimmungen
+               zeitlich dicht beieinander, rutscht die zweite nach unten – sonst lägen
+               die Texte übereinander. *@
+            <div class="mood-labels">
+                @foreach (var (mood, y) in LabelPositions())
+                {
+                    <div class="mood-label @(mood.Id == selectedId ? "is-selected" : "")"
+                         style="top: @(N(y))px;" @onclick="() => Select(mood.Id)">
+                        <span class="mood-label-time">@mood.RecordedAt.ToString("HH:mm")</span>
+                        <span class="mood-label-emoji">@MoodScale.Emoji(mood.Mood)</span>
+                        @if (mood.Energy is byte energy)
+                        {
+                            <span class="mood-label-energy text-muted">@energy/10</span>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(mood.Note))
+                        {
+                            <span class="mood-label-note">@mood.Note</span>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @if (Selected is { } sel)
+    {
+        <div class="mood-detail">
+            <div class="mood-detail-row">
+                <span class="mood-detail-label">Stimmung</span>
+                <div class="mood-detail-scale">
+                    @foreach (var value in MoodScale.Values)
+                    {
+                        <button type="button" title="@MoodScale.Label(value)"
+                                class="mood-button mood-button-sm @(sel.Mood == value ? "is-active" : "")"
+                                style="--mood-color: @MoodScale.Color(value);"
+                                @onclick="() => ChangeMoodAsync(sel, value)">
+                            @MoodScale.Emoji(value)
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <div class="mood-detail-row">
+                <span class="mood-detail-label">Uhrzeit</span>
+                <input type="time" class="form-control form-control-sm mood-detail-time"
+                       value="@sel.RecordedAt.ToString("HH:mm")" @onchange="e => ChangeTimeAsync(sel, e)" />
+            </div>
+
+            <div class="mood-detail-row">
+                <span class="mood-detail-label">Energie</span>
+                @if (sel.Energy is byte energy)
+                {
+                    <div class="mood-detail-energy-row">
+                        <input type="range" class="form-range" min="0" max="10" step="1"
+                               value="@energy" @onchange="e => ChangeEnergyAsync(sel, e)" />
+                        <span class="mood-detail-energy">@energy/10</span>
+                        <button type="button" class="btn btn-sm btn-link text-muted p-0"
+                                title="Energie nicht erfassen" @onclick="() => ClearEnergyAsync(sel)">×</button>
+                    </div>
+                }
+                else
+                {
+                    @* null heißt "nicht erfasst" und ist ausdrücklich etwas anderes als 0
+                       ("komplett leer") – deshalb hier ein Knopf statt eines Sliders auf 0. *@
+                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                            @onclick="() => ChangeEnergyValueAsync(sel, 5)">Energie angeben</button>
+                }
+            </div>
+
+            <div class="mood-detail-row">
+                <span class="mood-detail-label">Notiz</span>
+                <input class="form-control form-control-sm" placeholder="weil…"
+                       value="@sel.Note" @onchange="e => ChangeNoteAsync(sel, e)" />
+            </div>
+
+            <div class="mood-detail-actions">
+                <button type="button" class="btn btn-sm btn-outline-danger"
+                        @onclick="() => DeleteAsync(sel)">Löschen</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        @onclick="() => selectedId = null">Fertig</button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public DateOnly Date { get; set; }
+
+    [Parameter] public IReadOnlyList<MoodResponseDto> Moods { get; set; } = [];
+
+    // Nach jeder Änderung: Der Aufrufer holt den Tag frisch (nur die Stimmungen –
+    // ein ungespeicherter Tippstand im Editor darf davon nicht angefasst werden).
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    // Feste Pixelmaße statt skalierendem viewBox: Die Seitenleiste hat feste Breite,
+    // damit bleiben Kreise rund und die HTML-Beschriftung trifft die SVG-Punkte exakt.
+    //
+    // Die Höhe ist bewusst FEST und nicht von der Zahl der Einträge abhängig: So sieht
+    // eine Uhrzeit an jedem Tag an derselben Stelle aus, und Tage bleiben vergleichbar.
+    private const double PlotHeight = 300;
+    private const double BandWidth = 22;
+    private const double Spine = 11;
+    private const double PadY = 12;
+    private const double MinLabelGap = 21;
+
+    private int? selectedId;
+    private bool busy;
+
+    private List<MoodResponseDto> Ordered => Moods.OrderBy(m => m.RecordedAt).ToList();
+
+    private MoodResponseDto? Selected => Moods.FirstOrDefault(m => m.Id == selectedId);
+
+    private string BarLabel => Ordered.Count == 0
+        ? "Wie geht es dir gerade?"
+        : "Noch eine Stimmung festhalten";
+
+    private void Select(int id) => selectedId = selectedId == id ? null : id;
+
+    // ── Achse ───────────────────────────────────────────────────────────────────
+
+    // Standard 6–24 Uhr. Liegt ein Eintrag außerhalb (Nachtschicht, früh raus), wächst
+    // die Achse mit – sonst klebte der Punkt am Rand und läge zeitlich falsch.
+    private double StartHour => Math.Min(6, Math.Floor(Ordered.Min(m => m.RecordedAt.TimeOfDay.TotalHours)));
+
+    private double EndHour => Math.Max(24, Math.Ceiling(Ordered.Max(m => m.RecordedAt.TimeOfDay.TotalHours)));
+
+    private IEnumerable<int> TickHours
+    {
+        get
+        {
+            var first = (int)Math.Ceiling(StartHour / 3) * 3;
+            for (var h = first; h <= EndHour; h += 3) yield return h;
+        }
+    }
+
+    // Oben früh, unten spät. PadY hält Punkte vom Rand weg – sonst wird ein Kreis zur
+    // frühesten Uhrzeit halb abgeschnitten.
+    private double Y(double hour) =>
+        PadY + (hour - StartHour) / (EndHour - StartHour) * (PlotHeight - 2 * PadY);
+
+    // Die Stimmung wird ausschließlich über die FARBE des Punktes gezeigt, nicht mehr
+    // über eine waagerechte Auslenkung. In einer 22 px breiten Spur wäre eine Kurve
+    // ohnehin nicht lesbar gewesen – sie hätte Genauigkeit vorgetäuscht, die auf so
+    // wenig Platz nicht existiert. Der echte Verlauf kommt in 14g über mehrere Tage.
+    private static string N(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+
+    // Beschriftungen sitzen auf Höhe ihres Punktes – außer sie kämen einander zu nahe,
+    // dann rutscht die spätere nach unten. Ohne das überlagern sich zwei Stimmungen,
+    // die eine Viertelstunde auseinanderliegen.
+    private List<(MoodResponseDto Mood, double Y)> LabelPositions()
+    {
+        var result = new List<(MoodResponseDto, double)>();
+        double? previous = null;
+
+        foreach (var m in Ordered)
+        {
+            var y = Y(m.RecordedAt.TimeOfDay.TotalHours);
+            if (previous is double prev && y - prev < MinLabelGap) y = prev + MinLabelGap;
+            y = Math.Min(y, PlotHeight - 10);
+
+            previous = y;
+            result.Add((m, y));
+        }
+
+        return result;
+    }
+
+    // ── Ändern ──────────────────────────────────────────────────────────────────
+
+    private async Task AddAsync(byte mood)
+    {
+        if (busy) return;
+        busy = true;
+
+        // Ohne Uhrzeit: Der Server setzt "jetzt" am heutigen Tag und sonst die
+        // Tagesmitte – bei einem nachgetragenen Tag wäre "jetzt" schlicht falsch.
+        var created = await Api.AddMoodAsync(Date, new MoodCreateDto(mood));
+        busy = false;
+
+        if (created is null) return;
+
+        // Direkt auswählen: Energie und Notiz sollen ohne weiteren Klick erreichbar sein.
+        selectedId = created.Id;
+        await OnChanged.InvokeAsync();
+    }
+
+    private Task ChangeMoodAsync(MoodResponseDto m, byte mood) =>
+        SaveAsync(m with { Mood = mood });
+
+    private Task ChangeTimeAsync(MoodResponseDto m, ChangeEventArgs e)
+    {
+        if (!TimeOnly.TryParse(e.Value?.ToString(), out var time)) return Task.CompletedTask;
+        return SaveAsync(m with { RecordedAt = Date.ToDateTime(time) });
+    }
+
+    private Task ChangeEnergyAsync(MoodResponseDto m, ChangeEventArgs e) =>
+        byte.TryParse(e.Value?.ToString(), out var value)
+            ? ChangeEnergyValueAsync(m, value)
+            : Task.CompletedTask;
+
+    private Task ChangeEnergyValueAsync(MoodResponseDto m, byte value) =>
+        SaveAsync(m with { Energy = value });
+
+    private Task ClearEnergyAsync(MoodResponseDto m) =>
+        SaveAsync(m with { Energy = null });
+
+    private Task ChangeNoteAsync(MoodResponseDto m, ChangeEventArgs e)
+    {
+        var note = e.Value?.ToString();
+        return SaveAsync(m with { Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim() });
+    }
+
+    private async Task SaveAsync(MoodResponseDto updated)
+    {
+        var saved = await Api.UpdateMoodAsync(updated.Id,
+            new MoodUpdateDto(updated.Mood, updated.Energy, updated.Note, updated.RecordedAt));
+
+        if (saved is not null) await OnChanged.InvokeAsync();
+    }
+
+    private async Task DeleteAsync(MoodResponseDto m)
+    {
+        // Nachfragen, weil es keinen Papierkorb dafür gibt: Stimmungen sind kurz und
+        // schnell neu erfasst, ein zweiter Papierkorb wäre mehr Verwaltung als Nutzen.
+        var ok = await Confirm.ShowAsync(
+            "Stimmung löschen?",
+            $"Der Eintrag von {m.RecordedAt:HH:mm} wird entfernt.");
+
+        if (!ok) return;
+        if (!await Api.DeleteMoodAsync(m.Id)) return;
+
+        selectedId = null;
+        await OnChanged.InvokeAsync();
+    }
+}

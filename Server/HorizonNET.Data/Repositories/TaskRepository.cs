@@ -190,7 +190,21 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
 
         ApplyDueDateForStatusChange(task, previous, newStatus);
         await ApplyTimerForStatusChangeAsync(task.Id, previous, newStatus);
+        ApplyCompletedAt(task, previous, newStatus);
         task.Status = newStatus;
+    }
+
+    // Erledigt-Zeitstempel für den Tagesrückblick (Phase 14h). Nur beim WECHSEL setzen:
+    // Ein erneutes Speichern eines bereits erledigten Tasks darf ihn nicht auf heute
+    // umdatieren – sonst wäre die Spalte so unzuverlässig wie das UpdatedAt, das sie
+    // ersetzen soll. Wird der Task wieder geöffnet, fällt der Zeitstempel weg.
+    private static void ApplyCompletedAt(TaskItem task, WorkStatus previous, WorkStatus next)
+    {
+        var wasDone = previous is WorkStatus.Done or WorkStatus.Abandoned;
+        var isDone = next is WorkStatus.Done or WorkStatus.Abandoned;
+
+        if (!wasDone && isDone) task.CompletedAt = DateTime.Now;
+        else if (wasDone && !isDone) task.CompletedAt = null;
     }
 
     // "Warten auf" ausgefüllt heißt: der Task ruht, bis die Antwort da ist – also auf
@@ -351,6 +365,18 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
 
         await context.SaveChangesAsync();
         return true;
+    }
+
+    public async Task<IEnumerable<TaskItem>> GetCompletedOnAsync(DateOnly date)
+    {
+        var dayStart = date.ToDateTime(TimeOnly.MinValue);
+        var dayEnd = dayStart.AddDays(1);
+
+        return await context.Tasks
+            .Include(t => t.Project)
+            .Where(t => t.CompletedAt != null && t.CompletedAt >= dayStart && t.CompletedAt < dayEnd)
+            .OrderBy(t => t.CompletedAt)
+            .ToListAsync();
     }
 
     public async Task<IEnumerable<TaskItem>> SearchAsync(string query, int limit)

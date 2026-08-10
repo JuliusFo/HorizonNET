@@ -1,0 +1,127 @@
+@* Ein Jahr auf einen Blick: 53 Wochen als Spalten, Wochentage als Zeilen.
+
+   Eingefärbt wird nach dem STIMMUNGSSCHNITT des Tages, nicht nach "geschrieben ja/nein" –
+   sonst wäre es eine Anwesenheitsliste. Tage mit Text, aber ohne Stimmung bekommen einen
+   neutralen Ton: geschrieben wurde, gefühlt wurde nichts erfasst. *@
+<div class="heatmap-wrap">
+    <div class="heatmap-months">
+        @foreach (var (week, label) in MonthLabels)
+        {
+            <span class="heatmap-month" style="grid-column: @(week + 2);">@label</span>
+        }
+    </div>
+
+    <div class="heatmap-grid">
+        <div class="heatmap-weekdays">
+            @* Nur jeder zweite Wochentag beschriftet – alle sieben wären Tapete. *@
+            <span></span><span>Di</span><span></span><span>Do</span><span></span><span>Sa</span><span></span>
+        </div>
+
+        @foreach (var week in Weeks)
+        {
+            <div class="heatmap-week">
+                @foreach (var day in week)
+                {
+                    if (day > Today)
+                    {
+                        <span class="heatmap-cell is-future"></span>
+                    }
+                    else
+                    {
+                        <a class="heatmap-cell" href="@($"journal/{day:yyyy-MM-dd}")"
+                           style="background-color: @CellColor(day);" title="@Tooltip(day)"></a>
+                    }
+                }
+            </div>
+        }
+    </div>
+
+    <div class="heatmap-legend">
+        <span class="heatmap-legend-label">nichts</span>
+        <span class="heatmap-cell" style="background-color: @Empty;"></span>
+        <span class="heatmap-cell" style="background-color: @WrittenOnly;"></span>
+        <span class="heatmap-legend-label">nur Text</span>
+        <span class="heatmap-legend-gap"></span>
+        @foreach (var value in MoodScale.Values)
+        {
+            <span class="heatmap-cell" style="background-color: @MoodScale.Color(value);"
+                  title="@MoodScale.Label(value)"></span>
+        }
+        <span class="heatmap-legend-label">Stimmung</span>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<JournalListItemDto> Entries { get; set; } = [];
+
+    [Parameter, EditorRequired] public DateOnly From { get; set; }
+
+    // Leerer Tag und "geschrieben, aber ohne Stimmung" liegen bewusst NEBEN der
+    // Stimmungsskala: Sie sind keine Stufe davon, sondern die Abwesenheit einer.
+    private const string Empty = "#e9ecef";
+    private const string WrittenOnly = "#adb5bd";
+
+    private static DateOnly Today => DateOnly.FromDateTime(DateTime.Now);
+
+    private Dictionary<DateOnly, JournalListItemDto> byDate = [];
+
+    protected override void OnParametersSet() =>
+        byDate = Entries.ToDictionary(e => e.Date);
+
+    // Spalten beginnen am Montag – sonst zerfällt eine Woche auf zwei Spalten.
+    private DateOnly GridStart
+    {
+        get
+        {
+            var offset = ((int)From.DayOfWeek + 6) % 7;   // Mo = 0 … So = 6
+            return From.AddDays(-offset);
+        }
+    }
+
+    private List<List<DateOnly>> Weeks
+    {
+        get
+        {
+            var weeks = new List<List<DateOnly>>();
+            for (var start = GridStart; start <= Today; start = start.AddDays(7))
+                weeks.Add(Enumerable.Range(0, 7).Select(start.AddDays).ToList());
+
+            return weeks;
+        }
+    }
+
+    // Monatsname über der ersten Woche, in der ein neuer Monat beginnt.
+    private IEnumerable<(int Week, string Label)> MonthLabels
+    {
+        get
+        {
+            var weeks = Weeks;
+            for (var i = 0; i < weeks.Count; i++)
+            {
+                var first = weeks[i].FirstOrDefault(d => d.Day <= 7);
+                if (first != default && (i == 0 || weeks[i - 1].All(d => d.Month != first.Month)))
+                    yield return (i, first.ToString("MMM"));
+            }
+        }
+    }
+
+    private string CellColor(DateOnly day)
+    {
+        if (!byDate.TryGetValue(day, out var entry)) return Empty;
+        if (entry.MoodAvg is double avg) return MoodScale.ColorForAverage(avg);
+        return entry.HasContent ? WrittenOnly : Empty;
+    }
+
+    private string Tooltip(DateOnly day)
+    {
+        var date = day.ToString("dd.MM.yyyy");
+        if (!byDate.TryGetValue(day, out var entry)) return $"{date} – nichts erfasst";
+
+        var parts = new List<string>();
+        if (entry.HasContent) parts.Add("Text");
+        if (entry.MoodAvg is double avg)
+            parts.Add($"Stimmung {avg:0.0} {MoodScale.Emoji((byte)Math.Round(avg, MidpointRounding.AwayFromZero))}");
+
+        return parts.Count > 0 ? $"{date} – {string.Join(" · ", parts)}" : $"{date} – nichts erfasst";
+    }
+}

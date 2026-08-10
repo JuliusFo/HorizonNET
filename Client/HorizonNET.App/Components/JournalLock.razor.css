@@ -1,0 +1,33 @@
+.journal-lock {
+    display: flex;
+    justify-content: center;
+    padding: 3rem 1rem;
+}
+
+.journal-lock-card {
+    width: 100%;
+    max-width: 20rem;
+    text-align: center;
+    padding: 2rem 1.5rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.75rem;
+    background-color: var(--bs-body-bg);
+}
+
+.journal-lock-icon {
+    font-size: 2rem;
+    line-height: 1;
+    margin-bottom: 0.75rem;
+}
+
+/* Weite Zeichenabstände: Eine PIN liest man als Ziffernfolge, nicht als Wort. */
+.journal-lock-input {
+    letter-spacing: 0.5em;
+    font-size: 1.25rem;
+    padding-left: 0.5em;
+}
+
+.journal-lock-hint {
+    font-size: 0.75rem;
+    line-height: 1.35;
+}

@@ -59,6 +59,16 @@ public class TaskItem
 
     public DateTime UpdatedAt { get; set; }
 
+    // Wann der Task auf "Erledigt"/"Verworfen" gesetzt wurde; null, solange er offen ist.
+    // Gesetzt und geleert ausschließlich in TaskRepository.ApplyStatusChangeAsync –
+    // dort läuft jeder Statuswechsel durch, egal über welchen Weg.
+    //
+    // Eigene Spalte statt UpdatedAt auszuwerten: Wer einen erledigten Task später
+    // umbenennt, verschöbe ihn sonst im Tagesrückblick auf den Umbenennungstag.
+    // Für Bestandsdaten aus der Zeit vor Phase 14h ist der Wert eine Näherung
+    // (mit UpdatedAt befüllt), ab dann exakt.
+    public DateTime? CompletedAt { get; set; }
+
     // Soft-Delete: null = aktiv. Gelöschte Zeilen werden per globalem Query-Filter
     // ausgeblendet; der Zeitstempel gruppiert einen Löschvorgang (Cascade) für Undo.
     public DateTime? DeletedAt { get; set; }

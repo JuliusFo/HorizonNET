@@ -1,0 +1,87 @@
+/* Waagerecht scrollbar statt gequetscht: Ein Jahr sind 53 Spalten, die auf schmalen
+   Fenstern nicht sinnvoll schrumpfen können – Zellen unter 8 px sind nicht mehr
+   klickbar. Lieber scrollen als unbenutzbar. */
+.heatmap-wrap {
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+}
+
+.heatmap-months {
+    display: grid;
+    grid-auto-columns: 0.85rem;
+    grid-auto-flow: column;
+    gap: 0.15rem;
+    margin-left: 1.9rem;
+    height: 1rem;
+    min-width: max-content;
+}
+
+.heatmap-month {
+    font-size: 0.7rem;
+    color: var(--bs-secondary-color, #6c757d);
+    white-space: nowrap;
+}
+
+.heatmap-grid {
+    display: flex;
+    gap: 0.15rem;
+    min-width: max-content;
+}
+
+.heatmap-weekdays {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    width: 1.75rem;
+    flex-shrink: 0;
+}
+
+.heatmap-weekdays span {
+    height: 0.85rem;
+    font-size: 0.65rem;
+    line-height: 0.85rem;
+    color: var(--bs-secondary-color, #6c757d);
+}
+
+.heatmap-week {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.heatmap-cell {
+    display: block;
+    width: 0.85rem;
+    height: 0.85rem;
+    border-radius: 0.15rem;
+    background-color: #e9ecef;
+}
+
+a.heatmap-cell:hover {
+    outline: 2px solid var(--bs-body-color);
+    outline-offset: 1px;
+}
+
+/* Tage nach heute bleiben als Platzhalter stehen, damit die Woche nicht zerfällt –
+   aber unsichtbar, weil es über sie nichts zu sagen gibt. */
+.heatmap-cell.is-future {
+    background-color: transparent;
+}
+
+.heatmap-legend {
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+    margin-top: 0.6rem;
+    margin-left: 1.9rem;
+}
+
+.heatmap-legend-label {
+    font-size: 0.7rem;
+    color: var(--bs-secondary-color, #6c757d);
+    margin: 0 0.3rem;
+}
+
+.heatmap-legend-gap {
+    width: 0.75rem;
+}

@@ -67,6 +67,8 @@ builder.Services.AddScoped<ITimeEntryRepository, TimeEntryRepository>();
 builder.Services.AddScoped<IExerciseRepository, ExerciseRepository>();
 builder.Services.AddScoped<IExerciseSetRepository, ExerciseSetRepository>();
 builder.Services.AddScoped<IBodyWeightRepository, BodyWeightRepository>();
+builder.Services.AddScoped<IJournalRepository, JournalRepository>();
+builder.Services.AddScoped<IJournalTemplateRepository, JournalTemplateRepository>();
 
 // Google-Kalender-Anbindung (OAuth + späterer Calendar-Zugriff)
 builder.Services.AddScoped<GoogleCalendarService>();

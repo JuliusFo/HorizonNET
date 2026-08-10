@@ -1,0 +1,65 @@
+@* Stichworte eines Tages. Sie liegen als einziger Textteil des Journals im KLARTEXT
+   in der Datenbank – danach wird in SQL vorgefiltert, bevor der verschlüsselte Text im
+   Speicher durchsucht wird. Deshalb hier bewusst kurze Schlagworte statt Sätzen. *@
+<div class="tags">
+    <span class="tags-label">Stichworte</span>
+
+    <div class="tags-list">
+        @foreach (var tag in Current)
+        {
+            <span class="tag-chip">
+                @tag
+                <button type="button" class="tag-remove" title="Entfernen"
+                        @onclick="() => RemoveAsync(tag)">×</button>
+            </span>
+        }
+
+        <input class="tag-input" placeholder="+ Stichwort" @bind="draft" @bind:event="oninput"
+               @onkeydown="OnKeyDown" @onblur="AddAsync" />
+    </div>
+</div>
+
+@code {
+    // Kommaseparierte Liste, wie sie in der Spalte steht; null = keine.
+    [Parameter] public string? Tags { get; set; }
+
+    [Parameter] public EventCallback<string?> TagsChanged { get; set; }
+
+    private string draft = string.Empty;
+
+    private List<string> Current =>
+        (Tags ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        // Enter UND Komma schließen ein Stichwort ab – das Komma, weil man es beim
+        // Aufzählen ohnehin tippt, und es sonst mitten im Wort landen würde.
+        if (e.Key is "Enter" or ",") await AddAsync();
+        else if (e.Key == "Escape") draft = string.Empty;
+    }
+
+    private async Task AddAsync()
+    {
+        var value = draft.Trim().Trim(',').ToLowerInvariant();
+        draft = string.Empty;
+
+        if (value.Length == 0) return;
+
+        var tags = Current;
+        if (tags.Contains(value)) return;
+
+        tags.Add(value);
+        await TagsChanged.InvokeAsync(string.Join(',', tags));
+    }
+
+    private async Task RemoveAsync(string tag)
+    {
+        var tags = Current;
+        tags.Remove(tag);
+
+        // Leere Liste als null zurückgeben, damit in der Spalte nicht "" landet.
+        await TagsChanged.InvokeAsync(tags.Count == 0 ? null : string.Join(',', tags));
+    }
+}

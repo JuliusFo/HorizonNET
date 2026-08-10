@@ -1,0 +1,70 @@
+.journal-context {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.4rem;
+    background-color: var(--bs-secondary-bg);
+}
+
+/* Die ganze Zeile ist der Auslöser, nicht nur das Zeichen rechts – ein 4 px großes
+   Ziel wäre eine Zumutung. */
+.journal-context-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.4rem 0.7rem;
+    border: none;
+    background: none;
+    text-align: left;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: var(--bs-secondary-color, #6c757d);
+    border-radius: 0.4rem;
+}
+
+.journal-context-head:hover {
+    color: var(--bs-body-color);
+}
+
+.journal-context-summary {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.journal-context-chevron {
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.journal-context-body {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    padding: 0 0.7rem 0.7rem;
+    font-size: 0.875rem;
+}
+
+.journal-context-group {
+    min-width: 12rem;
+}
+
+.journal-context-label {
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--bs-secondary-color, #6c757d);
+    margin-bottom: 0.15rem;
+}
+
+.journal-context-group ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.journal-context-group li {
+    padding: 0.1rem 0;
+}

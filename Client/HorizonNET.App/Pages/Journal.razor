@@ -1,0 +1,606 @@
+@page "/journal"
+@* Datums-Einschränkung in der Route: Ohne sie würde /journal/verlauf ebenfalls hier
+   landen und stillschweigend als "nicht lesbares Datum" auf heute zurückfallen. *@
+@page "/journal/{Date:datetime}"
+@inject ApiService Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject JournalLockState Lock
+@inject ConfirmService Confirm
+@inject ToastService Toast
+@implements IAsyncDisposable
+
+<PageTitle>Journal – HorizonNET</PageTitle>
+
+@* Tagebuch: ein Eintrag pro Tag. Gespeichert wird ohne Knopf, 2 s nach der letzten
+   Eingabe – und beim Tageswechsel sowie beim Verlassen der Seite (FlushAsync).
+   Ein bloß angesehener Tag wird NICHT angelegt: Erst wenn etwas dasteht, entsteht
+   serverseitig ein Eintrag. *@
+@if (!Lock.IsOpen)
+{
+    @* Inhalt bewusst gar nicht erst rendern statt nur zu überdecken – sonst stünde
+       der Tagestext im DOM und wäre trotz Sperre auslesbar. *@
+    <JournalLock />
+}
+else
+{
+<div class="journal-layout">
+    @* Sichtbar trägt die Kopfzeile nur noch Kurzangaben; für Vorlesehilfen bleibt das
+       vollständige Datum als Seitenüberschrift erhalten. *@
+    <h1 class="visually-hidden">Journal – @currentDate.ToString("dddd, d. MMMM yyyy")</h1>
+
+    <div class="journal-bar">
+        <div class="journal-nav">
+            <button type="button" class="btn btn-sm btn-outline-secondary"
+                    @onclick="GoPreviousDayAsync" title="Vorheriger Tag (Alt+←)">←</button>
+
+            <input type="date" class="form-control form-control-sm journal-date"
+                   value="@currentDate.ToString("yyyy-MM-dd")" @onchange="OnDatePickedAsync" />
+
+            <button type="button" class="btn btn-sm btn-outline-secondary"
+                    @onclick="GoNextDayAsync" title="Nächster Tag (Alt+→)">→</button>
+
+            @if (currentDate != Today)
+            {
+                <button type="button" class="btn btn-sm btn-outline-primary"
+                        @onclick="GoTodayAsync" title="Zu heute springen (Alt+H)">Heute</button>
+            }
+        </div>
+
+        @* Nur noch das, was das Datumsfeld NICHT zeigt: Wochentag ("was war Montag?")
+           und der Abstand zu heute. Die fette Datumszeile ist entfallen – sie wiederholte
+           bloß das Feld daneben. *@
+        <span class="journal-when text-muted small">@WhenLabel</span>
+
+        @* Die Überschrift füllt die Mitte. Weil sie selten gesetzt wird, steht dort im
+           Normalfall nur ein unscheinbares "+ Überschrift" statt eines leeren Feldes –
+           ein breites leeres Eingabefeld oben liest sich sonst wie eine Suche. *@
+        <div class="journal-title-slot">
+            @if (titleEditing)
+            {
+                <input @ref="titleInput" class="form-control form-control-sm journal-title"
+                       placeholder="Überschrift für den Tag…"
+                       value="@title" @oninput="OnTitleInput"
+                       @onblur="StopTitleEdit" @onkeydown="OnTitleKeyDown" />
+            }
+            else if (!string.IsNullOrWhiteSpace(title))
+            {
+                <button type="button" class="journal-title-text" @onclick="StartTitleEdit"
+                        title="Überschrift bearbeiten">@title</button>
+            }
+            else
+            {
+                <button type="button" class="journal-title-add" @onclick="StartTitleEdit">
+                    + Überschrift
+                </button>
+            }
+        </div>
+
+        @* Rechtsbündig, weil die Kopfzeile jetzt eine echte rechte Kante hat: die Karte
+           der Seitenleiste. Symbol UND Kurztext – drei Zustände an einem Zeichen allein
+           müsste man raten. *@
+        <span class="journal-status text-muted small" title="@StatusTooltip">
+            <span class="journal-status-icon">@StatusDisplay.Icon</span>@StatusDisplay.Text
+        </span>
+    </div>
+
+    @if (loading)
+    {
+        <p class="text-muted">Wird geladen…</p>
+    }
+    else
+    {
+        @* Zwei Spalten: Schreiben links, Stimmung rechts. Der Stimmungsbereich ist ein
+           Begleiter, kein Teil des Schreibflusses – zwischen Überschrift und Text stünde
+           er dem Einstieg im Weg. *@
+        <div class="journal-body">
+            <div class="journal-main">
+                @* Was die App über den Tag weiß – als Schreibhilfe über dem Text. *@
+                <JournalContext Date="currentDate" />
+
+                <JournalTemplateBar HasContent="@(!IsBlank)" OnInsert="InsertTemplate" />
+
+                @* Value wird EINWEG gebunden und nur beim Tageswechsel gesetzt. Mit @bind-Value
+                   schriebe Radzen den Inhalt bei jedem Tastendruck in den DOM zurück – das gäbe
+                   eine spürbare Eingabeverzögerung (gleiche Lehre wie im NoteEditor).
+
+                   Eigene Werkzeugleiste: Sobald Kind-Elemente angegeben sind, ersetzen sie die
+                   Standardleiste. Die brachte rund 35 Symbole in zwei Reihen über ein leeres
+                   Blatt – Schriftart, Tabellen, Hoch-/Tiefstellen und Quelltext braucht beim
+                   Tagebuchschreiben niemand. Bewusst NICHT dabei ist auch das Bild-Werkzeug:
+                   Die App hat keinen Upload-Endpunkt, und eingebettete Bilder würden als
+                   Base64 den verschlüsselten Inhalt aufblähen. *@
+                <RadzenHtmlEditor Value="@editorValue" Input="OnContentInput" Change="OnContentInput"
+                                  class="journal-editor">
+                    <RadzenHtmlEditorUndo />
+                    <RadzenHtmlEditorRedo />
+                    <RadzenHtmlEditorSeparator />
+                    <RadzenHtmlEditorBold />
+                    <RadzenHtmlEditorItalic />
+                    <RadzenHtmlEditorUnderline />
+                    <RadzenHtmlEditorStrikeThrough />
+                    <RadzenHtmlEditorColor />
+                    <RadzenHtmlEditorSeparator />
+                    <RadzenHtmlEditorUnorderedList />
+                    <RadzenHtmlEditorOrderedList />
+                    <RadzenHtmlEditorSeparator />
+                    <RadzenHtmlEditorLink />
+                    <RadzenHtmlEditorUnlink />
+                    <RadzenHtmlEditorSeparator />
+                    <RadzenHtmlEditorRemoveFormat />
+                </RadzenHtmlEditor>
+            </div>
+
+            <aside class="journal-side">
+                <div class="journal-side-card">
+                    <MoodPanel Date="currentDate" Moods="@(entry?.Moods ?? [])" OnChanged="RefreshMoodsAsync" />
+
+                    <JournalTags Tags="@entry?.Tags" TagsChanged="OnTagsChangedAsync" />
+
+                    @* Aktionen für den Tag am Fuß der Karte – dadurch enden beide Spalten
+                       bündig und die Kopfzeile bleibt eine einzige ruhige Gruppe. *@
+                    <div class="journal-side-actions">
+                        @if (Lock.IsConfigured)
+                        {
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                    @onclick="LockNow" title="Journal sperren">🔒</button>
+                        }
+
+                        <a href="journal/suche" class="btn btn-sm btn-outline-secondary"
+                           title="Journal durchsuchen">Suche</a>
+
+                        <a href="journal/verlauf" class="btn btn-sm btn-outline-secondary"
+                           title="Stimmung über mehrere Tage">Verlauf</a>
+
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                @onclick="() => showTrash = true" title="Gelöschte Einträge">Papierkorb</button>
+
+                        @if (entry is not null)
+                        {
+                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                    @onclick="DeleteAsync" title="Diesen Tag löschen">Tag löschen</button>
+                        }
+                    </div>
+                </div>
+            </aside>
+        </div>
+    }
+</div>
+
+@if (showTrash)
+{
+    <JournalTrash OnClose="() => showTrash = false" OnRestored="OnRestoredAsync" />
+}
+}
+
+@code {
+    // Datum aus der Route (yyyy-MM-dd); ohne Angabe heute.
+    [Parameter] public DateTime? Date { get; set; }
+
+    private static DateOnly Today => DateOnly.FromDateTime(DateTime.Now);
+
+    private DateOnly currentDate = Today;
+    private DateOnly? loadedDate;          // was tatsächlich geladen wurde (verhindert Doppelladen)
+    private JournalEntryResponseDto? entry; // null = für diesen Tag existiert noch nichts
+
+    private string title = string.Empty;
+    private string editorValue = string.Empty; // stabil an den Editor gebunden (nur bei Wechsel gesetzt)
+    private string content = string.Empty;     // laufender Bearbeitungsstand (zum Speichern)
+
+    private bool loading = true;
+    private bool dataLoaded;               // ob der Tag tatsächlich geladen wurde (nicht bei Sperre)
+    private bool showTrash;
+    private bool titleEditing;             // Überschrift aufgeklappt?
+    private bool focusTitle;               // Fokus nach dem nächsten Rendern setzen
+    private ElementReference titleInput;
+    private SaveState state = SaveState.Saved;
+    private DateTime? savedAt;
+    private CancellationTokenSource? debounceCts;
+    private bool skipNextRender;
+
+    private IJSObjectReference? keysModule;
+    private IJSObjectReference? lockModule;
+    private DotNetObjectReference<Journal>? selfRef;
+
+    private enum SaveState { Saved, Pending, Saving, Error }
+
+    // Kurzform für die Ecke rechts. Der Zeitstempel steht bewusst ohne Sekunden – auf
+    // die Sekunde genau interessiert hier niemanden, und er soll nicht ständig zappeln.
+    private (string Icon, string Text) StatusDisplay => state switch
+    {
+        SaveState.Pending => ("⋯", "nicht gespeichert"),
+        SaveState.Saving  => ("⋯", "speichert…"),
+        SaveState.Error   => ("⚠", "Fehler"),
+        _ when savedAt is DateTime at => ("✓", at.ToString("HH:mm")),
+        _ when entry is null => ("", "noch nichts geschrieben"),
+        _                 => ("✓", "gespeichert")
+    };
+
+    // Die Langform als Tooltip – so bleibt die Zeile kurz, ohne Information zu verlieren.
+    private string StatusTooltip => state switch
+    {
+        SaveState.Pending => "Änderungen noch nicht gespeichert",
+        SaveState.Saving  => "Wird gespeichert…",
+        SaveState.Error   => "Speichern fehlgeschlagen",
+        _ when savedAt is DateTime at => $"Zuletzt gespeichert um {at:HH:mm:ss}",
+        _ when entry is null => "Für diesen Tag gibt es noch keinen Eintrag",
+        _                 => "Gespeichert"
+    };
+
+    // Wochentag plus Abstand zu heute – genau die zwei Angaben, die das Datumsfeld
+    // daneben nicht zeigt.
+    private string WhenLabel => $"{currentDate:dddd} · {RelativeLabel}";
+
+    private string RelativeLabel
+    {
+        get
+        {
+            var diff = currentDate.DayNumber - Today.DayNumber;
+            return diff switch
+            {
+                0  => "heute",
+                -1 => "gestern",
+                1  => "morgen",
+                < 0 => $"vor {-diff} Tagen",
+                _  => $"in {diff} Tagen"
+            };
+        }
+    }
+
+    // ── Überschrift ──────────────────────────────────────────────────────────────
+
+    private void StartTitleEdit()
+    {
+        titleEditing = true;
+        focusTitle = true;
+    }
+
+    private void StopTitleEdit() => titleEditing = false;
+
+    private void OnTitleKeyDown(KeyboardEventArgs e)
+    {
+        // Enter und Escape schließen das Feld; gespeichert wird ohnehin automatisch.
+        if (e.Key is "Enter" or "Escape") titleEditing = false;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        selfRef = DotNetObjectReference.Create(this);
+
+        await Lock.EnsureLoadedAsync();
+        Lock.OnChange += HandleLockChanged;
+
+        keysModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/journalKeys.js");
+        await keysModule.InvokeVoidAsync("register", selfRef);
+
+        // Aktivität melden, damit der Auto-Lock nicht mitten im Lesen zuschlägt.
+        lockModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/journalLock.js");
+        await lockModule.InvokeVoidAsync("trackActivity", selfRef);
+    }
+
+    // Aufgeklapptes Überschriften-Feld direkt fokussieren – sonst wäre ein zweiter
+    // Klick nötig, und der Knopf wäre keine Abkürzung, sondern ein Umweg.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!focusTitle) return;
+
+        focusTitle = false;
+        await titleInput.FocusAsync();
+    }
+
+    [JSInvokable]
+    public void OnUserActivity() => Lock.RegisterActivity();
+
+    // Reagiert auf Entsperren, manuelles Sperren und den Auto-Lock.
+    private void HandleLockChanged() => InvokeAsync(async () =>
+    {
+        if (Lock.IsOpen)
+        {
+            // Gerade entsperrt: Der Tag wurde bei Sperre bewusst nicht geladen.
+            if (!dataLoaded) await LoadAsync();
+        }
+        else
+        {
+            // Gerade gesperrt: Erst noch Ungespeichertes sichern – der Auto-Lock darf
+            // nicht kosten, was seit der letzten Eingabe getippt wurde.
+            await FlushAsync();
+
+            entry       = null;
+            title       = string.Empty;
+            content     = string.Empty;
+            editorValue = string.Empty;
+            dataLoaded  = false;
+            showTrash   = false;
+        }
+
+        StateHasChanged();
+    });
+
+    private void LockNow() => Lock.Lock();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var target = Date is DateTime d ? DateOnly.FromDateTime(d) : Today;
+        if (loadedDate == target) return;
+
+        // Tageswechsel: ausstehende Änderungen des bisherigen Tages noch sichern.
+        await FlushAsync();
+
+        currentDate = target;
+        loadedDate = target;
+        await LoadAsync();
+    }
+
+    private static DateOnly? ParseDate(string? value) =>
+        DateOnly.TryParse(value, out var parsed) ? parsed : null;
+
+    private async Task LoadAsync()
+    {
+        // Bei gesperrtem Journal gar nicht erst holen: Der Text soll nicht im Speicher
+        // der Seite liegen, solange er nicht gezeigt werden darf.
+        if (!Lock.IsOpen)
+        {
+            loading = false;
+            dataLoaded = false;
+            return;
+        }
+
+        loading = true;
+        StateHasChanged();
+
+        entry       = await Api.GetJournalEntryAsync(currentDate);
+        title       = entry?.Title ?? string.Empty;
+        content     = entry?.Content ?? string.Empty;
+        editorValue = content;
+        state       = SaveState.Saved;
+        savedAt     = null;
+        loading     = false;
+        dataLoaded  = true;
+
+        StateHasChanged();
+    }
+
+    // Holt den Tag neu, übernimmt aber NUR die Stimmungen. Titel und Text bleiben
+    // unangetastet: Wer gerade tippt und nebenher eine Stimmung festhält, dürfte sonst
+    // seinen noch nicht gespeicherten Stand verlieren.
+    private async Task RefreshMoodsAsync()
+    {
+        var fresh = await Api.GetJournalEntryAsync(currentDate);
+        if (fresh is null) return;
+
+        entry = fresh;
+        StateHasChanged();
+    }
+
+    // Stichworte werden SOFORT gespeichert, nicht über den Debounce: Ein Stichwort setzt
+    // man bewusst und einmalig – zwei Sekunden Warten auf Wirkung fühlten sich kaputt an.
+    // Der laufende Textstand geht dabei mit, er steht ohnehin in content.
+    private async Task OnTagsChangedAsync(string? tags)
+    {
+        debounceCts?.Cancel();
+
+        var saved = await Api.SaveJournalEntryAsync(currentDate, new JournalEntryUpsertDto(
+            string.IsNullOrWhiteSpace(title) ? null : title.Trim(),
+            content, tags, entry?.ProjectId, entry?.TaskItemId));
+
+        if (saved is null)
+        {
+            state = SaveState.Error;
+        }
+        else
+        {
+            entry = saved;
+            savedAt = saved.UpdatedAt;
+            state = SaveState.Saved;
+        }
+
+        StateHasChanged();
+    }
+
+    // ── Löschen und Wiederherstellen ─────────────────────────────────────────────
+
+    private async Task DeleteAsync()
+    {
+        if (entry is null) return;
+
+        var ok = await Confirm.ShowAsync(
+            "Tag löschen?",
+            $"Der Eintrag vom {currentDate:dd.MM.yyyy} wandert in den Journal-Papierkorb "
+            + "und lässt sich von dort wiederherstellen.");
+
+        if (!ok) return;
+
+        debounceCts?.Cancel();
+        var id = entry.Id;
+        if (!await Api.DeleteJournalEntryAsync(id)) return;
+
+        entry       = null;
+        title       = string.Empty;
+        content     = string.Empty;
+        editorValue = string.Empty;
+        state       = SaveState.Saved;
+        savedAt     = null;
+
+        // Undo wie im Rest der App – bewusst ohne Inhalt in der Meldung.
+        Toast.ShowUndo($"Eintrag vom {currentDate:dd.MM.yyyy} gelöscht.", async () =>
+        {
+            if (await Api.RestoreJournalEntryAsync(id))
+                await LoadAsync();
+        });
+
+        StateHasChanged();
+    }
+
+    // Nach dem Wiederherstellen aus dem Papierkorb: Betrifft es den angezeigten Tag,
+    // muss die Seite ihn neu laden – sonst stünde dort weiter „nichts geschrieben".
+    private async Task OnRestoredAsync(DateOnly date)
+    {
+        if (date == currentDate) await LoadAsync();
+    }
+
+    // ── Navigation ───────────────────────────────────────────────────────────────
+
+    // Über die URL navigieren statt den Zustand direkt zu setzen: So funktionieren
+    // Vor/Zurück des Browsers und ein direkt aufgerufener Link von selbst.
+    private void NavigateTo(DateOnly date) =>
+        Nav.NavigateTo($"/journal/{date:yyyy-MM-dd}");
+
+    [JSInvokable] public Task GoPreviousDayAsync() { NavigateTo(currentDate.AddDays(-1)); return Task.CompletedTask; }
+
+    [JSInvokable] public Task GoNextDayAsync() { NavigateTo(currentDate.AddDays(1)); return Task.CompletedTask; }
+
+    [JSInvokable] public Task GoTodayAsync() { NavigateTo(Today); return Task.CompletedTask; }
+
+    private void OnDatePickedAsync(ChangeEventArgs e)
+    {
+        if (ParseDate(e.Value?.ToString()) is DateOnly picked)
+            NavigateTo(picked);
+    }
+
+    // ── Eingabe und Auto-Save ────────────────────────────────────────────────────
+
+    // Während des Tippens NICHT neu rendern – sonst schreibt Radzen den Editor-DOM neu.
+    protected override bool ShouldRender()
+    {
+        if (skipNextRender) { skipNextRender = false; return false; }
+        return true;
+    }
+
+    private void OnTitleInput(ChangeEventArgs e)
+    {
+        title = e.Value?.ToString() ?? string.Empty;
+        skipNextRender = true;
+        ScheduleSave();
+    }
+
+    private void OnContentInput(string html)
+    {
+        content = html;
+        skipNextRender = true;
+        ScheduleSave();
+    }
+
+    // Vorlage einsetzen. Das ist der einzige Fall, in dem editorValue bewusst gesetzt
+    // wird: Der Editor SOLL seinen Inhalt neu schreiben. Beim Tippen wäre genau das
+    // der Grund für die Eingabeverzögerung, die wir vermeiden.
+    private void InsertTemplate(string html)
+    {
+        // An bestehenden Text anfügen statt ihn zu ersetzen – Geschriebenes darf ein
+        // Fehlklick nicht kosten.
+        content = IsBlank ? html : content + html;
+        editorValue = content;
+
+        ScheduleSave();
+        StateHasChanged();
+    }
+
+    private void ScheduleSave()
+    {
+        state = SaveState.Pending;
+        debounceCts?.Cancel();
+        debounceCts = new CancellationTokenSource();
+        _ = DebouncedSaveAsync(debounceCts.Token);
+    }
+
+    private async Task DebouncedSaveAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(2000, token);
+            await SaveAsync();
+        }
+        catch (TaskCanceledException) { /* durch neue Eingabe ersetzt */ }
+    }
+
+    // Speichert ausstehende Änderungen sofort (Tageswechsel, Verlassen der Seite).
+    public async Task FlushAsync()
+    {
+        if (state is SaveState.Pending or SaveState.Error)
+            await SaveAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        // Einen leeren Tag nicht anlegen: Durchblättern soll keine Karteileichen
+        // erzeugen. Existiert der Eintrag bereits, wird Leeren dagegen gespeichert –
+        // das ist eine echte Änderung.
+        if (entry is null && IsBlank)
+        {
+            state = SaveState.Saved;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        debounceCts?.Cancel();
+        state = SaveState.Saving;
+        await InvokeAsync(StateHasChanged);
+
+        // Tag merken: Beim Flush während eines Tageswechsels darf der Stand nicht
+        // versehentlich auf dem neuen Tag landen.
+        var targetDate = loadedDate ?? currentDate;
+
+        var dto = new JournalEntryUpsertDto(
+            string.IsNullOrWhiteSpace(title) ? null : title.Trim(),
+            content,
+            entry?.Tags,
+            entry?.ProjectId,
+            entry?.TaskItemId);
+
+        var saved = await Api.SaveJournalEntryAsync(targetDate, dto);
+
+        if (saved is null)
+        {
+            state = SaveState.Error;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        // Nur übernehmen, wenn inzwischen nicht schon auf einen anderen Tag gewechselt
+        // wurde – sonst überschriebe die Antwort den frisch geladenen Tag.
+        if (targetDate == loadedDate)
+        {
+            entry   = saved;
+            savedAt = saved.UpdatedAt;
+        }
+
+        state = SaveState.Saved;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // Leer heißt: keine Überschrift und im HTML steht kein sichtbarer Text. Die
+    // Klartext-Umwandlung teilen wir uns mit der Notizliste, damit "<p>&nbsp;</p>"
+    // hier genauso als leer gilt wie dort.
+    private bool IsBlank =>
+        string.IsNullOrWhiteSpace(title) && string.IsNullOrEmpty(NoteSnippet.From(content));
+
+    public async ValueTask DisposeAsync()
+    {
+        Lock.OnChange -= HandleLockChanged;
+
+        debounceCts?.Cancel();
+        await FlushAsync();
+        debounceCts?.Dispose();
+
+        if (keysModule is not null)
+        {
+            try
+            {
+                await keysModule.InvokeVoidAsync("unregister");
+                await keysModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException) { }
+        }
+
+        if (lockModule is not null)
+        {
+            try
+            {
+                await lockModule.InvokeVoidAsync("untrackActivity");
+                await lockModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException) { }
+        }
+
+        selfRef?.Dispose();
+    }
+}

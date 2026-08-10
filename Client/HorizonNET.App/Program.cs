@@ -48,6 +48,9 @@ builder.Services.AddScoped<TimerState>();
 // Lokale UI-Einstellungen (localStorage)
 builder.Services.AddScoped<SettingsState>();
 
+// Bildschirmsperre des Journals (PIN + Auto-Lock). Bewusst nur UI-Schutz.
+builder.Services.AddScoped<JournalLockState>();
+
 // UI-Sounds (Web Audio via JS-Interop)
 builder.Services.AddScoped<SoundService>();
 

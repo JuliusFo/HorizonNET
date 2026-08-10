@@ -173,6 +173,9 @@
     </div>
 }
 
+@* ── Rückblick ans Ende: Die Karten darüber sind zum Handeln, diese zum Erinnern ── *@
+<JournalOnThisDay />
+
 <DailyTaskDialog Visible="showDailyDialog"
                  OnClose="() => showDailyDialog = false"
                  OnChanged="ReloadDailyTasksAsync" />

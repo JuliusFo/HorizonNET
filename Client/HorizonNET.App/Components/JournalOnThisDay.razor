@@ -1,0 +1,88 @@
+@inject ApiService Api
+@inject JournalLockState Lock
+@implements IDisposable
+
+@* „An diesem Tag": zurückliegende Journal-Einträge zum selben Kalendertag. Das ist der
+   Grund, warum man überhaupt Tagebuch führt – es zahlt sich erst beim Zurücklesen aus.
+
+   Steht auf der Heute-Seite, also AUSSERHALB der Journal-Sperre. Deshalb zwei Regeln:
+   Es wird nie Text gezeigt, nur Datum und Stimmungsschnitt. Und ist eine PIN gesetzt
+   und das Journal zu, erscheint der Bereich gar nicht – sonst würde die Sperre über
+   eine Hintertür ausgehebelt.
+
+   Ohne Treffer wird nichts gerendert: Im ersten Jahr gibt es hier meist nichts, und
+   eine dauerhaft leere Karte wäre nur Ballast. *@
+@if (Lock.IsOpen && entries is { Count: > 0 })
+{
+    <div class="card mb-3 overflow-hidden">
+        <div class="card-header fw-semibold">An diesem Tag</div>
+        <div class="card-body">
+            <ul class="list-group">
+                @foreach (var e in entries)
+                {
+                    <li class="list-group-item d-flex align-items-center gap-2">
+                        <span class="onthisday-ago">@Ago(e.Date)</span>
+                        <a href="@($"journal/{e.Date:yyyy-MM-dd}")"
+                           class="text-decoration-none text-body flex-grow-1">
+                            @e.Date.ToString("dddd, d. MMMM yyyy")
+                        </a>
+
+                        @if (e.MoodAvg is double avg)
+                        {
+                            <span class="onthisday-mood" title="@($"Stimmungsschnitt {avg:0.0}")">
+                                @MoodScale.Emoji((byte)Math.Round(avg, MidpointRounding.AwayFromZero))
+                            </span>
+                        }
+
+                        @if (e.HasContent)
+                        {
+                            <span class="badge bg-light text-dark">Text</span>
+                        }
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+}
+
+@code {
+    private List<OnThisDayDto>? entries;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Lock.OnChange += HandleLockChanged;
+        await Lock.EnsureLoadedAsync();
+        await LoadAsync();
+    }
+
+    private void HandleLockChanged() => InvokeAsync(async () =>
+    {
+        if (Lock.IsOpen && entries is null) await LoadAsync();
+        else if (!Lock.IsOpen) entries = null;
+
+        StateHasChanged();
+    });
+
+    private async Task LoadAsync()
+    {
+        // Bei gesperrtem Journal gar nicht erst anfragen.
+        if (!Lock.IsOpen) return;
+
+        entries = await Api.GetOnThisDayAsync() ?? [];
+        StateHasChanged();
+    }
+
+    private static string Ago(DateOnly date)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        var years = today.Year - date.Year;
+
+        // Nur ein echter Jahrestag wird als Jahr benannt; alles andere ist der Monat.
+        if (date.Month == today.Month && date.Day == today.Day && years > 0)
+            return years == 1 ? "vor 1 Jahr" : $"vor {years} Jahren";
+
+        return "vor 1 Monat";
+    }
+
+    public void Dispose() => Lock.OnChange -= HandleLockChanged;
+}

@@ -1,0 +1,221 @@
+@page "/journal/suche"
+@inject ApiService Api
+@inject JournalLockState Lock
+@implements IDisposable
+
+<PageTitle>Journal durchsuchen – HorizonNET</PageTitle>
+
+@* Suche im Journal. Bewusst eine eigene Seite und NICHT die globale Palette (Strg+K):
+   Wer dort nach "Urlaub" sucht, soll nicht ungefragt Tagebucheinträge neben Tasks und
+   Notizen stehen haben. Und sie liegt hinter derselben Sperre wie das Journal.
+
+   Technisch läuft die Suche zweistufig – Zeitraum und Stichwort schränken per SQL ein,
+   der verschlüsselte Text wird danach serverseitig im Speicher durchsucht. Ein
+   SQL-LIKE über Chiffrat kann nicht funktionieren. *@
+@if (!Lock.IsOpen)
+{
+    <JournalLock />
+}
+else
+{
+<div class="search-layout">
+    <div class="search-head">
+        <div>
+            <h1 class="h4 mb-1">Journal durchsuchen</h1>
+            <a href="journal" class="text-decoration-none small">← Zurück zum Journal</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="search-controls">
+                <input class="form-control search-query" placeholder="Suchbegriff…"
+                       value="@query" @oninput="OnQueryInput" @onkeydown="OnQueryKeyDown" />
+
+                <div class="search-range">
+                    <label class="form-label small text-muted mb-0">von</label>
+                    <input type="date" class="form-control form-control-sm"
+                           value="@from?.ToString("yyyy-MM-dd")" @onchange="OnFromChanged" />
+                    <label class="form-label small text-muted mb-0">bis</label>
+                    <input type="date" class="form-control form-control-sm"
+                           value="@to?.ToString("yyyy-MM-dd")" @onchange="OnToChanged" />
+                </div>
+            </div>
+
+            @if (tags is { Count: > 0 })
+            {
+                <div class="tag-cloud">
+                    @foreach (var t in tags)
+                    {
+                        <button type="button" class="tag-cloud-chip @(activeTag == t.Tag ? "is-active" : "")"
+                                @onclick="() => ToggleTagAsync(t.Tag)">
+                            @t.Tag <span class="tag-cloud-count">@t.Count</span>
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (searching)
+    {
+        <p class="text-muted">Wird gesucht…</p>
+    }
+    else if (hits is null)
+    {
+        <p class="text-muted">Suchbegriff eingeben oder ein Stichwort wählen.</p>
+    }
+    else if (hits.Count == 0)
+    {
+        <p class="text-muted">Keine Treffer.</p>
+    }
+    else
+    {
+        <p class="text-muted small mb-0">@hits.Count @(hits.Count == 1 ? "Treffer" : "Treffer")</p>
+
+        <ul class="list-group">
+            @foreach (var hit in hits)
+            {
+                <li class="list-group-item">
+                    <a href="@($"journal/{hit.Date:yyyy-MM-dd}")" class="text-decoration-none text-body">
+                        <div class="d-flex align-items-baseline gap-2">
+                            <span class="fw-semibold">@hit.Date.ToString("dddd, d. MMMM yyyy")</span>
+                            @if (hit.MoodAvg is double avg)
+                            {
+                                <span title="@($"Stimmungsschnitt {avg:0.0}")">
+                                    @MoodScale.Emoji((byte)Math.Round(avg, MidpointRounding.AwayFromZero))
+                                </span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(hit.Title))
+                            {
+                                <span class="text-muted">· @hit.Title</span>
+                            }
+                        </div>
+                        <div class="search-snippet text-muted small">@hit.Snippet</div>
+                    </a>
+
+                    @if (!string.IsNullOrWhiteSpace(hit.Tags))
+                    {
+                        <div class="search-hit-tags">
+                            @foreach (var t in hit.Tags.Split(','))
+                            {
+                                <span class="tag-chip-small">@t</span>
+                            }
+                        </div>
+                    }
+                </li>
+            }
+        </ul>
+    }
+</div>
+}
+
+@code {
+    private string query = string.Empty;
+    private string? activeTag;
+    private DateOnly? from;
+    private DateOnly? to;
+
+    private List<JournalTagDto>? tags;
+    private List<JournalSearchHitDto>? hits;
+    private bool searching;
+
+    private CancellationTokenSource? debounceCts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Lock.OnChange += HandleLockChanged;
+        await Lock.EnsureLoadedAsync();
+        await LoadTagsAsync();
+    }
+
+    private void HandleLockChanged() => InvokeAsync(async () =>
+    {
+        if (Lock.IsOpen && tags is null) await LoadTagsAsync();
+        else if (!Lock.IsOpen) { tags = null; hits = null; }
+
+        StateHasChanged();
+    });
+
+    private async Task LoadTagsAsync()
+    {
+        if (!Lock.IsOpen) return;
+        tags = await Api.GetJournalTagsAsync() ?? [];
+        StateHasChanged();
+    }
+
+    // Beim Tippen verzögert suchen: Jeder Tastendruck entschlüsselt serverseitig Texte,
+    // das soll nicht bei jedem Buchstaben passieren.
+    private void OnQueryInput(ChangeEventArgs e)
+    {
+        query = e.Value?.ToString() ?? string.Empty;
+
+        debounceCts?.Cancel();
+        debounceCts = new CancellationTokenSource();
+        _ = DebouncedSearchAsync(debounceCts.Token);
+    }
+
+    private async Task DebouncedSearchAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(400, token);
+            await SearchAsync();
+        }
+        catch (TaskCanceledException) { /* durch neue Eingabe ersetzt */ }
+    }
+
+    private async Task OnQueryKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            debounceCts?.Cancel();
+            await SearchAsync();
+        }
+    }
+
+    private async Task ToggleTagAsync(string tag)
+    {
+        activeTag = activeTag == tag ? null : tag;
+        await SearchAsync();
+    }
+
+    private async Task OnFromChanged(ChangeEventArgs e)
+    {
+        from = DateOnly.TryParse(e.Value?.ToString(), out var d) ? d : null;
+        await SearchAsync();
+    }
+
+    private async Task OnToChanged(ChangeEventArgs e)
+    {
+        to = DateOnly.TryParse(e.Value?.ToString(), out var d) ? d : null;
+        await SearchAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        // Ohne Begriff und ohne Stichwort gibt es nichts zu suchen – der Zeitraum
+        // allein würde bloß alles auflisten.
+        if (string.IsNullOrWhiteSpace(query) && activeTag is null)
+        {
+            hits = null;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        searching = true;
+        await InvokeAsync(StateHasChanged);
+
+        hits = await Api.SearchJournalAsync(query, activeTag, from, to) ?? [];
+
+        searching = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Lock.OnChange -= HandleLockChanged;
+        debounceCts?.Cancel();
+        debounceCts?.Dispose();
+    }
+}

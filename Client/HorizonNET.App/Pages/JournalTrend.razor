@@ -1,0 +1,252 @@
+@page "/journal/verlauf"
+@inject ApiService Api
+@inject JournalLockState Lock
+@implements IDisposable
+
+<PageTitle>Journal-Auswertung – HorizonNET</PageTitle>
+
+@* Zwei Auflösungen desselben Themas: die Jahresübersicht zeigt Regelmäßigkeit und grobe
+   Stimmungslage, der Verlauf darunter die Tage im Detail.
+
+   Steht hinter derselben Sperre wie das Journal: Stimmungswerte sind zwar unverschlüsselt,
+   aber niemand soll sie auf einem offenen Rechner nebenbei mitlesen. *@
+@if (!Lock.IsOpen)
+{
+    <JournalLock />
+}
+else
+{
+<div class="trend-layout">
+    <div class="trend-bar">
+        <div>
+            <h1 class="h4 mb-1">Journal-Auswertung</h1>
+            <a href="journal" class="text-decoration-none small">← Zurück zum Journal</a>
+        </div>
+    </div>
+
+    @if (entries is null)
+    {
+        <p class="text-muted">Wird geladen…</p>
+    }
+    else
+    {
+        @* ── Jahresübersicht ─────────────────────────────────────────────────── *@
+        <div class="card">
+            <div class="card-header fw-semibold">Letzte 12 Monate</div>
+            <div class="card-body">
+                <div class="trend-summary mb-3">
+                    <div class="trend-stat">
+                        <span class="trend-stat-value">@CurrentStreak</span>
+                        <span class="trend-stat-label">Tage in Folge @(CurrentStreak > 0 ? "🔥" : "")</span>
+                    </div>
+                    <div class="trend-stat">
+                        <span class="trend-stat-value">@LongestStreak</span>
+                        <span class="trend-stat-label">längste Serie</span>
+                    </div>
+                    <div class="trend-stat">
+                        <span class="trend-stat-value">@WrittenDays.Count</span>
+                        <span class="trend-stat-label">Tage geschrieben</span>
+                    </div>
+                </div>
+
+                <JournalHeatmap Entries="entries" From="YearStart" />
+            </div>
+        </div>
+
+        @* ── Stimmungsverlauf ────────────────────────────────────────────────── *@
+        <div class="card">
+            <div class="card-header d-flex align-items-center justify-content-between gap-2">
+                <span class="fw-semibold">Stimmungsverlauf</span>
+                <select class="form-select form-select-sm w-auto" value="@days"
+                        @onchange="e => ChangeRange(int.Parse(e.Value!.ToString()!))">
+                    <option value="30">30 Tage</option>
+                    <option value="90">90 Tage</option>
+                    <option value="365">1 Jahr</option>
+                </select>
+            </div>
+            <div class="card-body">
+                @if (points.Count == 0)
+                {
+                    <p class="text-muted mb-0">
+                        Für diesen Zeitraum sind keine Stimmungen erfasst.
+                        Halte sie <a href="journal">im Journal</a> fest – ein Klick auf ein Emoji genügt.
+                    </p>
+                }
+                else
+                {
+                    <RadzenChart>
+                        @* Das Band: von Tagestief bis Tageshoch. Zurückhaltend gefüllt, damit
+                           die Durchschnittslinie darüber lesbar bleibt. *@
+                        <RadzenRangeColumnSeries Data="points" CategoryProperty="Day"
+                                                 MinProperty="Low" MaxProperty="High"
+                                                 Title="Tief bis Hoch" Fill="#9aa0a6" />
+
+                        <RadzenLineSeries Data="points" CategoryProperty="Day" ValueProperty="Average"
+                                          Title="Durchschnitt" Stroke="#3d8b40" StrokeWidth="2" Smooth="true">
+                            <RadzenMarkers MarkerType="MarkerType.Circle" Size="6" />
+                        </RadzenLineSeries>
+
+                        @* Feste Achse 1–5: Sonst skaliert der Chart je Zeitraum anders und zwei
+                           Zeiträume wären nicht mehr miteinander vergleichbar. *@
+                        <RadzenValueAxis Min="1" Max="5" Step="1">
+                            <RadzenGridLines Visible="true" />
+                            <RadzenAxisTitle Text="Stimmung" />
+                        </RadzenValueAxis>
+
+                        @* Step gegen überfüllte Achsen: Bei einem Jahr stünden sonst 365
+                           Datumsangaben nebeneinander. *@
+                        <RadzenCategoryAxis FormatString="{0:dd.MM.}" Step="@LabelStep" />
+                    </RadzenChart>
+
+                    <div class="trend-summary mt-3">
+                        <div class="trend-stat">
+                            <span class="trend-stat-value">@Overall.ToString("0.0")</span>
+                            <span class="trend-stat-label">Schnitt @MoodScale.Emoji(RoundedOverall)</span>
+                        </div>
+                        <div class="trend-stat">
+                            <span class="trend-stat-value">@points.Count / @days</span>
+                            <span class="trend-stat-label">Tage mit Stimmung</span>
+                        </div>
+                        <div class="trend-stat">
+                            <span class="trend-stat-value">@Best.Day.ToString("dd.MM.")</span>
+                            <span class="trend-stat-label">bester Tag (@Best.Average.ToString("0.0"))</span>
+                        </div>
+                        <div class="trend-stat">
+                            <span class="trend-stat-value">@Worst.Day.ToString("dd.MM.")</span>
+                            <span class="trend-stat-label">schwächster Tag (@Worst.Average.ToString("0.0"))</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+}
+
+@code {
+    // Nur Tage MIT Stimmung. Leere Tage als Lücke mitzuzeichnen würde eine
+    // gleichmäßige Kategorie-Achse verlangen und leere Säulen erzeugen – die Zahl
+    // "Tage mit Stimmung" in der Zusammenfassung sagt dasselbe ehrlicher.
+    private record TrendPoint(DateTime Day, double Low, double High, double Average);
+
+    // Ein Jahr wird EINMAL geladen; der Zeitraumwechsel filtert nur noch. Die Heatmap
+    // braucht ohnehin das ganze Jahr, ein zweiter Aufruf wäre verschenkt.
+    private List<JournalListItemDto>? entries;
+    private List<TrendPoint> points = [];
+    private int days = 30;
+
+    private static DateOnly Today => DateOnly.FromDateTime(DateTime.Now);
+
+    private static DateOnly YearStart => Today.AddDays(-364);
+
+    // ── Serie ────────────────────────────────────────────────────────────────────
+
+    // Zählt Tage MIT TEXT, nicht Tage mit Stimmung: Eine Serie, die ein Emoji-Klick
+    // aufrechterhält, wäre in fünf Sekunden pro Tag erschlichen.
+    private HashSet<DateOnly> WrittenDays =>
+        entries!.Where(e => e.HasContent).Select(e => e.Date).ToHashSet();
+
+    private int CurrentStreak
+    {
+        get
+        {
+            var written = WrittenDays;
+
+            // Heute noch nichts geschrieben? Dann ist die Serie nicht gerissen – der Tag
+            // ist ja noch nicht vorbei. Erst ab gestern zurückzählen.
+            var cursor = written.Contains(Today) ? Today : Today.AddDays(-1);
+
+            var count = 0;
+            while (written.Contains(cursor))
+            {
+                count++;
+                cursor = cursor.AddDays(-1);
+            }
+
+            return count;
+        }
+    }
+
+    private int LongestStreak
+    {
+        get
+        {
+            var written = WrittenDays;
+            var best = 0;
+            var run = 0;
+
+            for (var day = YearStart; day <= Today; day = day.AddDays(1))
+            {
+                run = written.Contains(day) ? run + 1 : 0;
+                if (run > best) best = run;
+            }
+
+            return best;
+        }
+    }
+
+    // ── Verlauf ──────────────────────────────────────────────────────────────────
+
+    // Rund 15 Beschriftungen sind lesbar; darüber wird die Achse zur Tapete.
+    private double LabelStep => points.Count <= 15 ? 1 : Math.Ceiling(points.Count / 15.0);
+
+    private double Overall => points.Average(p => p.Average);
+
+    private byte RoundedOverall =>
+        (byte)Math.Clamp(Math.Round(Overall, MidpointRounding.AwayFromZero), MoodScale.Min, MoodScale.Max);
+
+    private TrendPoint Best => points.OrderByDescending(p => p.Average).ThenByDescending(p => p.Day).First();
+
+    private TrendPoint Worst => points.OrderBy(p => p.Average).ThenByDescending(p => p.Day).First();
+
+    // ── Laden ────────────────────────────────────────────────────────────────────
+
+    protected override async Task OnInitializedAsync()
+    {
+        Lock.OnChange += HandleLockChanged;
+        await Lock.EnsureLoadedAsync();
+        await LoadAsync();
+    }
+
+    private void HandleLockChanged() => InvokeAsync(async () =>
+    {
+        if (Lock.IsOpen && entries is null) await LoadAsync();
+        else if (!Lock.IsOpen) entries = null;
+
+        StateHasChanged();
+    });
+
+    private void ChangeRange(int value)
+    {
+        days = value;
+        RebuildPoints();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (!Lock.IsOpen) return;
+
+        entries = await Api.GetJournalRangeAsync(YearStart, Today) ?? [];
+        RebuildPoints();
+        StateHasChanged();
+    }
+
+    private void RebuildPoints()
+    {
+        var from = Today.AddDays(-(days - 1));
+
+        points = entries!
+            .Where(e => e.Date >= from
+                     && e.MoodCount > 0
+                     && e.MoodMin is not null && e.MoodMax is not null && e.MoodAvg is not null)
+            .OrderBy(e => e.Date)
+            .Select(e => new TrendPoint(
+                e.Date.ToDateTime(TimeOnly.MinValue),
+                e.MoodMin!.Value,
+                e.MoodMax!.Value,
+                e.MoodAvg!.Value))
+            .ToList();
+    }
+
+    public void Dispose() => Lock.OnChange -= HandleLockChanged;
+}

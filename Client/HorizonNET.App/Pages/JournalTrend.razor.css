@@ -1,0 +1,52 @@
+.trend-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    max-width: 120rem;
+    margin-inline: auto;
+}
+
+.trend-bar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.trend-range {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+/* Vier Kennzahlen in einer Reihe, gleich breit – so liest man sie als Gruppe und
+   nicht als vier einzelne Aussagen. */
+.trend-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: 0.75rem;
+}
+
+.trend-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    background-color: var(--bs-body-bg);
+}
+
+.trend-stat-value {
+    font-size: 1.35rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+}
+
+.trend-stat-label {
+    font-size: 0.8rem;
+    color: var(--bs-secondary-color, #6c757d);
+}

@@ -1,0 +1,203 @@
+.mood-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+/* ── Erfassen ────────────────────────────────────────────────────────────────── */
+
+.mood-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.mood-bar-buttons {
+    display: flex;
+    gap: 0.15rem;
+}
+
+/* Große Klickfläche: Ein Emoji anzutippen darf nicht zielen erfordern. */
+.mood-button {
+    font-size: 1.5rem;
+    line-height: 1;
+    padding: 0.25rem 0.4rem;
+    border: 1px solid transparent;
+    border-radius: 0.5rem;
+    background: none;
+    cursor: pointer;
+    transition: transform 0.08s ease, background-color 0.12s ease;
+}
+
+.mood-button:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--mood-color) 18%, transparent);
+    transform: scale(1.12);
+}
+
+.mood-button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.mood-button-sm {
+    font-size: 1.15rem;
+    padding: 0.15rem 0.25rem;
+}
+
+/* Die gewählte Stufe wird durch ihre eigene Farbe markiert, nicht durch eine
+   Fremdfarbe – sonst konkurrieren zwei Aussagen um dieselbe Fläche. */
+.mood-button.is-active {
+    border-color: var(--mood-color);
+    background-color: color-mix(in srgb, var(--mood-color) 22%, transparent);
+}
+
+/* ── Senkrechter Zeitstrahl ──────────────────────────────────────────────────── */
+
+/* Drei Spuren nebeneinander: Stunden | Kurve | Beschriftung. Die Höhe kommt als
+   Inline-Stil aus der Komponente, damit SVG-Pixel und HTML-Positionen exakt
+   dieselbe Skala benutzen. */
+.mood-timeline {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    gap: 0.25rem;
+}
+
+.mood-hours {
+    position: relative;
+    width: 1.75rem;
+    flex-shrink: 0;
+}
+
+.mood-hour {
+    position: absolute;
+    right: 0;
+    transform: translateY(-50%);
+    font-size: 0.7rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--bs-secondary-color, #6c757d);
+}
+
+.mood-plot {
+    flex-shrink: 0;
+}
+
+/* Das Rückgrat des Zeitstrahls – zurückhaltend, aber durchgehend. */
+.mood-axis {
+    stroke: var(--bs-border-color);
+    stroke-width: 2;
+}
+
+.mood-point {
+    cursor: pointer;
+}
+
+.mood-point.is-selected {
+    stroke: var(--bs-body-color);
+    stroke-width: 2;
+}
+
+/* ── Beschriftung neben den Punkten ──────────────────────────────────────────── */
+
+.mood-labels {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+}
+
+.mood-label {
+    position: absolute;
+    left: 0;
+    right: 0;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    padding: 0.1rem 0.3rem;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.mood-label:hover,
+.mood-label.is-selected {
+    background-color: var(--bs-secondary-bg);
+}
+
+.mood-label-time {
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--bs-secondary-color, #6c757d);
+    flex-shrink: 0;
+}
+
+.mood-label-emoji {
+    flex-shrink: 0;
+}
+
+.mood-label-energy {
+    font-size: 0.75rem;
+    flex-shrink: 0;
+}
+
+/* Die Notiz wird einzeilig gekürzt – der lange Text gehört in den Tageseintrag. */
+.mood-label-note {
+    font-size: 0.85rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+/* ── Detail ──────────────────────────────────────────────────────────────────── */
+
+/* In der schmalen Seitenleiste steht die Beschriftung über dem Bedienelement –
+   nebeneinander bliebe für beides zu wenig Platz. */
+.mood-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 0.75rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    background-color: var(--bs-secondary-bg);
+}
+
+.mood-detail-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.mood-detail-label {
+    color: var(--bs-secondary-color, #6c757d);
+    font-size: 0.8rem;
+}
+
+.mood-detail-scale {
+    display: flex;
+    gap: 0.1rem;
+}
+
+.mood-detail-time {
+    width: auto;
+    align-self: flex-start;
+}
+
+.mood-detail-energy-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.mood-detail-energy {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.mood-detail-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}

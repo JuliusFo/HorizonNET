@@ -1,0 +1,36 @@
+@inject ApiService Api
+
+@* Leitfragen-Vorlagen als Klickleiste über dem Text. Sie lösen das Problem der leeren
+   Seite – daran sterben Tagebücher sonst nach zwei Wochen.
+
+   Bewusst direkt sichtbar statt hinter einem Menü: Wer vor einem leeren Blatt sitzt,
+   soll die Hilfe sehen, nicht erst suchen. Sind keine Vorlagen angelegt, erscheint die
+   Leiste gar nicht. *@
+@if (templates is { Count: > 0 })
+{
+    <div class="template-bar">
+        <span class="template-bar-label">Vorlage</span>
+        @foreach (var t in templates)
+        {
+            <button type="button" class="template-chip" @onclick="() => OnInsert.InvokeAsync(t.Content)"
+                    title="@(HasContent ? "Ans Ende des Eintrags anfügen" : "In den Eintrag einsetzen")">
+                @t.Name
+            </button>
+        }
+    </div>
+}
+
+@code {
+    // Ob im Eintrag schon Text steht – ändert nur die Beschriftung des Hinweises,
+    // eingefügt wird in beiden Fällen (dann ans Ende).
+    [Parameter] public bool HasContent { get; set; }
+
+    [Parameter] public EventCallback<string> OnInsert { get; set; }
+
+    private List<JournalTemplateResponseDto>? templates;
+
+    // Einmal je Seitenaufruf laden. Vorlagen ändern sich in den Einstellungen, nicht
+    // beim Blättern – ein Nachladen pro Tag wäre verschenkte Anfrage.
+    protected override async Task OnInitializedAsync() =>
+        templates = await Api.GetJournalTemplatesAsync() ?? new();
+}

@@ -1,0 +1,90 @@
+@inject ApiService Api
+@inject ConfirmService Confirm
+@inject ToastService Toast
+
+@* Eigene Papierkorb-Ansicht des Journals. Bewusst nicht der globale Papierkorb:
+   Dort stünden Tagebuch-Tage neben Tasks und Notizen und wären damit für jeden
+   sichtbar, der die Seite öffnet – auch bei gesperrtem Journal. *@
+<div class="journal-trash-backdrop" @onclick="OnClose"></div>
+
+<div class="journal-trash" role="dialog" aria-label="Gelöschte Journal-Einträge">
+    <div class="journal-trash-head">
+        <span class="fw-semibold">Gelöschte Einträge</span>
+        <button type="button" class="btn-close" aria-label="Schließen" @onclick="OnClose"></button>
+    </div>
+
+    <div class="journal-trash-body">
+        @if (entries is null)
+        {
+            <p class="text-muted small mb-0">Wird geladen…</p>
+        }
+        else if (entries.Count == 0)
+        {
+            <p class="text-muted small mb-0">Keine gelöschten Einträge.</p>
+        }
+        else
+        {
+            <ul class="list-group list-group-flush">
+                @foreach (var e in entries)
+                {
+                    <li class="list-group-item px-0">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="flex-grow-1 min-w-0">
+                                <div class="fw-semibold">@e.Date.ToString("dddd, d. MMMM yyyy")</div>
+                                @* Nur die Überschrift, nie der Inhalt: Der Papierkorb ist eine
+                                   Liste zum Wiederherstellen, keine Lesefläche. *@
+                                @if (!string.IsNullOrWhiteSpace(e.Title))
+                                {
+                                    <div class="small text-muted text-truncate">@e.Title</div>
+                                }
+                                <div class="small text-muted">Gelöscht: @e.DeletedAt.ToString("dd.MM.yyyy HH:mm")</div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0"
+                                    @onclick="() => RestoreAsync(e)">Wiederherstellen</button>
+                            <button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0"
+                                    @onclick="() => PurgeAsync(e)" title="Endgültig löschen">🗑</button>
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+</div>
+
+@code {
+    // Nach Wiederherstellen: Der Aufrufer lädt den angezeigten Tag ggf. neu.
+    [Parameter] public EventCallback<DateOnly> OnRestored { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private List<JournalDeletedItemDto>? entries;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync() =>
+        entries = await Api.GetDeletedJournalEntriesAsync() ?? new();
+
+    private async Task RestoreAsync(JournalDeletedItemDto e)
+    {
+        if (!await Api.RestoreJournalEntryAsync(e.Id)) return;
+
+        await LoadAsync();
+        Toast.ShowSuccess($"Eintrag vom {e.Date:dd.MM.yyyy} wiederhergestellt.");
+        await OnRestored.InvokeAsync(e.Date);
+    }
+
+    private async Task PurgeAsync(JournalDeletedItemDto e)
+    {
+        // Kein Undo dahinter – deshalb hier die deutliche Nachfrage.
+        var ok = await Confirm.ShowAsync(
+            "Endgültig löschen?",
+            $"Der Eintrag vom {e.Date:dd.MM.yyyy} wird mit allen Stimmungen unwiderruflich entfernt.",
+            "Endgültig löschen");
+
+        if (!ok) return;
+        if (!await Api.PurgeJournalEntryAsync(e.Id)) return;
+
+        await LoadAsync();
+        Toast.ShowSuccess("Eintrag endgültig gelöscht.");
+    }
+}

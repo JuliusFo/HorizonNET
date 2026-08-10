@@ -1,0 +1,19 @@
+/* Feste Breite, damit die Datumsangaben darunter auf einer Flucht stehen. */
+.onthisday-ago {
+    flex-shrink: 0;
+    width: 7rem;
+    font-size: 0.8rem;
+    color: var(--bs-secondary-color, #6c757d);
+}
+
+.onthisday-mood {
+    flex-shrink: 0;
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+@media (max-width: 576px) {
+    .onthisday-ago {
+        width: auto;
+    }
+}

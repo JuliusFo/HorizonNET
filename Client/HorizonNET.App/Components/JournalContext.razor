@@ -1,0 +1,132 @@
+@inject ApiService Api
+
+@* Tagesrückblick: was die App über diesen Tag ohnehin weiß. Als eine ruhige Zeile über
+   dem Text, aufklappbar für die Details.
+
+   Bewusst READ-ONLY und nie in den Eintrag kopiert – sonst fröre man Daten ein, die
+   sich noch ändern. Und bewusst kompakt: Der Bereich soll beim Schreiben helfen, nicht
+   den Einstieg zustellen.
+
+   Gibt es für den Tag nichts zu berichten, erscheint gar nichts – eine Zeile voller
+   Nullen wäre schlechter als Schweigen. *@
+@if (context is { HasAnything: true })
+{
+    <div class="journal-context">
+        <button type="button" class="journal-context-head" @onclick="() => expanded = !expanded"
+                aria-expanded="@expanded">
+            <span class="journal-context-summary">@Summary</span>
+            <span class="journal-context-chevron">@(expanded ? "⌃" : "⌄")</span>
+        </button>
+
+        @if (expanded)
+        {
+            <div class="journal-context-body">
+                @if (context.CompletedTasks.Count > 0)
+                {
+                    <div class="journal-context-group">
+                        <span class="journal-context-label">Erledigt</span>
+                        <ul>
+                            @foreach (var t in context.CompletedTasks)
+                            {
+                                <li>
+                                    <a href="@($"tasks/{t.Id}")">@t.Title</a>
+                                    @if (!string.IsNullOrWhiteSpace(t.ProjectName))
+                                    {
+                                        <span class="text-muted"> · @t.ProjectName</span>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                @if (context.TrackedPerTask.Count > 0)
+                {
+                    <div class="journal-context-group">
+                        <span class="journal-context-label">Zeit</span>
+                        <ul>
+                            @foreach (var t in context.TrackedPerTask)
+                            {
+                                <li>
+                                    <a href="@($"tasks/{t.TaskItemId}")">@t.TaskTitle</a>
+                                    <span class="text-muted"> · @FormatMinutes(t.Minutes)</span>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                @if (context.Sport.Count > 0)
+                {
+                    <div class="journal-context-group">
+                        <span class="journal-context-label">Sport</span>
+                        <ul>
+                            @foreach (var s in context.Sport)
+                            {
+                                <li>@s.ExerciseName <span class="text-muted">· @s.Summary</span></li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                @if (context.BodyWeightKg is double kg)
+                {
+                    <div class="journal-context-group">
+                        <span class="journal-context-label">Gewicht</span>
+                        <ul><li>@kg.ToString("0.0") kg</li></ul>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public DateOnly Date { get; set; }
+
+    private JournalContextDto? context;
+    private DateOnly? loadedFor;
+    private bool expanded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loadedFor == Date) return;
+
+        loadedFor = Date;
+        context = await Api.GetJournalContextAsync(Date);
+
+        // Beim Tageswechsel wieder einklappen: Der aufgeklappte Zustand gehörte zum
+        // vorherigen Tag, nicht zum neuen.
+        expanded = false;
+    }
+
+    // Nur nennen, was es auch gibt – "0 Tasks erledigt" ist keine Information.
+    private string Summary
+    {
+        get
+        {
+            var parts = new List<string>();
+
+            if (context!.CompletedTasks.Count > 0)
+                parts.Add($"{context.CompletedTasks.Count} erledigt");
+
+            if (context.TrackedMinutes > 0)
+                parts.Add($"{FormatMinutes(context.TrackedMinutes)} gebucht");
+
+            if (context.DailiesPlanned > 0)
+                parts.Add($"{context.DailiesDone}/{context.DailiesPlanned} Dailies");
+
+            if (context.Sport.Count > 0)
+                parts.Add(context.Sport.Count == 1 ? "Sport" : $"Sport ({context.Sport.Count})");
+
+            if (context.BodyWeightKg is double kg)
+                parts.Add($"{kg:0.0} kg");
+
+            return string.Join(" · ", parts);
+        }
+    }
+
+    // Unter einer Stunde in Minuten – "0:12 h" liest sich umständlicher als "12 min".
+    private static string FormatMinutes(int minutes) =>
+        minutes < 60 ? $"{minutes} min" : $"{minutes / 60}:{minutes % 60:00} h";
+}

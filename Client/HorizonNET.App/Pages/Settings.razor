@@ -3,6 +3,9 @@
 @inject ApiService Api
 @inject IConfiguration Config
 @inject VersionState Version
+@inject JournalLockState JournalLock
+@inject ToastService Toast
+@inject ConfirmService Confirm
 
 <PageTitle>Einstellungen – HorizonNET</PageTitle>
 
@@ -27,6 +30,66 @@
             <label class="form-check-label" for="soundsToggle">Sound-Effekte</label>
         </div>
         <div class="form-text">Kurze Töne bei erledigten Tasks und Daily Tasks.</div>
+    </div>
+</div>
+
+<div class="card mb-3 settings-card">
+    <div class="card-header fw-semibold">Journal-Sperre</div>
+    <div class="card-body">
+        <p class="text-muted">
+            Sichert das Journal mit einer PIN, die nach einer Zeit ohne Eingabe erneut
+            abgefragt wird. Das schützt vor fremden Blicken am offenen Rechner –
+            <strong>nicht</strong> vor Zugriff auf die Daten selbst: Wer die API erreicht,
+            liest das Journal auch ohne PIN.
+        </p>
+
+        @if (JournalLock.IsConfigured)
+        {
+            <div class="mb-3"><span class="badge bg-success">PIN eingerichtet</span></div>
+        }
+
+        <div class="row g-2 align-items-end mb-3" style="max-width: 30rem;">
+            <div class="col-sm">
+                <label for="journalPin" class="form-label">@(JournalLock.IsConfigured ? "Neue PIN" : "PIN festlegen")</label>
+                <input id="journalPin" type="password" inputmode="numeric" autocomplete="new-password"
+                       class="form-control" placeholder="mindestens 4 Zeichen" @bind="newPin" />
+            </div>
+            <div class="col-sm-auto">
+                <button class="btn btn-primary" @onclick="SavePinAsync"
+                        disabled="@(newPin.Trim().Length < 4)">Speichern</button>
+            </div>
+            @if (JournalLock.IsConfigured)
+            {
+                <div class="col-sm-auto">
+                    <button class="btn btn-outline-danger" @onclick="RemovePinAsync">PIN entfernen</button>
+                </div>
+            }
+        </div>
+
+        <label for="journalTimeout" class="form-label">Automatisch sperren nach</label>
+        <select id="journalTimeout" class="form-select" style="max-width: 16rem;"
+                value="@JournalLock.TimeoutMinutes" @onchange="OnTimeoutChanged">
+            <option value="1">1 Minute</option>
+            <option value="5">5 Minuten</option>
+            <option value="15">15 Minuten</option>
+            <option value="60">1 Stunde</option>
+            <option value="0">Nie</option>
+        </select>
+        <div class="form-text">
+            Gezählt wird ab der letzten Eingabe oder Mausbewegung. Nach dem Neuladen der
+            Seite ist das Journal ohnehin wieder gesperrt.
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3 settings-card">
+    <div class="card-header fw-semibold">Journal-Vorlagen</div>
+    <div class="card-body">
+        <p class="text-muted">
+            Leitfragen für Journal-Einträge. Sie erscheinen als Leiste über dem Text und
+            setzen ihre Fragen per Klick ein – gegen das leere Blatt.
+        </p>
+        <JournalTemplateManager />
     </div>
 </div>
 
@@ -124,6 +187,7 @@
 
     private GoogleStatusDto? status;
     private bool busy;
+    private string newPin = string.Empty;
 
     // Vollständige Navigation zur API (anderer Origin), die den OAuth-Flow startet.
     private string ConnectUrl =>
@@ -132,8 +196,41 @@
     protected override async Task OnInitializedAsync()
     {
         await AppSettings.EnsureLoadedAsync();
+        await JournalLock.EnsureLoadedAsync();
         await Version.EnsureApiLoadedAsync();
         status = await Api.GetGoogleStatusAsync();
+    }
+
+    // ── Journal-Sperre ───────────────────────────────────────────────────────────
+
+    private async Task SavePinAsync()
+    {
+        var pin = newPin.Trim();
+        if (pin.Length < 4) return;
+
+        await JournalLock.SetPinAsync(pin);
+        newPin = string.Empty;
+        Toast.ShowSuccess("Journal-PIN gespeichert.");
+    }
+
+    private async Task RemovePinAsync()
+    {
+        // Nachfragen, weil danach jeder am Rechner das Journal öffnen kann.
+        var ok = await Confirm.ShowAsync(
+            "PIN entfernen?",
+            "Das Journal ist danach ohne Eingabe zugänglich.",
+            "Entfernen");
+
+        if (!ok) return;
+
+        await JournalLock.SetPinAsync(null);
+        Toast.ShowSuccess("Journal-PIN entfernt.");
+    }
+
+    private async Task OnTimeoutChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var minutes))
+            await JournalLock.SetTimeoutAsync(minutes);
     }
 
     private async Task OnCalendarViewChanged(ChangeEventArgs e)

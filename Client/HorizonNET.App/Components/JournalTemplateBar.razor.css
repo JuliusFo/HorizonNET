@@ -1,0 +1,33 @@
+.template-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+
+.template-bar-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--bs-secondary-color, #6c757d);
+    margin-right: 0.2rem;
+}
+
+/* Zurückhaltend im Ruhezustand: Die Leiste steht über dem Text und darf ihn nicht
+   überstrahlen – sie ist ein Angebot, keine Aufforderung. */
+.template-chip {
+    padding: 0.15rem 0.6rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 1rem;
+    background: none;
+    font-size: 0.8rem;
+    color: var(--bs-secondary-color, #6c757d);
+    cursor: pointer;
+    transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.template-chip:hover {
+    background-color: var(--bs-secondary-bg);
+    color: var(--bs-body-color);
+    border-color: var(--bs-secondary-color, #6c757d);
+}

@@ -1,0 +1,205 @@
+/* Zentriert statt linksbündig: Der Platz, den der Bildschirm mehr hat als die Seite
+   braucht, verteilt sich dann gleichmäßig auf beide Seiten und liest sich als Rand.
+   Linksbündig sammelte er sich rechts und wirkte wie "nach links geschoben". */
+.journal-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-width: 120rem;
+    margin-inline: auto;
+}
+
+/* Schreiben links, Stimmung rechts. Die Seitenleiste hat feste Breite: Ihr Inhalt
+   wird nicht breiter, wenn der Bildschirm es wird – jeder zusätzliche Pixel gehört
+   dem Editor. */
+/* align-items bewusst NICHT auf start: Die Seitenleiste soll sich auf die Höhe des
+   Editors ziehen, damit beide Spalten unten bündig enden statt auszufransen. */
+.journal-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 22rem;
+    gap: 1.5rem;
+}
+
+/* Bewusst OHNE eigene max-width: Ein Deckel hier und ein Deckel am Layout arbeiten
+   gegeneinander – die Differenz bliebe als toter Raum in der Spalte stehen und sähe
+   aus wie ein zufälliger Abstand zur Seitenleiste. Begrenzt wird nur das Layout.
+   Zugleich die Karte für Titel und Editor: So beginnen und enden links und rechts
+   zwei gleichwertige Kästen auf derselben Linie. */
+.journal-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-width: 0;
+    padding: 0.9rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    background-color: var(--bs-body-bg);
+}
+
+.journal-side {
+    min-width: 0;
+}
+
+/* Eigenes Gefäß für die Seitenleiste: Links steht ein klar umrandeter Editorkasten,
+   rechts stand loser Text auf Weiß – gleiche Wichtigkeit, ungleiches Gewicht. Das
+   ließ die rechte Spalte wie Übriggebliebenes wirken. */
+.journal-side-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    height: 100%;
+    padding: 0.9rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    background-color: var(--bs-body-bg);
+}
+
+/* Schiebt die Tages-Aktionen an den Fuß der Karte. */
+.journal-side-actions {
+    margin-top: auto;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--bs-border-color);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.journal-bar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.journal-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-shrink: 0;
+}
+
+.journal-date {
+    width: auto;
+}
+
+/* Kein text-transform: capitalize – das macht aus "heute" ein "Heute" und aus
+   "vor 12 Tagen" ein "Vor 12 Tagen". Den Wochentag schreibt die deutsche Kultur
+   ohnehin groß. */
+.journal-when {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+/* Rechts außen, bündig mit der rechten Kante der Seitenleisten-Karte. Mindestbreite,
+   damit der Wechsel der Zustände die Überschrift daneben nicht verschiebt. */
+.journal-status {
+    margin-left: auto;
+    flex-shrink: 0;
+    min-width: 9rem;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.journal-status-icon {
+    margin-right: 0.3rem;
+}
+
+/* ── Überschrift in der Kopfzeile ─────────────────────────────────────────────── */
+
+/* Nimmt den freien Platz in der Mitte ein – genau dort klaffte vorher die Lücke. */
+.journal-title-slot {
+    flex: 1;
+    min-width: 6rem;
+    display: flex;
+    align-items: center;
+}
+
+/* Im Ruhezustand bewusst zurückhaltend: Die Überschrift wird selten gesetzt, ein
+   dauerhaft sichtbares Eingabefeld wäre Gewicht für den Ausnahmefall. */
+.journal-title-add {
+    border: none;
+    background: none;
+    padding: 0.15rem 0.3rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    color: var(--bs-secondary-color, #6c757d);
+    cursor: pointer;
+}
+
+.journal-title-add:hover {
+    background-color: var(--bs-secondary-bg);
+    color: var(--bs-body-color);
+}
+
+/* Gesetzte Überschrift liest sich als Text, nicht als Formularfeld – anklickbar
+   bleibt sie trotzdem. */
+.journal-title-text {
+    border: none;
+    background: none;
+    padding: 0.15rem 0.3rem;
+    border-radius: 0.25rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: text;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.journal-title-text:hover {
+    background-color: var(--bs-secondary-bg);
+}
+
+.journal-title {
+    max-width: 32rem;
+}
+
+/* Höhe fest genug, dass der Editor beim Tageswechsel nicht springt.
+   ::deep ist nötig, weil die Höhe am Schreibbereich INNERHALB der Radzen-Komponente
+   hängen muss – auf der Wurzel gesetzt gibt Radzen sie nicht weiter, und der Editor
+   bleibt zwei Zeilen hoch. */
+/* Kein eigener Rahmen mehr – den trägt jetzt die Karte drumherum. Zwei ineinander
+   geschachtelte Rahmen wären genau die Art von Kante, die unruhig wirkt. */
+.journal-main ::deep .rz-html-editor {
+    min-height: 65vh;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    border: none;
+}
+
+.journal-main ::deep .rz-html-editor-content {
+    flex: 1;
+    min-height: 55vh;
+}
+
+/* Unter 1200 px übereinander – und die Stimmung wandert NACH OBEN: Sie in fünf
+   Sekunden festzuhalten ist ihr Zweck, unter einem langen Text wäre sie weg. */
+@media (max-width: 1200px) {
+    .journal-body {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .journal-side {
+        order: -1;
+    }
+
+    /* Einspaltig darf die Karte nicht auf Editorhöhe wachsen. */
+    .journal-side-card {
+        height: auto;
+    }
+}
+
+@media (max-width: 640px) {
+    .journal-status {
+        margin-left: 0;
+        text-align: left;
+    }
+
+    /* Auf schmalen Schirmen darf die Überschrift eine eigene Zeile bekommen. */
+    .journal-title-slot {
+        flex-basis: 100%;
+        order: 1;
+    }
+}

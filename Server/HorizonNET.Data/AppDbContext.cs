@@ -220,6 +220,74 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IDataProtectio
             e.HasQueryFilter(b => b.DeletedAt == null);
         });
 
+        modelBuilder.Entity<JournalEntry>(e =>
+        {
+            e.HasKey(j => j.Id);
+
+            // Ein Eintrag pro Tag – der fachliche Schlüssel. Ein zweiter Schreibvorgang
+            // für denselben Tag aktualisiert (siehe JournalRepository.UpsertAsync).
+            e.HasIndex(j => j.Date).IsUnique();
+
+            // Verschlüsselt und STRENG: Anders als beim Google-Token wäre ein still
+            // verschluckter Fehler hier fatal – ein leerer Tagestext sähe aus wie ein
+            // verlorener Eintrag. Lieber lautstark scheitern.
+            e.Property(j => j.Content).IsRequired()
+                .HasConversion(EncryptedConverter.Strict(
+                    dataProtection.CreateProtector("HorizonNET.Journal.Content")));
+
+            e.Property(j => j.Title)
+                .HasConversion(EncryptedConverter.StrictNullable(
+                    dataProtection.CreateProtector("HorizonNET.Journal.Title")));
+
+            // Kein MaxLength auf verschlüsselten Spalten: Das Chiffrat ist länger als
+            // der Klartext, eine Längengrenze würde den Wert unberechenbar abschneiden.
+            e.Property(j => j.Tags).HasMaxLength(500);
+
+            e.HasOne(j => j.Project)
+                .WithMany()
+                .HasForeignKey(j => j.ProjectId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(j => j.TaskItem)
+                .WithMany()
+                .HasForeignKey(j => j.TaskItemId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasQueryFilter(j => j.DeletedAt == null);
+        });
+
+        modelBuilder.Entity<MoodEntry>(e =>
+        {
+            e.HasKey(m => m.Id);
+
+            // Stimmungen gehören zum Tag und gehen beim endgültigen Löschen mit.
+            e.HasOne(m => m.JournalEntry)
+                .WithMany(j => j.Moods)
+                .HasForeignKey(m => m.JournalEntryId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Der häufigste Zugriff: die Stimmungen eines Tages in zeitlicher Folge.
+            e.HasIndex(m => new { m.JournalEntryId, m.RecordedAt });
+
+            e.Property(m => m.Note)
+                .HasConversion(EncryptedConverter.StrictNullable(
+                    dataProtection.CreateProtector("HorizonNET.Journal.MoodNote")));
+
+            // Passender Filter zum Soft-Delete des Tages (blendet Stimmungen gelöschter
+            // Tage mit aus – vermeidet die EF-Filter-Warnung, siehe TimeEntry).
+            e.HasQueryFilter(m => m.JournalEntry!.DeletedAt == null);
+        });
+
+        modelBuilder.Entity<JournalTemplate>(e =>
+        {
+            e.HasKey(t => t.Id);
+            e.Property(t => t.Name).IsRequired().HasMaxLength(200);
+            // Content ist HTML und bewusst ohne MaxLength – und unverschlüsselt:
+            // Eine Vorlage enthält die Fragen, nicht die Antworten.
+
+            e.HasQueryFilter(t => t.DeletedAt == null);
+        });
+
         modelBuilder.Entity<DailyTaskCompletion>(e =>
         {
             e.HasKey(c => c.Id);
@@ -268,6 +336,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IDataProtectio
     public DbSet<ExerciseSet> ExerciseSets => Set<ExerciseSet>();
 
     public DbSet<BodyWeightEntry> BodyWeightEntries => Set<BodyWeightEntry>();
+
+    public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
+
+    public DbSet<MoodEntry> MoodEntries => Set<MoodEntry>();
+
+    public DbSet<JournalTemplate> JournalTemplates => Set<JournalTemplate>();
 
     #endregion
 }

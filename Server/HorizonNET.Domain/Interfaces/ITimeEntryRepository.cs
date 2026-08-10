@@ -10,6 +10,11 @@ public interface ITimeEntryRepository
     // Das systemweit einzige laufende Intervall (EndedAt == null), falls vorhanden.
     Task<TimeEntry?> GetRunningAsync();
 
+    // Alle Intervalle, die den Tag berühren (für den Tagesrückblick im Journal),
+    // inkl. Task. Ein über Mitternacht laufendes Intervall taucht an beiden Tagen auf –
+    // die Zuordnung des Anteils macht der Aufrufer.
+    Task<IEnumerable<TimeEntry>> GetForDayAsync(DateOnly date);
+
     // Stoppt das laufende Intervall des Tasks. false, wenn keines läuft.
     // Gestartet wird ausschließlich über den Status (siehe TaskRepository), damit es
     // nur einen Pfad gibt, der die Kopplung Status ↔ Timer herstellt.
