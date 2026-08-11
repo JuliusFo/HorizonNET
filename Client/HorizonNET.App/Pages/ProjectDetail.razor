@@ -457,7 +457,7 @@ else
                             title="@L["Button_AddSubTask_Title"]">＋</button>
                 }
                 <button class="btn btn-sm btn-outline-primary" @onclick="() => OpenEdit(task)" title="@L["Button_Edit_Title"]">✎</button>
-                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteTaskAsync(task, isSubTask)" title="@L["Button_Delete_Title"]">🗑</button>
+                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteTaskAsync(task)" title="@L["Button_Delete_Title"]">🗑</button>
             </div>
         </div>
     };
@@ -488,22 +488,52 @@ else
     private async Task<bool> ChangeStatusAsync(TaskResponseDto task, WorkStatus newStatus)
     {
         var updated = await Api.SetTaskStatusAsync(task.Id, newStatus);
-        if (updated is null || tasks is null) return false;
+        if (updated is null) return false;
 
-        var parent = tasks.FirstOrDefault(t => t.Id == task.Id);
-        if (parent is not null)
-        {
-            tasks[tasks.IndexOf(parent)] = updated;
-        }
-        else
-        {
-            var parentTask = tasks.FirstOrDefault(t => t.SubTasks?.Any(s => s.Id == task.Id) == true);
-            if (parentTask?.SubTasks is not null)
-                parentTask.SubTasks[parentTask.SubTasks.IndexOf(parentTask.SubTasks.First(s => s.Id == task.Id))] = updated;
-        }
-
+        ReplaceTask(updated);
         SyncProjectCounts();
         return true;
+    }
+
+    // ── Zugriff auf die Liste ────────────────────────────────────────────────
+    // Ein Task steht entweder oben in der Liste oder als Sub-Task unter seinem Eltern-Task.
+    // Diese Unterscheidung stand vorher an fünf Stellen ausgeschrieben – jedes Mal etwas
+    // anders formuliert, obwohl immer dasselbe gemeint war. Ab hier steht sie einmal hier,
+    // und die Aufrufer sagen nur noch, WAS passieren soll.
+    //
+    // Alle drei arbeiten auf der geladenen Liste, nicht auf dem Server: Der Aufrufer hat
+    // die Antwort der API bereits in der Hand und spart sich damit ein Neuladen.
+
+    private TaskResponseDto? FindTask(int id) =>
+        tasks?.FirstOrDefault(t => t.Id == id)
+        ?? tasks?.SelectMany(t => t.SubTasks ?? []).FirstOrDefault(s => s.Id == id);
+
+    // Ersetzt den Task durch seinen frischen Stand. Ist er nicht (mehr) in der Liste,
+    // passiert nichts – das ist kein Fehler, sondern der Normalfall nach einem Wechsel.
+    private void ReplaceTask(TaskResponseDto updated)
+    {
+        if (tasks is null) return;
+
+        var idx = tasks.FindIndex(t => t.Id == updated.Id);
+        if (idx >= 0)
+        {
+            tasks[idx] = updated;
+            return;
+        }
+
+        var subTasks = tasks.FirstOrDefault(t => t.SubTasks?.Any(s => s.Id == updated.Id) == true)?.SubTasks;
+        var subIdx = subTasks?.FindIndex(s => s.Id == updated.Id) ?? -1;
+        if (subIdx >= 0) subTasks![subIdx] = updated;
+    }
+
+    private void RemoveTask(int id)
+    {
+        if (tasks is null) return;
+
+        if (tasks.RemoveAll(t => t.Id == id) > 0) return;
+
+        tasks.FirstOrDefault(t => t.SubTasks?.Any(s => s.Id == id) == true)
+             ?.SubTasks?.RemoveAll(s => s.Id == id);
     }
 
     // ── Bearbeiten (geteilter Dialog) ─────────────────────────────────────────
@@ -512,45 +542,17 @@ else
 
     private void HandleTaskSaved(TaskResponseDto updated)
     {
-        if (tasks is null) { selectedTask = null; return; }
-
-        var parentIdx = tasks.FindIndex(t => t.Id == updated.Id);
-        if (parentIdx >= 0)
-        {
-            tasks[parentIdx] = updated;
-        }
-        else
-        {
-            var parentTask = tasks.FirstOrDefault(t => t.SubTasks?.Any(s => s.Id == updated.Id) == true);
-            if (parentTask?.SubTasks is not null)
-            {
-                var subIdx = parentTask.SubTasks.FindIndex(s => s.Id == updated.Id);
-                if (subIdx >= 0) parentTask.SubTasks[subIdx] = updated;
-            }
-        }
-
+        ReplaceTask(updated);
         SyncProjectCounts();
         selectedTask = null;
     }
 
     private void HandleTaskDeleted(int id)
     {
-        var title = FindTaskTitle(id);
+        // Titel VOR dem Entfernen holen – danach ist er nicht mehr zu haben.
+        var title = FindTask(id)?.Title;
 
-        if (tasks is not null)
-        {
-            var parentIdx = tasks.FindIndex(t => t.Id == id);
-            if (parentIdx >= 0)
-            {
-                tasks.RemoveAt(parentIdx);
-            }
-            else
-            {
-                var parentTask = tasks.FirstOrDefault(t => t.SubTasks?.Any(s => s.Id == id) == true);
-                parentTask?.SubTasks?.RemoveAll(s => s.Id == id);
-            }
-        }
-
+        RemoveTask(id);
         SyncProjectCounts();
         selectedTask = null;
         ShowTaskUndo(id, title);
@@ -560,38 +562,23 @@ else
     // Sub-Task-Zeilen in der Liste aktualisieren sich mit.
     private void HandleTaskUpdated(TaskResponseDto updated)
     {
-        if (tasks is null) return;
-        var idx = tasks.FindIndex(t => t.Id == updated.Id);
-        if (idx >= 0) tasks[idx] = updated;
+        ReplaceTask(updated);
         SyncProjectCounts();
     }
 
     // ── Löschen ──────────────────────────────────────────────────────────────
 
-    private async Task DeleteTaskAsync(TaskResponseDto task, bool isSubTask)
+    // Kein isSubTask-Kennzeichen mehr: RemoveTask findet den Task selbst. Das Kennzeichen
+    // musste vorher an jeder Aufrufstelle richtig gesetzt werden – eine Fehlerquelle, die
+    // nichts zur Sache beitrug.
+    private async Task DeleteTaskAsync(TaskResponseDto task)
     {
-        var success = await Api.DeleteTaskAsync(task.Id);
-        if (!success || tasks is null) return;
+        if (!await Api.DeleteTaskAsync(task.Id)) return;
 
-        if (!isSubTask)
-        {
-            tasks.Remove(task);
-        }
-        else
-        {
-            var parentTask = tasks.FirstOrDefault(t => t.SubTasks?.Any(s => s.Id == task.Id) == true);
-            parentTask?.SubTasks?.Remove(task);
-        }
-
+        RemoveTask(task.Id);
         SyncProjectCounts();
         ShowTaskUndo(task.Id, task.Title);
     }
-
-    // Titel eines (Sub-)Tasks aus der aktuellen Liste ermitteln (für den Undo-Toast).
-    private string? FindTaskTitle(int id) =>
-        tasks?.FirstOrDefault(t => t.Id == id)?.Title
-        ?? tasks?.SelectMany(t => t.SubTasks ?? Enumerable.Empty<TaskResponseDto>())
-                 .FirstOrDefault(s => s.Id == id)?.Title;
 
     private void ShowTaskUndo(int id, string? title)
     {
@@ -809,7 +796,6 @@ else
         public DateTime? StartTime { get; set; }
         public DateTime? EndTime { get; set; }
         public Priority Priority { get; set; } = Priority.Medium;
-        public WorkStatus Status { get; set; } = WorkStatus.Planned;
     }
 
 }
