@@ -174,7 +174,11 @@ else
     </div>
 }
 
-<TaskEditDialog Task="selectedTask"
+@* Visible ist Pflicht – der Dialog rendert nur, wenn es gesetzt ist. Ohne die Bindung
+   blieb ein Klick auf einen Termin wirkungslos (dieselbe Bedingung wie auf den vier
+   anderen Seiten, die den Dialog einbinden). *@
+<TaskEditDialog Visible="selectedTask is not null"
+                Task="selectedTask"
                 OnSaved="HandleTaskSaved"
                 OnDeleted="HandleTaskDeleted"
                 OnTaskUpdated="HandleTaskUpdated"
@@ -354,10 +358,19 @@ else
         await RefreshAsync();
     }
 
+    // Die drei Scheduler-Rückrufe prüfen ihre Nutzlast, statt sie mit "!" für sicher zu
+    // erklären: Radzens Ereignisargumente sind nicht auf Nullbarkeit annotiert, also kann
+    // der Compiler nichts garantieren – und wir können es über eine fremde Bibliothek
+    // ebenso wenig. Fällt einer der Werte wider Erwarten aus, passiert hier nichts weiter;
+    // eine unbehandelte Ausnahme im Ereignis-Handler brächte dagegen die Fehlerleiste über
+    // die ganze Seite.
+
     private void OnAppointmentSelect(SchedulerAppointmentSelectEventArgs<CalendarAppointment> args)
     {
         // Google-Termine sind read-only – kein Edit-Dialog.
-        if (!args.Data.IsGoogle) selectedTask = args.Data.Task;
+        if (args.Data is not { IsGoogle: false } appointment) return;
+
+        selectedTask = appointment.Task;
     }
 
     // Termin per Drag verschoben → neue Zeit/Datum übernehmen und speichern.
@@ -365,7 +378,9 @@ else
     {
         if (moved.TimeSpan == TimeSpan.Zero) return;
 
-        var appt = (CalendarAppointment)moved.Appointment.Data;
+        // Mustervergleich statt harter Umwandlung: Der Cast hätte bei unerwarteter Nutzlast
+        // eine InvalidCastException geworfen, hier fällt derselbe Fall still durch.
+        if (moved.Appointment?.Data is not CalendarAppointment appt) return;
 
         // Google-Termine sind read-only und werden nicht verschoben.
         if (appt.IsGoogle || appt.Task is null) return;
@@ -392,7 +407,9 @@ else
     // farbiger Rand + dezenter linker Akzent, dunkler Text. Google = Google-Blau.
     private void OnAppointmentRender(SchedulerAppointmentRenderEventArgs<CalendarAppointment> args)
     {
-        var color = args.Data.IsGoogle ? "#4285F4" : (ProjectColor(args.Data.Task?.ProjectId) ?? "#6c757d");
+        if (args.Data is not { } appointment) return; // ohne Termin nichts einzufärben
+
+        var color = appointment.IsGoogle ? "#4285F4" : (ProjectColor(appointment.Task?.ProjectId) ?? "#6c757d");
         args.Attributes["style"] =
             $"background-color: {color}1A; border: 1px solid {color}; border-left: 3px solid {color}; color: #212529;";
     }
