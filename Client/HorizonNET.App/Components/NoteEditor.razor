@@ -100,16 +100,11 @@ else
     private int? selectedTaskId;
     private int? selectedFolderId;
     private List<TaskOptionDto> allTasks = new();
-    private List<TaskOption> taskOptions = new();
+    private List<SelectOption> taskOptions = new();
 
     // Manuelle Ordner mit vollem Pfad ("Ideen / 2026"), damit gleichnamige Unterordner
     // in der flachen Auswahlliste unterscheidbar bleiben.
-    private List<TaskOption> folderOptions = new();
-
-    // Auswahl-Eintrag für das Task-Dropdown (Sub-Tasks mit ↳ gekennzeichnet).
-    private record TaskOption(int Id, string Label);
-
-    private static readonly StringComparer NameComparer = StringComparer.CurrentCultureIgnoreCase;
+    private List<SelectOption> folderOptions = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -126,28 +121,11 @@ else
     private async Task LoadFolderOptionsAsync()
     {
         var folders = await Api.GetNoteFoldersAsync() ?? new();
-        folderOptions = NoteFolderPaths.Options(folders)
-            .Select(o => new TaskOption(o.Id, o.Label))
-            .ToList();
+        folderOptions = NoteFolderPaths.Options(folders);
     }
 
     // Ist ein Projekt gewählt, nur dessen Tasks anbieten – sonst alle.
-    // Sortierung: Haupt-Tasks A-Z, ihre Sub-Tasks jeweils A-Z direkt darunter.
-    private void RebuildTaskOptions()
-    {
-        var source = selectedProjectId is int projectId
-            ? allTasks.Where(t => t.ProjectId == projectId)
-            : allTasks;
-
-        taskOptions = new();
-        foreach (var t in source.OrderBy(t => t.Title, NameComparer))
-        {
-            taskOptions.Add(new TaskOption(t.Id, t.Title));
-            if (t.SubTasks is not null)
-                foreach (var s in t.SubTasks.OrderBy(s => s.Title, NameComparer))
-                    taskOptions.Add(new TaskOption(s.Id, "↳ " + s.Title));
-        }
-    }
+    private void RebuildTaskOptions() => taskOptions = TaskOptions.For(allTasks, selectedProjectId);
 
     // Während des Tippens NICHT neu rendern – sonst schreibt Radzen den Editor-DOM neu.
     // Beim Laden einer Notiz und bei Statuswechseln (Speichern) rendern wir normal.

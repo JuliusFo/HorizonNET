@@ -8,8 +8,6 @@ namespace HorizonNET.App.Components;
 // geteilt, damit beide dieselbe Beschriftung zeigen.
 public static class NoteFolderPaths
 {
-    public record Option(int Id, string Label);
-
     private static readonly StringComparer NameComparer = StringComparer.CurrentCultureIgnoreCase;
 
     /// <summary>Voller Pfad eines Ordners, z. B. „Ideen / 2026".</summary>
@@ -39,7 +37,7 @@ public static class NoteFolderPaths
     /// Sonst böte die Liste ein Ziel an, das der Server ablehnen muss – ein Ordner kann
     /// nicht unter sich selbst liegen.
     /// </param>
-    public static List<Option> Options(IEnumerable<NoteFolderResponseDto> folders, int? exclude = null)
+    public static List<SelectOption> Options(IEnumerable<NoteFolderResponseDto> folders, int? exclude = null)
     {
         var alle = folders.ToList();
         var byId = alle.ToDictionary(f => f.Id);
@@ -47,7 +45,7 @@ public static class NoteFolderPaths
 
         return alle
             .Where(f => !gesperrt.Contains(f.Id))
-            .Select(f => new Option(f.Id, Path(f, byId)))
+            .Select(f => new SelectOption(f.Id, Path(f, byId)))
             .OrderBy(o => o.Label, NameComparer)
             .ToList();
     }

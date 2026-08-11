@@ -199,7 +199,7 @@
     private int? folderFormOriginalParentId;
 
     // Beim Bearbeiten den Ordner selbst und seine Nachfahren ausblenden.
-    private List<NoteFolderPaths.Option> FolderParentOptions =>
+    private List<SelectOption> FolderParentOptions =>
         NoteFolderPaths.Options(folders, folderForm == FolderFormMode.Edit ? folderFormId : null);
 
     private void OnFolderParentChanged(ChangeEventArgs e)

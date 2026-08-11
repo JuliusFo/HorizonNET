@@ -90,11 +90,7 @@ else
     private int? selectedProjectId;
     private int? selectedTaskId;
     private List<TaskOptionDto> allTasks = new();
-    private List<TaskOption> taskOptions = new();
-
-    private record TaskOption(int Id, string Label);
-
-    private static readonly StringComparer NameComparer = StringComparer.CurrentCultureIgnoreCase;
+    private List<SelectOption> taskOptions = new();
 
     private enum SaveState { Saved, Pending, Saving, Error }
 
@@ -113,21 +109,8 @@ else
         RebuildTaskOptions();
     }
 
-    private void RebuildTaskOptions()
-    {
-        var source = selectedProjectId is int projectId
-            ? allTasks.Where(t => t.ProjectId == projectId)
-            : allTasks;
-
-        taskOptions = new();
-        foreach (var t in source.OrderBy(t => t.Title, NameComparer))
-        {
-            taskOptions.Add(new TaskOption(t.Id, t.Title));
-            if (t.SubTasks is not null)
-                foreach (var s in t.SubTasks.OrderBy(s => s.Title, NameComparer))
-                    taskOptions.Add(new TaskOption(s.Id, "↳ " + s.Title));
-        }
-    }
+    // Ist ein Projekt gewählt, nur dessen Tasks anbieten – sonst alle.
+    private void RebuildTaskOptions() => taskOptions = TaskOptions.For(allTasks, selectedProjectId);
 
     protected override async Task OnParametersSetAsync()
     {
