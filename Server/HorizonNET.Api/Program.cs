@@ -112,10 +112,24 @@ app.MapGet("/api/version", () =>
     return Results.Ok(new AppVersionDto(version, buildUtc));
 });
 
-// Ausstehende Migrationen beim Start automatisch anwenden
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    // SQLite im WAL-Modus betreiben. Im Standardmodus schreibt SQLite direkt in die
+    // Hauptdatei und muss Leser so lange aussperren; mit WAL gehen Änderungen zunächst in
+    // eine Nebendatei, und Leser sehen weiter einen konsistenten Stand. Damit blockieren
+    // sich Hintergrundarbeit (Google-Sync) und UI-Abfragen nicht mehr gegenseitig –
+    // die häufigste Ursache für "database is locked".
+    //
+    // Der Modus steht im Datei-Header und bleibt erhalten; der Aufruf hier stellt nur
+    // sicher, dass auch eine frisch angelegte Datenbank ihn bekommt.
+    //
+    // Fürs Backup relevant: Neben horizonnet.db liegen nun -wal und -shm. Nur die .db zu
+    // kopieren reicht nicht mehr – scripts\backup-database.ps1 nimmt beide Dateien mit.
+    db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
+
+    // Ausstehende Migrationen beim Start automatisch anwenden
     db.Database.Migrate();
 }
 
