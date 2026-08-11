@@ -6,10 +6,11 @@ public record WorkspaceCreateDto(
     string? Color = null
 );
 
+// Vollersatz, deshalb ohne Standardwerte (siehe NoteUpdateDto).
 public record WorkspaceUpdateDto(
     string Name,
     string? Description,
-    string? Color = null
+    string? Color
 );
 
 public record WorkspaceResponseDto(

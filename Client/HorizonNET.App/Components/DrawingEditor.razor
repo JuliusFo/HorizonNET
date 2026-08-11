@@ -300,7 +300,14 @@ else
         }
         var thumbnail = await drawingModule.InvokeAsync<string?>("getThumbnail", canvasHost);
 
-        var dto = new NoteUpdateDto(title.Trim(), svg, selectedTaskId, selectedProjectId, thumbnail);
+        // NoteFolderId ausdrücklich durchreichen, obwohl dieser Editor keine Ordner-Auswahl
+        // hat: NoteUpdateDto ist ein VOLLERSATZ, ein weggelassener Optional-Parameter fällt
+        // also auf null und LÖSCHT die Ablage. Mit dem Positionsaufruf davor hätte die erste
+        // automatische Speicherung eine Zeichnung aus ihrem Ordner geworfen – heute nicht
+        // erreichbar, weil nur der NoteEditor Ordner setzt, aber eine Mine für den Tag, an
+        // dem Zeichnungen eine Ordner-Auswahl oder der Baum Drag & Drop bekommt.
+        var dto = new NoteUpdateDto(title.Trim(), svg, selectedTaskId, selectedProjectId, thumbnail,
+                                    NoteFolderId: loaded.NoteFolderId);
         var updated = await Api.UpdateNoteAsync(loaded.Id, dto);
 
         if (updated is null)

@@ -46,12 +46,15 @@ public record JournalEntryResponseDto(
 // Kein Id im Upsert-DTO: Der Schlüssel ist das Datum aus der Route, nicht die Id.
 // Vollersatz statt Teil-Updates – es gibt nur einen Editor, der alle Felder zeigt
 // (gleiche Begründung wie bei den Projekten und beim Sport).
+// Ohne Standardwerte, weil Vollersatz (siehe NoteUpdateDto): Hier wiegt es besonders
+// schwer – ein vergessenes Feld beim automatischen Speichern würde Stichworte oder
+// Verknüpfung eines Tagebucheintrags stillschweigend löschen.
 public record JournalEntryUpsertDto(
     string? Title,
     string Content,
-    string? Tags = null,
-    int? ProjectId = null,
-    int? TaskItemId = null
+    string? Tags,
+    int? ProjectId,
+    int? TaskItemId
 );
 
 // Schlanke Variante für Liste, Heatmap und Kurve: OHNE Content – der ist HTML und

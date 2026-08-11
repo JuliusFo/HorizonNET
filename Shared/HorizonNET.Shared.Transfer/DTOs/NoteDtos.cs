@@ -14,14 +14,19 @@ public record NoteCreateDto(
     int? NoteFolderId = null
 );
 
+// KEINE Standardwerte – anders als beim Anlegen darüber. Dieses DTO ist ein Vollersatz:
+// Was hier fehlt, wird serverseitig auf null gesetzt, nicht etwa übergangen. Ein
+// weggelassener Optional-Parameter löscht also stillschweigend ein Feld, das der Aufrufer
+// bloß nicht kannte – genau so ist eine Zeichnung schon einmal aus ihrem Ordner geflogen.
+// Ohne Defaults erzwingt der Compiler an jeder Aufrufstelle eine bewusste Angabe.
 public record NoteUpdateDto(
     string Title,
     string? Content,
-    int? TaskItemId = null,
-    int? ProjectId = null,
+    int? TaskItemId,
+    int? ProjectId,
     // Kind bewusst NICHT im Update-DTO – eine Notiz wird nicht in eine Zeichnung umgewandelt.
-    string? Thumbnail = null,
-    int? NoteFolderId = null
+    string? Thumbnail,
+    int? NoteFolderId
 );
 
 public record NoteResponseDto(

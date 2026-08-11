@@ -11,13 +11,14 @@ public record ProjectCreateDto(
     int? WorkspaceId = null
 );
 
+// Vollersatz, deshalb ohne Standardwerte (siehe NoteUpdateDto).
 public record ProjectUpdateDto(
     string Name,
     string? Description,
     ProjectStatus Status,
     Priority Priority,
-    string? Color = null,
-    int? WorkspaceId = null
+    string? Color,
+    int? WorkspaceId
 );
 
 public record ProjectResponseDto(

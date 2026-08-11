@@ -339,7 +339,12 @@ else
         state = SaveState.Saving;
         await InvokeAsync(StateHasChanged);
 
+        // Thumbnail durchreichen statt weglassen: Dieser Editor verwaltet es nicht (es gehört
+        // zu Zeichnungen), und ein Vollersatz-DTO löscht alles, was nicht mitkommt. Bei
+        // HTML-Notizen ist der Wert ohnehin null – aber die Regel gilt hier wie im
+        // DrawingEditor, der umgekehrt den Ordner durchreicht.
         var dto = new NoteUpdateDto(title.Trim(), content, selectedTaskId, selectedProjectId,
+                                    Thumbnail: loaded.Thumbnail,
                                     NoteFolderId: selectedFolderId);
         var updated = await Api.UpdateNoteAsync(loaded.Id, dto);
 
