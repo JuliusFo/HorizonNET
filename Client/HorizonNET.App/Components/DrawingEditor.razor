@@ -82,9 +82,12 @@ else
     private bool editorActive; // ist aktuell ein js-draw-Editor am Host aktiv?
 
     // Tab-Lock (identisch zu NoteEditor – noteLock.js ist generisch über die Note-Id).
-    private IJSObjectReference? lockModule;
+    private NoteTabLock? tabLock;
+
+    private bool readOnly => tabLock?.IsReadOnly ?? false;
+
+    // Bleibt trotz NoteTabLock: js-draw ruft darüber OnDrawingChanged zurück.
     private DotNetObjectReference<DrawingEditor>? selfRef;
-    private bool readOnly;
 
     // Zuordnung (Projekt/Task)
     private int? selectedProjectId;
@@ -105,6 +108,8 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        tabLock = new NoteTabLock(JS) { Lost = OnLockLostAsync };
+
         allTasks = await Api.GetTaskOptionsAsync() ?? new();
         RebuildTaskOptions();
     }
@@ -165,34 +170,26 @@ else
         return Task.CompletedTask;
     }
 
-    // ── Tab-Lock (wie NoteEditor) ───────────────────────────────────────────────
+    // ── Tab-Lock ────────────────────────────────────────────────────────────────
+    // Holen und Freigeben liegen in NoteTabLock; hier steht nur, was DIESER Editor tut,
+    // wenn ein anderer Tab übernimmt.
 
     private async Task AcquireLockAsync(bool force)
     {
-        if (loaded is null) return;
+        if (loaded is null || tabLock is null) return;
 
-        lockModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/noteLock.js");
-        selfRef    ??= DotNetObjectReference.Create(this);
-
-        var acquired = await lockModule.InvokeAsync<bool>("acquire", loaded.Id, selfRef, force);
-        readOnly = !acquired;
+        await tabLock.AcquireAsync(loaded.Id, force);
     }
 
-    private async Task ReleaseLockAsync(int? noteId)
-    {
-        readOnly = false;
-        if (lockModule is null) return;
-        try { await lockModule.InvokeVoidAsync("release", noteId); }
-        catch (JSDisconnectedException) { }
-    }
+    private Task ReleaseLockAsync(int? noteId) =>
+        tabLock?.ReleaseAsync(noteId) ?? Task.CompletedTask;
 
-    // Ein anderer Tab hat übernommen: ausstehende Änderungen verwerfen, Editor abbauen.
-    [JSInvokable]
-    public async Task OnLockLost()
+    // Anders als beim Notiz-Editor muss hier auch die Zeichenfläche weg: js-draw hält
+    // eigenen Zustand, der sonst weiter auf eine Notiz zeigt, die uns nicht mehr gehört.
+    private async Task OnLockLostAsync()
     {
         debounceCts?.Cancel();
         await DestroyEditorAsync();
-        readOnly = true;
         state = SaveState.Saved;
         await InvokeAsync(StateHasChanged);
     }
@@ -345,11 +342,7 @@ else
             try { await drawingModule.DisposeAsync(); }
             catch (JSDisconnectedException) { }
         }
-        if (lockModule is not null)
-        {
-            try { await lockModule.DisposeAsync(); }
-            catch (JSDisconnectedException) { }
-        }
+        if (tabLock is not null) await tabLock.DisposeAsync();
 
         selfRef?.Dispose();
     }

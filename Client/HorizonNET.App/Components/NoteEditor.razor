@@ -88,9 +88,10 @@ else
     // Tab-Lock: Die Notiz darf nur in einem Tab bearbeitet werden. Hält ein anderer Tab
     // den Lock, ist dieser Editor schreibgeschützt und speichert nichts – sonst würde er
     // beim Verlassen seinen veralteten Stand über den des anderen Tabs schreiben.
-    private IJSObjectReference? lockModule;
-    private DotNetObjectReference<NoteEditor>? selfRef;
-    private bool readOnly;
+    // Die Mechanik steckt in NoteTabLock (geteilt mit dem Zeichnungs-Editor).
+    private NoteTabLock? tabLock;
+
+    private bool readOnly => tabLock?.IsReadOnly ?? false;
 
     // Macht Links im contenteditable-Bereich des Editors anklickbar (siehe noteLinks.js).
     private IJSObjectReference? linkModule;
@@ -108,6 +109,8 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        tabLock = new NoteTabLock(JS) { Lost = OnLockLostAsync };
+
         allTasks = await Api.GetTaskOptionsAsync() ?? new();
         RebuildTaskOptions();
         await LoadFolderOptionsAsync();
@@ -184,42 +187,25 @@ else
     }
 
     // ── Tab-Lock ──────────────────────────────────────────────────────────────────
+    // Holen und Freigeben liegen in NoteTabLock; hier steht nur, was DIESER Editor tut,
+    // wenn ein anderer Tab übernimmt.
 
-    // Sperrt die geladene Notiz für diesen Tab. Hält sie bereits ein anderer, lebender
-    // Tab, geht der Editor in den Read-Only-Modus (force = true übernimmt trotzdem).
     private async Task AcquireLockAsync(bool force)
     {
-        if (loaded is null) return;
+        if (loaded is null || tabLock is null) return;
 
-        lockModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/noteLock.js");
-        selfRef    ??= DotNetObjectReference.Create(this);
-
-        var acquired = await lockModule.InvokeAsync<bool>("acquire", loaded.Id, selfRef, force);
-        readOnly = !acquired;
+        await tabLock.AcquireAsync(loaded.Id, force);
     }
 
-    // Gibt den gehaltenen Lock frei (Notiz abgewählt/gelöscht), damit ein anderer Tab
-    // sie sofort bearbeiten kann statt erst nach Ablauf des TTL.
-    private async Task ReleaseLockAsync(int? noteId)
-    {
-        readOnly = false;
+    private Task ReleaseLockAsync(int? noteId) =>
+        tabLock?.ReleaseAsync(noteId) ?? Task.CompletedTask;
 
-        if (lockModule is null) return;
-
-        try
-        {
-            await lockModule.InvokeVoidAsync("release", noteId);
-        }
-        catch (JSDisconnectedException) { }
-    }
-
-    // Ein anderer Tab hat die Notiz übernommen. Ausstehende Änderungen werden bewusst
-    // verworfen statt gespeichert – genau dieses Zurückschreiben war das Problem.
-    [JSInvokable]
-    public async Task OnLockLost()
+    // Ausstehende Änderungen werden bewusst verworfen statt gespeichert – genau dieses
+    // Zurückschreiben war das Problem. skipNextRender muss fallen, sonst bliebe die
+    // Read-Only-Ansicht bis zur nächsten Eingabe unsichtbar.
+    private async Task OnLockLostAsync()
     {
         debounceCts?.Cancel();
-        readOnly       = true;
         state          = SaveState.Saved;
         skipNextRender = false;
         await InvokeAsync(StateHasChanged);
@@ -360,22 +346,13 @@ else
         await FlushAsync();
         debounceCts?.Dispose();
 
-        // Beim Verlassen der Seite ist der JS-Kontext u. U. schon weg – der Lock läuft
-        // dann über sein TTL ab, das ist unkritisch.
         await ReleaseLockAsync(loaded?.Id);
-
-        if (lockModule is not null)
-        {
-            try { await lockModule.DisposeAsync(); }
-            catch (JSDisconnectedException) { }
-        }
+        if (tabLock is not null) await tabLock.DisposeAsync();
 
         if (linkModule is not null)
         {
             try { await linkModule.DisposeAsync(); }
             catch (JSDisconnectedException) { }
         }
-
-        selfRef?.Dispose();
     }
 }
