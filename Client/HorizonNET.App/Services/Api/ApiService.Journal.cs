@@ -1,6 +1,5 @@
 using System.Net.Http.Json;
 using HorizonNET.Shared.Transfer.DTOs;
-using HorizonNET.Shared.Transfer.Enums;
 
 namespace HorizonNET.App.Services;
 
@@ -16,14 +15,9 @@ public partial class ApiService
         http.GetFromJsonAsync<JournalEntryResponseDto>($"api/journal/{date:yyyy-MM-dd}");
 
     // Anlegen und Ändern in einem: Der Schlüssel ist der Tag, nicht eine Id.
-    public async Task<JournalEntryResponseDto?> SaveJournalEntryAsync(
-        DateOnly date, JournalEntryUpsertDto dto)
-    {
-        var response = await http.PutAsJsonAsync($"api/journal/{date:yyyy-MM-dd}", dto);
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<JournalEntryResponseDto>()
-            : null;
-    }
+    public Task<JournalEntryResponseDto?> SaveJournalEntryAsync(
+        DateOnly date, JournalEntryUpsertDto dto) =>
+        PutAsync<JournalEntryResponseDto>($"api/journal/{date:yyyy-MM-dd}", dto);
 
     // Sucht in Tagestext, Überschrift und Stimmungsnotizen. Bewusst ein eigener
     // Endpunkt – die globale Palette (Strg+K) kennt das Journal nicht.
@@ -53,28 +47,15 @@ public partial class ApiService
     public Task<List<JournalTemplateResponseDto>?> GetJournalTemplatesAsync() =>
         http.GetFromJsonAsync<List<JournalTemplateResponseDto>>("api/journaltemplates");
 
-    public async Task<JournalTemplateResponseDto?> CreateJournalTemplateAsync(JournalTemplateCreateDto dto)
-    {
-        var response = await http.PostAsJsonAsync("api/journaltemplates", dto);
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<JournalTemplateResponseDto>()
-            : null;
-    }
+    public Task<JournalTemplateResponseDto?> CreateJournalTemplateAsync(JournalTemplateCreateDto dto) =>
+        PostAsync<JournalTemplateResponseDto>("api/journaltemplates", dto);
 
-    public async Task<JournalTemplateResponseDto?> UpdateJournalTemplateAsync(
-        int id, JournalTemplateUpdateDto dto)
-    {
-        var response = await http.PutAsJsonAsync($"api/journaltemplates/{id}", dto);
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<JournalTemplateResponseDto>()
-            : null;
-    }
+    public Task<JournalTemplateResponseDto?> UpdateJournalTemplateAsync(
+        int id, JournalTemplateUpdateDto dto) =>
+        PutAsync<JournalTemplateResponseDto>($"api/journaltemplates/{id}", dto);
 
-    public async Task<bool> DeleteJournalTemplateAsync(int id)
-    {
-        var response = await http.DeleteAsync($"api/journaltemplates/{id}");
-        return response.IsSuccessStatusCode;
-    }
+    public Task<bool> DeleteJournalTemplateAsync(int id) =>
+        DeleteAsync($"api/journaltemplates/{id}");
 
     // Was die App über den Tag ohnehin weiß (Tasks, Dailies, Zeit, Sport). Wird bei
     // jedem Öffnen frisch gelesen und nie in den Eintrag kopiert.
@@ -89,50 +70,27 @@ public partial class ApiService
 
     // Stimmungen: mehrere pro Tag. Existiert der Tageseintrag noch nicht, legt ihn der
     // Server leer an – eine Stimmung festzuhalten setzt kein Schreiben voraus.
-    public async Task<MoodResponseDto?> AddMoodAsync(DateOnly date, MoodCreateDto dto)
-    {
-        var response = await http.PostAsJsonAsync($"api/journal/{date:yyyy-MM-dd}/moods", dto);
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<MoodResponseDto>()
-            : null;
-    }
+    public Task<MoodResponseDto?> AddMoodAsync(DateOnly date, MoodCreateDto dto) =>
+        PostAsync<MoodResponseDto>($"api/journal/{date:yyyy-MM-dd}/moods", dto);
 
-    public async Task<MoodResponseDto?> UpdateMoodAsync(int id, MoodUpdateDto dto)
-    {
-        var response = await http.PutAsJsonAsync($"api/journal/moods/{id}", dto);
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<MoodResponseDto>()
-            : null;
-    }
+    public Task<MoodResponseDto?> UpdateMoodAsync(int id, MoodUpdateDto dto) =>
+        PutAsync<MoodResponseDto>($"api/journal/moods/{id}", dto);
 
-    public async Task<bool> DeleteMoodAsync(int id)
-    {
-        var response = await http.DeleteAsync($"api/journal/moods/{id}");
-        return response.IsSuccessStatusCode;
-    }
+    public Task<bool> DeleteMoodAsync(int id) =>
+        DeleteAsync($"api/journal/moods/{id}");
 
     // Gelöschte Journal-Einträge. Bewusst ein eigener Endpunkt statt des globalen
     // Papierkorbs: Tagebuch-Einträge sollen dort nicht mitgelistet werden.
     public Task<List<JournalDeletedItemDto>?> GetDeletedJournalEntriesAsync() =>
         http.GetFromJsonAsync<List<JournalDeletedItemDto>>("api/journal/deleted");
 
-    public async Task<bool> DeleteJournalEntryAsync(int id)
-    {
-        var response = await http.DeleteAsync($"api/journal/{id}");
-        return response.IsSuccessStatusCode;
-    }
+    public Task<bool> DeleteJournalEntryAsync(int id) =>
+        DeleteAsync($"api/journal/{id}");
 
-    public async Task<bool> RestoreJournalEntryAsync(int id)
-    {
-        var response = await http.PostAsync($"api/journal/{id}/restore", null);
-        return response.IsSuccessStatusCode;
-    }
+    public Task<bool> RestoreJournalEntryAsync(int id) =>
+        PostAsync($"api/journal/{id}/restore");
 
     // Endgültig – nicht umkehrbar, nimmt die Stimmungen des Tages mit.
-    public async Task<bool> PurgeJournalEntryAsync(int id)
-    {
-        var response = await http.DeleteAsync($"api/journal/{id}/purge");
-        return response.IsSuccessStatusCode;
-    }
-
+    public Task<bool> PurgeJournalEntryAsync(int id) =>
+        DeleteAsync($"api/journal/{id}/purge");
 }

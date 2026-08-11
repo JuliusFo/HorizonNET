@@ -27,23 +27,15 @@ public partial class ApiService
     public Task<List<TaskOptionDto>?> GetTaskOptionsAsync() =>
         http.GetFromJsonAsync<List<TaskOptionDto>>("api/tasks/options");
 
-    public async Task<TaskResponseDto?> CreateTaskAsync(TaskCreateDto dto)
-    {
-        var response = await http.PostAsJsonAsync("api/tasks", dto);
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<TaskResponseDto>()
-            : null;
-    }
+    public Task<TaskResponseDto?> CreateTaskAsync(TaskCreateDto dto) =>
+        PostAsync<TaskResponseDto>("api/tasks", dto);
 
     // Vollersatz – nur für die echten Editoren (Detailseite, Bearbeiten-Dialog). Wer nur
     // ein Anliegen hat, nimmt eines der Teil-Updates darunter.
     public async Task<TaskResponseDto?> UpdateTaskAsync(int id, TaskUpdateDto dto)
     {
-        var response = await http.PutAsJsonAsync($"api/tasks/{id}", dto);
-        if (!response.IsSuccessStatusCode) return null;
-
-        var updated = await response.Content.ReadFromJsonAsync<TaskResponseDto>();
-        await NotifyTaskChangedAsync(); // Status kann den Timer gestartet/gestoppt haben
+        var updated = await PutAsync<TaskResponseDto>($"api/tasks/{id}", dto);
+        if (updated is not null) await NotifyTaskChangedAsync(); // Status kann den Timer gestartet/gestoppt haben
         return updated;
     }
 
@@ -53,91 +45,62 @@ public partial class ApiService
 
     public async Task<TaskResponseDto?> SetTaskStatusAsync(int id, WorkStatus status)
     {
-        var response = await http.PutAsJsonAsync($"api/tasks/{id}/status", new TaskStatusDto(status));
-        if (!response.IsSuccessStatusCode) return null;
-
-        var updated = await response.Content.ReadFromJsonAsync<TaskResponseDto>();
-        await NotifyTaskChangedAsync(); // Status kann den Timer gestartet/gestoppt haben
+        var updated = await PutAsync<TaskResponseDto>($"api/tasks/{id}/status", new TaskStatusDto(status));
+        if (updated is not null) await NotifyTaskChangedAsync(); // Status kann den Timer gestartet/gestoppt haben
         return updated;
     }
 
-    public async Task<TaskResponseDto?> SetTaskScheduleAsync(int id, DateTime? dueDate, DateTime? startTime, DateTime? endTime)
-    {
-        var response = await http.PutAsJsonAsync($"api/tasks/{id}/schedule",
-            new TaskScheduleDto(dueDate, startTime, endTime));
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<TaskResponseDto>()
-            : null;
-    }
+    public Task<TaskResponseDto?> SetTaskScheduleAsync(int id, DateTime? dueDate, DateTime? startTime, DateTime? endTime) =>
+        PutAsync<TaskResponseDto>($"api/tasks/{id}/schedule", new TaskScheduleDto(dueDate, startTime, endTime));
 
-    public async Task<TaskResponseDto?> SetTaskProjectAsync(int id, int? projectId)
-    {
-        var response = await http.PutAsJsonAsync($"api/tasks/{id}/project", new TaskProjectDto(projectId));
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<TaskResponseDto>()
-            : null;
-    }
+    public Task<TaskResponseDto?> SetTaskProjectAsync(int id, int? projectId) =>
+        PutAsync<TaskResponseDto>($"api/tasks/{id}/project", new TaskProjectDto(projectId));
 
     public async Task<bool> DeleteTaskAsync(int id)
     {
-        var response = await http.DeleteAsync($"api/tasks/{id}");
-        if (response.IsSuccessStatusCode) await NotifyTaskChangedAsync();
-        return response.IsSuccessStatusCode;
+        var deleted = await DeleteAsync($"api/tasks/{id}");
+        if (deleted) await NotifyTaskChangedAsync();
+        return deleted;
     }
 
-    public async Task<bool> RestoreTaskAsync(int id)
-    {
-        var response = await http.PostAsync($"api/tasks/{id}/restore", null);
-        return response.IsSuccessStatusCode;
-    }
+    public Task<bool> RestoreTaskAsync(int id) =>
+        PostAsync($"api/tasks/{id}/restore");
 
     public async Task<bool> ReorderTasksAsync(TaskReorderDto dto)
     {
-        var response = await http.PutAsJsonAsync("api/tasks/reorder", dto);
+        var reordered = await PutAsync("api/tasks/reorder", dto);
         // Im Kanban-Board ist das Verschieben in eine Spalte ein Statuswechsel.
-        if (response.IsSuccessStatusCode) await NotifyTaskChangedAsync();
-        return response.IsSuccessStatusCode;
+        if (reordered) await NotifyTaskChangedAsync();
+        return reordered;
     }
 
-    public async Task<bool> ReorderSubTasksAsync(List<int> orderedTaskIds)
-    {
-        var response = await http.PutAsJsonAsync("api/tasks/reorder-subtasks", orderedTaskIds);
-        return response.IsSuccessStatusCode;
-    }
+    public Task<bool> ReorderSubTasksAsync(List<int> orderedTaskIds) =>
+        PutAsync("api/tasks/reorder-subtasks", orderedTaskIds);
 
     // Reihenfolge der Haupt-Tasks in der Projektliste. Kein NotifyTaskChangedAsync:
     // es ändert sich nur die Position, kein Status – andere Ansichten bleiben gültig.
-    public async Task<bool> ReorderTaskListAsync(List<int> orderedTaskIds)
-    {
-        var response = await http.PutAsJsonAsync("api/tasks/reorder-list", orderedTaskIds);
-        return response.IsSuccessStatusCode;
-    }
+    public Task<bool> ReorderTaskListAsync(List<int> orderedTaskIds) =>
+        PutAsync("api/tasks/reorder-list", orderedTaskIds);
 
     // ── Zeiterfassung ────────────────────────────────────────────────────────────
 
     // Start/Stop liefern den aktualisierten Task zurück (Status und Zeiten inklusive).
     public async Task<TaskResponseDto?> StartTimerAsync(int taskId)
     {
-        var response = await http.PostAsync($"api/tasks/{taskId}/timer/start", null);
-        if (!response.IsSuccessStatusCode) return null;
-
-        var updated = await response.Content.ReadFromJsonAsync<TaskResponseDto>();
-        await NotifyTaskChangedAsync();
+        var updated = await PostAsync<TaskResponseDto>($"api/tasks/{taskId}/timer/start");
+        if (updated is not null) await NotifyTaskChangedAsync();
         return updated;
     }
 
     public async Task<TaskResponseDto?> StopTimerAsync(int taskId)
     {
-        var response = await http.PostAsync($"api/tasks/{taskId}/timer/stop", null);
-        if (!response.IsSuccessStatusCode) return null;
-
-        var updated = await response.Content.ReadFromJsonAsync<TaskResponseDto>();
-        await NotifyTaskChangedAsync();
+        var updated = await PostAsync<TaskResponseDto>($"api/tasks/{taskId}/timer/stop");
+        if (updated is not null) await NotifyTaskChangedAsync();
         return updated;
     }
 
-    // Läuft kein Timer, antwortet die API mit 204 (leerer Body) – GetFromJsonAsync
-    // würde daran scheitern, deshalb der Umweg über GetAsync.
+    // Bleibt ausgeschrieben: Läuft kein Timer, antwortet die API mit 204 (leerer Body) –
+    // GetFromJsonAsync würde daran scheitern, deshalb der Umweg über GetAsync.
     public async Task<RunningTimerDto?> GetRunningTimerAsync()
     {
         var response = await http.GetAsync("api/tasks/timer/running");
@@ -156,32 +119,15 @@ public partial class ApiService
     public Task<List<TaskTemplateResponseDto>?> GetTaskTemplatesAsync() =>
         http.GetFromJsonAsync<List<TaskTemplateResponseDto>>("api/tasktemplates");
 
-    public async Task<TaskTemplateResponseDto?> CreateTaskTemplateAsync(TaskTemplateCreateDto dto)
-    {
-        var response = await http.PostAsJsonAsync("api/tasktemplates", dto);
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<TaskTemplateResponseDto>()
-            : null;
-    }
+    public Task<TaskTemplateResponseDto?> CreateTaskTemplateAsync(TaskTemplateCreateDto dto) =>
+        PostAsync<TaskTemplateResponseDto>("api/tasktemplates", dto);
 
-    public async Task<TaskTemplateResponseDto?> UpdateTaskTemplateAsync(int id, TaskTemplateUpdateDto dto)
-    {
-        var response = await http.PutAsJsonAsync($"api/tasktemplates/{id}", dto);
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<TaskTemplateResponseDto>()
-            : null;
-    }
+    public Task<TaskTemplateResponseDto?> UpdateTaskTemplateAsync(int id, TaskTemplateUpdateDto dto) =>
+        PutAsync<TaskTemplateResponseDto>($"api/tasktemplates/{id}", dto);
 
-    public async Task<bool> DeleteTaskTemplateAsync(int id)
-    {
-        var response = await http.DeleteAsync($"api/tasktemplates/{id}");
-        return response.IsSuccessStatusCode;
-    }
+    public Task<bool> DeleteTaskTemplateAsync(int id) =>
+        DeleteAsync($"api/tasktemplates/{id}");
 
-    public async Task<bool> RestoreTaskTemplateAsync(int id)
-    {
-        var response = await http.PostAsync($"api/tasktemplates/{id}/restore", null);
-        return response.IsSuccessStatusCode;
-    }
-
+    public Task<bool> RestoreTaskTemplateAsync(int id) =>
+        PostAsync($"api/tasktemplates/{id}/restore");
 }

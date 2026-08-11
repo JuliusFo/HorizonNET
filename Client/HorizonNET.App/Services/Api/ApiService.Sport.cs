@@ -1,6 +1,5 @@
 using System.Net.Http.Json;
 using HorizonNET.Shared.Transfer.DTOs;
-using HorizonNET.Shared.Transfer.Enums;
 
 namespace HorizonNET.App.Services;
 
@@ -15,33 +14,20 @@ public partial class ApiService
     public Task<ExerciseResponseDto?> GetExerciseAsync(int id) =>
         http.GetFromJsonAsync<ExerciseResponseDto>($"api/exercises/{id}");
 
-    public async Task<ExerciseResponseDto?> CreateExerciseAsync(ExerciseCreateDto dto)
-    {
-        var response = await http.PostAsJsonAsync("api/exercises", dto);
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<ExerciseResponseDto>()
-            : null;
-    }
+    public Task<ExerciseResponseDto?> CreateExerciseAsync(ExerciseCreateDto dto) =>
+        PostAsync<ExerciseResponseDto>("api/exercises", dto);
 
-    public async Task<ExerciseResponseDto?> UpdateExerciseAsync(int id, ExerciseUpdateDto dto)
-    {
-        var response = await http.PutAsJsonAsync($"api/exercises/{id}", dto);
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<ExerciseResponseDto>()
-            : null;
-    }
+    public Task<ExerciseResponseDto?> UpdateExerciseAsync(int id, ExerciseUpdateDto dto) =>
+        PutAsync<ExerciseResponseDto>($"api/exercises/{id}", dto);
 
-    public async Task<bool> ReorderExercisesAsync(List<int> orderedIds)
-    {
-        var response = await http.PutAsJsonAsync("api/exercises/reorder", orderedIds);
-        return response.IsSuccessStatusCode;
-    }
+    public Task<bool> ReorderExercisesAsync(List<int> orderedIds) =>
+        PutAsync("api/exercises/reorder", orderedIds);
 
-    public async Task<bool> DeleteExerciseAsync(int id) =>
-        (await http.DeleteAsync($"api/exercises/{id}")).IsSuccessStatusCode;
+    public Task<bool> DeleteExerciseAsync(int id) =>
+        DeleteAsync($"api/exercises/{id}");
 
-    public async Task<bool> RestoreExerciseAsync(int id) =>
-        (await http.PostAsync($"api/exercises/{id}/restore", null)).IsSuccessStatusCode;
+    public Task<bool> RestoreExerciseAsync(int id) =>
+        PostAsync($"api/exercises/{id}/restore");
 
     // ── Sport: Sätze ───────────────────────────────────────────────────────────
 
@@ -58,9 +44,10 @@ public partial class ApiService
         return http.GetFromJsonAsync<List<ExerciseSetResponseDto>>(url);
     }
 
-    // Liefert die Fehlermeldung der API mit: Die typabhängigen Regeln ("Kraftübungen
-    // brauchen Wiederholungen und Gewicht") sind für den Nutzer die eigentliche Auskunft
-    // und sollen nicht zu einem generischen "hat nicht geklappt" verkommen.
+    // Diese beiden bleiben ausgeschrieben: Sie brauchen die Antwort AUCH im Fehlerfall.
+    // Die typabhängigen Regeln ("Kraftübungen brauchen Wiederholungen und Gewicht") sind
+    // für den Nutzer die eigentliche Auskunft und sollen nicht zu einem generischen
+    // "hat nicht geklappt" verkommen – die Helfer oben werfen den Rumpf dagegen weg.
     public async Task<(ExerciseSetResponseDto? Set, string? Error)> CreateExerciseSetAsync(ExerciseSetCreateDto dto)
     {
         var response = await http.PostAsJsonAsync("api/exercise-sets", dto);
@@ -79,11 +66,11 @@ public partial class ApiService
         return (null, await ErrorTextAsync(response));
     }
 
-    public async Task<bool> DeleteExerciseSetAsync(int id) =>
-        (await http.DeleteAsync($"api/exercise-sets/{id}")).IsSuccessStatusCode;
+    public Task<bool> DeleteExerciseSetAsync(int id) =>
+        DeleteAsync($"api/exercise-sets/{id}");
 
-    public async Task<bool> RestoreExerciseSetAsync(int id) =>
-        (await http.PostAsync($"api/exercise-sets/{id}/restore", null)).IsSuccessStatusCode;
+    public Task<bool> RestoreExerciseSetAsync(int id) =>
+        PostAsync($"api/exercise-sets/{id}/restore");
 
     // ── Sport: Körpergewicht ───────────────────────────────────────────────────
 
@@ -97,16 +84,11 @@ public partial class ApiService
         return http.GetFromJsonAsync<List<BodyWeightResponseDto>>(url);
     }
 
-    public async Task<BodyWeightResponseDto?> SetBodyWeightAsync(DateOnly measuredOn, double weightKg)
-    {
-        var response = await http.PutAsJsonAsync("api/bodyweight", new BodyWeightSetDto(measuredOn, weightKg));
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<BodyWeightResponseDto>()
-            : null;
-    }
+    public Task<BodyWeightResponseDto?> SetBodyWeightAsync(DateOnly measuredOn, double weightKg) =>
+        PutAsync<BodyWeightResponseDto>("api/bodyweight", new BodyWeightSetDto(measuredOn, weightKg));
 
-    public async Task<bool> DeleteBodyWeightAsync(int id) =>
-        (await http.DeleteAsync($"api/bodyweight/{id}")).IsSuccessStatusCode;
+    public Task<bool> DeleteBodyWeightAsync(int id) =>
+        DeleteAsync($"api/bodyweight/{id}");
 
     // Die API meldet Validierungsfehler als Klartext (BadRequest mit string).
     private static async Task<string> ErrorTextAsync(HttpResponseMessage response)
@@ -114,5 +96,4 @@ public partial class ApiService
         var text = await response.Content.ReadAsStringAsync();
         return string.IsNullOrWhiteSpace(text) ? "Speichern fehlgeschlagen." : text.Trim('"');
     }
-
 }

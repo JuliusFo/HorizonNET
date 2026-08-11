@@ -1,6 +1,5 @@
 using System.Net.Http.Json;
 using HorizonNET.Shared.Transfer.DTOs;
-using HorizonNET.Shared.Transfer.Enums;
 
 namespace HorizonNET.App.Services;
 
@@ -12,36 +11,21 @@ public partial class ApiService
     public Task<List<NoteFolderResponseDto>?> GetNoteFoldersAsync() =>
         http.GetFromJsonAsync<List<NoteFolderResponseDto>>("api/note-folders");
 
-    public async Task<NoteFolderResponseDto?> CreateNoteFolderAsync(NoteFolderCreateDto dto)
-    {
-        var response = await http.PostAsJsonAsync("api/note-folders", dto);
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<NoteFolderResponseDto>()
-            : null;
-    }
+    public Task<NoteFolderResponseDto?> CreateNoteFolderAsync(NoteFolderCreateDto dto) =>
+        PostAsync<NoteFolderResponseDto>("api/note-folders", dto);
 
-    public async Task<NoteFolderResponseDto?> RenameNoteFolderAsync(int id, string name)
-    {
-        var response = await http.PutAsJsonAsync($"api/note-folders/{id}/name", new NoteFolderRenameDto(name));
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<NoteFolderResponseDto>()
-            : null;
-    }
+    public Task<NoteFolderResponseDto?> RenameNoteFolderAsync(int id, string name) =>
+        PutAsync<NoteFolderResponseDto>($"api/note-folders/{id}/name", new NoteFolderRenameDto(name));
 
     // null = auf die oberste Ebene. Liefert null, wenn das Ziel ein Nachfahre wäre.
-    public async Task<NoteFolderResponseDto?> MoveNoteFolderAsync(int id, int? parentFolderId)
-    {
-        var response = await http.PutAsJsonAsync($"api/note-folders/{id}/parent", new NoteFolderMoveDto(parentFolderId));
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<NoteFolderResponseDto>()
-            : null;
-    }
+    public Task<NoteFolderResponseDto?> MoveNoteFolderAsync(int id, int? parentFolderId) =>
+        PutAsync<NoteFolderResponseDto>($"api/note-folders/{id}/parent", new NoteFolderMoveDto(parentFolderId));
 
-    public async Task<bool> DeleteNoteFolderAsync(int id) =>
-        (await http.DeleteAsync($"api/note-folders/{id}")).IsSuccessStatusCode;
+    public Task<bool> DeleteNoteFolderAsync(int id) =>
+        DeleteAsync($"api/note-folders/{id}");
 
-    public async Task<bool> RestoreNoteFolderAsync(int id) =>
-        (await http.PostAsync($"api/note-folders/{id}/restore", null)).IsSuccessStatusCode;
+    public Task<bool> RestoreNoteFolderAsync(int id) =>
+        PostAsync($"api/note-folders/{id}/restore");
 
     // ── Notizen ────────────────────────────────────────────────────────────────
 
@@ -57,32 +41,15 @@ public partial class ApiService
     public Task<List<NoteListItemDto>?> GetNotesByProjectAsync(int projectId) =>
         http.GetFromJsonAsync<List<NoteListItemDto>>($"api/notes/project/{projectId}");
 
-    public async Task<NoteResponseDto?> CreateNoteAsync(NoteCreateDto dto)
-    {
-        var response = await http.PostAsJsonAsync("api/notes", dto);
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<NoteResponseDto>()
-            : null;
-    }
+    public Task<NoteResponseDto?> CreateNoteAsync(NoteCreateDto dto) =>
+        PostAsync<NoteResponseDto>("api/notes", dto);
 
-    public async Task<NoteResponseDto?> UpdateNoteAsync(int id, NoteUpdateDto dto)
-    {
-        var response = await http.PutAsJsonAsync($"api/notes/{id}", dto);
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<NoteResponseDto>()
-            : null;
-    }
+    public Task<NoteResponseDto?> UpdateNoteAsync(int id, NoteUpdateDto dto) =>
+        PutAsync<NoteResponseDto>($"api/notes/{id}", dto);
 
-    public async Task<bool> DeleteNoteAsync(int id)
-    {
-        var response = await http.DeleteAsync($"api/notes/{id}");
-        return response.IsSuccessStatusCode;
-    }
+    public Task<bool> DeleteNoteAsync(int id) =>
+        DeleteAsync($"api/notes/{id}");
 
-    public async Task<bool> RestoreNoteAsync(int id)
-    {
-        var response = await http.PostAsync($"api/notes/{id}/restore", null);
-        return response.IsSuccessStatusCode;
-    }
-
+    public Task<bool> RestoreNoteAsync(int id) =>
+        PostAsync($"api/notes/{id}/restore");
 }

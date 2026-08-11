@@ -1,6 +1,5 @@
 using System.Net.Http.Json;
 using HorizonNET.Shared.Transfer.DTOs;
-using HorizonNET.Shared.Transfer.Enums;
 
 namespace HorizonNET.App.Services;
 
@@ -15,46 +14,26 @@ public partial class ApiService
     public Task<List<DailyTaskResponseDto>?> GetDailyTasksTodayAsync() =>
         http.GetFromJsonAsync<List<DailyTaskResponseDto>>("api/dailytasks/today");
 
-    public async Task<DailyTaskResponseDto?> CreateDailyTaskAsync(DailyTaskCreateDto dto)
-    {
-        var response = await http.PostAsJsonAsync("api/dailytasks", dto);
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<DailyTaskResponseDto>()
-            : null;
-    }
+    public Task<DailyTaskResponseDto?> CreateDailyTaskAsync(DailyTaskCreateDto dto) =>
+        PostAsync<DailyTaskResponseDto>("api/dailytasks", dto);
 
-    public async Task<DailyTaskResponseDto?> UpdateDailyTaskAsync(int id, DailyTaskUpdateDto dto)
-    {
-        var response = await http.PutAsJsonAsync($"api/dailytasks/{id}", dto);
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<DailyTaskResponseDto>()
-            : null;
-    }
+    public Task<DailyTaskResponseDto?> UpdateDailyTaskAsync(int id, DailyTaskUpdateDto dto) =>
+        PutAsync<DailyTaskResponseDto>($"api/dailytasks/{id}", dto);
 
-    public async Task<bool> DeleteDailyTaskAsync(int id)
-    {
-        var response = await http.DeleteAsync($"api/dailytasks/{id}");
-        return response.IsSuccessStatusCode;
-    }
+    public Task<bool> DeleteDailyTaskAsync(int id) =>
+        DeleteAsync($"api/dailytasks/{id}");
 
-    public async Task<bool> RestoreDailyTaskAsync(int id)
-    {
-        var response = await http.PostAsync($"api/dailytasks/{id}/restore", null);
-        return response.IsSuccessStatusCode;
-    }
+    public Task<bool> RestoreDailyTaskAsync(int id) =>
+        PostAsync($"api/dailytasks/{id}/restore");
 
-    public async Task<bool> ReorderDailyTasksAsync(List<int> orderedIds)
-    {
-        var response = await http.PutAsJsonAsync("api/dailytasks/reorder", orderedIds);
-        return response.IsSuccessStatusCode;
-    }
+    public Task<bool> ReorderDailyTasksAsync(List<int> orderedIds) =>
+        PutAsync("api/dailytasks/reorder", orderedIds);
 
     // Häkchen für einen Tag setzen/entfernen (Datum als yyyy-MM-dd; null = heute serverseitig).
-    public async Task<bool> SetDailyTaskCompletionAsync(int id, DateOnly date, bool completed)
+    // Setzen und Entfernen liegen auf derselben URL, nur das Verb unterscheidet sich.
+    public Task<bool> SetDailyTaskCompletionAsync(int id, DateOnly date, bool completed)
     {
         var url = $"api/dailytasks/{id}/complete?date={date:yyyy-MM-dd}";
-        var response = completed ? await http.PostAsync(url, null) : await http.DeleteAsync(url);
-        return response.IsSuccessStatusCode;
+        return completed ? PostAsync(url) : DeleteAsync(url);
     }
-
 }

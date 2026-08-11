@@ -1,6 +1,5 @@
 using System.Net.Http.Json;
 using HorizonNET.Shared.Transfer.DTOs;
-using HorizonNET.Shared.Transfer.Enums;
 
 namespace HorizonNET.App.Services;
 
@@ -15,33 +14,17 @@ public partial class ApiService
     public Task<WorkspaceResponseDto?> GetWorkspaceAsync(int id) =>
         http.GetFromJsonAsync<WorkspaceResponseDto>($"api/workspaces/{id}");
 
-    public async Task<WorkspaceResponseDto?> CreateWorkspaceAsync(WorkspaceCreateDto dto)
-    {
-        var response = await http.PostAsJsonAsync("api/workspaces", dto);
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<WorkspaceResponseDto>()
-            : null;
-    }
+    public Task<WorkspaceResponseDto?> CreateWorkspaceAsync(WorkspaceCreateDto dto) =>
+        PostAsync<WorkspaceResponseDto>("api/workspaces", dto);
 
-    public async Task<WorkspaceResponseDto?> UpdateWorkspaceAsync(int id, WorkspaceUpdateDto dto)
-    {
-        var response = await http.PutAsJsonAsync($"api/workspaces/{id}", dto);
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<WorkspaceResponseDto>()
-            : null;
-    }
+    public Task<WorkspaceResponseDto?> UpdateWorkspaceAsync(int id, WorkspaceUpdateDto dto) =>
+        PutAsync<WorkspaceResponseDto>($"api/workspaces/{id}", dto);
 
-    public async Task<bool> DeleteWorkspaceAsync(int id)
-    {
-        var response = await http.DeleteAsync($"api/workspaces/{id}");
-        return response.IsSuccessStatusCode;
-    }
+    public Task<bool> DeleteWorkspaceAsync(int id) =>
+        DeleteAsync($"api/workspaces/{id}");
 
-    public async Task<bool> RestoreWorkspaceAsync(int id)
-    {
-        var response = await http.PostAsync($"api/workspaces/{id}/restore", null);
-        return response.IsSuccessStatusCode;
-    }
+    public Task<bool> RestoreWorkspaceAsync(int id) =>
+        PostAsync($"api/workspaces/{id}/restore");
 
     // ── Projekte ────────────────────────────────────────────────────────────
 
@@ -51,32 +34,15 @@ public partial class ApiService
     public Task<ProjectResponseDto?> GetProjectAsync(int id) =>
         http.GetFromJsonAsync<ProjectResponseDto>($"api/projects/{id}");
 
-    public async Task<ProjectResponseDto?> CreateProjectAsync(ProjectCreateDto dto)
-    {
-        var response = await http.PostAsJsonAsync("api/projects", dto);
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<ProjectResponseDto>()
-            : null;
-    }
+    public Task<ProjectResponseDto?> CreateProjectAsync(ProjectCreateDto dto) =>
+        PostAsync<ProjectResponseDto>("api/projects", dto);
 
-    public async Task<ProjectResponseDto?> UpdateProjectAsync(int id, ProjectUpdateDto dto)
-    {
-        var response = await http.PutAsJsonAsync($"api/projects/{id}", dto);
-        return response.IsSuccessStatusCode
-            ? await response.Content.ReadFromJsonAsync<ProjectResponseDto>()
-            : null;
-    }
+    public Task<ProjectResponseDto?> UpdateProjectAsync(int id, ProjectUpdateDto dto) =>
+        PutAsync<ProjectResponseDto>($"api/projects/{id}", dto);
 
-    public async Task<bool> DeleteProjectAsync(int id)
-    {
-        var response = await http.DeleteAsync($"api/projects/{id}");
-        return response.IsSuccessStatusCode;
-    }
+    public Task<bool> DeleteProjectAsync(int id) =>
+        DeleteAsync($"api/projects/{id}");
 
-    public async Task<bool> RestoreProjectAsync(int id)
-    {
-        var response = await http.PostAsync($"api/projects/{id}/restore", null);
-        return response.IsSuccessStatusCode;
-    }
-
+    public Task<bool> RestoreProjectAsync(int id) =>
+        PostAsync($"api/projects/{id}/restore");
 }

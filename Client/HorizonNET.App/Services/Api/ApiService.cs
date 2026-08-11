@@ -3,6 +3,7 @@ using HorizonNET.Shared.Transfer.DTOs;
 using HorizonNET.Shared.Transfer.Enums;
 
 namespace HorizonNET.App.Services;
+
 // Kapselt alle HTTP-Aufrufe an die HorizonNET-API.
 //
 // Auf mehrere Dateien verteilt (ApiService.<Bereich>.cs im selben Ordner) – die Klasse
@@ -16,6 +17,55 @@ public partial class ApiService(HttpClient http)
     public event Func<Task>? TaskChanged;
 
     private Task NotifyTaskChangedAsync() => TaskChanged?.Invoke() ?? Task.CompletedTask;
+
+    // ── Haus-Helfer für die Aufrufe ────────────────────────────────────────────
+    // Fast jede Methode dieser Klasse macht dasselbe: absetzen, Erfolg prüfen, Antwort
+    // lesen oder null/false liefern. Das stand rund sechzigmal ausgeschrieben da.
+    //
+    // Absichtlich dieselben Namen wie bei HttpClient (Post/Put/Delete): Innerhalb dieser
+    // Klasse ist immer der Helfer gemeint, und der Unterschied ist an der Signatur
+    // ablesbar – der Helfer nimmt eine URL, kein HttpContent, und liefert bereits das
+    // fertige Ergebnis statt einer HttpResponseMessage.
+    //
+    // GET-Aufrufe bleiben bewusst direkt bei http.GetFromJsonAsync: Sie sind schon
+    // Einzeiler, und der ApiErrorHandler macht aus einem Fehler dort ohnehin ein null.
+
+    private async Task<T?> PostAsync<T>(string url, object body)
+    {
+        var response = await http.PostAsJsonAsync(url, body);
+        return response.IsSuccessStatusCode
+            ? await response.Content.ReadFromJsonAsync<T>()
+            : default;
+    }
+
+    // Ohne Rumpf – für Endpunkte, die allein aus der URL bestehen (Timer starten/stoppen).
+    private async Task<T?> PostAsync<T>(string url)
+    {
+        var response = await http.PostAsync(url, null);
+        return response.IsSuccessStatusCode
+            ? await response.Content.ReadFromJsonAsync<T>()
+            : default;
+    }
+
+    private async Task<T?> PutAsync<T>(string url, object body)
+    {
+        var response = await http.PutAsJsonAsync(url, body);
+        return response.IsSuccessStatusCode
+            ? await response.Content.ReadFromJsonAsync<T>()
+            : default;
+    }
+
+    // Die drei folgenden interessiert nur, OB es geklappt hat – die Antwort ist leer
+    // (NoContent) oder wird nicht gebraucht.
+
+    private async Task<bool> PostAsync(string url) =>
+        (await http.PostAsync(url, null)).IsSuccessStatusCode;
+
+    private async Task<bool> PutAsync(string url, object body) =>
+        (await http.PutAsJsonAsync(url, body)).IsSuccessStatusCode;
+
+    private async Task<bool> DeleteAsync(string url) =>
+        (await http.DeleteAsync(url)).IsSuccessStatusCode;
 
     // ── Globale Suche ──────────────────────────────────────────────────────────
 
@@ -40,17 +90,10 @@ public partial class ApiService(HttpClient http)
         _ => Task.FromResult(false)
     };
 
-    public async Task<bool> PurgeTrashItemAsync(string type, int id)
-    {
-        var response = await http.DeleteAsync($"api/trash/{type}/{id}");
-        return response.IsSuccessStatusCode;
-    }
+    public Task<bool> PurgeTrashItemAsync(string type, int id) =>
+        DeleteAsync($"api/trash/{type}/{id}");
 
-    public async Task<bool> EmptyTrashAsync()
-    {
-        var response = await http.DeleteAsync("api/trash");
-        return response.IsSuccessStatusCode;
-    }
+    public Task<bool> EmptyTrashAsync() => DeleteAsync("api/trash");
 
     // ── Version ────────────────────────────────────────────────────────────────
 
@@ -67,11 +110,7 @@ public partial class ApiService(HttpClient http)
     public Task<GoogleStatusDto?> GetGoogleStatusAsync() =>
         http.GetFromJsonAsync<GoogleStatusDto>("api/google/status");
 
-    public async Task<bool> DisconnectGoogleAsync()
-    {
-        var response = await http.DeleteAsync("api/google");
-        return response.IsSuccessStatusCode;
-    }
+    public Task<bool> DisconnectGoogleAsync() => DeleteAsync("api/google");
 
     // Holt die Google-Termine eines Zeitraums. Fehler (z. B. nicht verbunden oder
     // Google nicht erreichbar) werden geschluckt, damit der Kalender trotzdem funktioniert.
