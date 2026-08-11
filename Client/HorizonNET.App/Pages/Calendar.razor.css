@@ -158,6 +158,15 @@
     height: 100%;
 }
 
+/* Termin ohne Uhrzeit: eine schmale Zeile statt eines Blocks. Mehr passt in die halbe
+   Stunde Höhe nicht hinein, mit der solche Termine gezeichnet werden. */
+.cal-appt-allday {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.3rem;
+    white-space: nowrap;
+}
+
 .cal-appt-title {
     display: flex;
     align-items: center;

@@ -139,10 +139,9 @@ else
                         var ready = hasPrereqs && prereqs!.All(s => s.IsCompleted);
                         // Inline-Checkboxen nur in der Tagesansicht (Index 0) und nur bei
                         // Terminen mit Uhrzeit (genug Höhe) – sonst kompakt nur mit Status-Icon.
-                        var showInline = selectedViewIndex == 0 && hasPrereqs
-                                         && t.StartTime is not null && t.EndTime is not null;
+                        var showInline = selectedViewIndex == 0 && hasPrereqs && !appt.IsAllDay;
 
-                        <div class="cal-appt">
+                        <div class="cal-appt @(appt.IsAllDay ? "cal-appt-allday" : "")">
                             <div class="cal-appt-title">
                                 @if (hasPrereqs && !t.IsCompleted)
                                 {
@@ -288,24 +287,52 @@ else
         if (scheduler is not null) await scheduler.Reload();
     }
 
-    private CalendarAppointment ToAppointment(GoogleEventDto e) =>
-        new() { Start = e.Start, End = e.End, Text = e.Title, IsGoogle = true, FilterKey = "google" };
+    // Nur eine Von-Zeit gesetzt: Ohne Bis-Zeit hätte der Termin keine Höhe. Eine Stunde
+    // ist die übliche Annahme – dieselbe, mit der auch ein Ende vor dem Anfang korrigiert wird.
+    private static readonly TimeSpan DefaultDuration = TimeSpan.FromHours(1);
+
+    // Ohne jede Uhrzeit: Der Termin bekommt bewusst nur eine halbe Stunde Höhe und sitzt am
+    // Tagesanfang. Vorher lief er von 00:00 bis 24:00 und färbte die ganze Tagesspalte ein.
+    // Der Radzen-Scheduler kennt keinen Ganztags-Bereich, deshalb diese Lösung über die Dauer.
+    private static readonly TimeSpan AllDayHeight = TimeSpan.FromMinutes(30);
+
+    private CalendarAppointment ToAppointment(GoogleEventDto e)
+    {
+        // Ganztägige Google-Termine liefen bisher genauso über den ganzen Tag wie die
+        // eigenen: Das AllDay-Kennzeichen aus dem DTO wurde schlicht nicht ausgewertet.
+        if (!e.AllDay)
+            return new() { Start = e.Start, End = e.End, Text = e.Title, IsGoogle = true, FilterKey = "google" };
+
+        return new()
+        {
+            Start = e.Start.Date,
+            End = e.Start.Date + AllDayHeight,
+            Text = e.Title,
+            IsGoogle = true,
+            IsAllDay = true,
+            FilterKey = "google"
+        };
+    }
 
     private CalendarAppointment ToAppointment(TaskResponseDto t)
     {
         var date = t.DueDate!.Value.Date;
         DateTime start, end;
+        var allDay = false;
 
-        if (t.StartTime is not null && t.EndTime is not null)
+        if (t.StartTime is not null)
         {
             start = date + t.StartTime.Value.TimeOfDay;
-            end   = date + t.EndTime.Value.TimeOfDay;
-            if (end <= start) end = start.AddHours(1);
+            end   = t.EndTime is not null ? date + t.EndTime.Value.TimeOfDay : start + DefaultDuration;
+
+            // Fehlende oder unsinnige Bis-Zeit führen zum selben Ergebnis: Standarddauer.
+            if (end <= start) end = start + DefaultDuration;
         }
         else
         {
-            start = date;
-            end   = date.AddDays(1);
+            start  = date;
+            end    = date + AllDayHeight;
+            allDay = true;
         }
 
         return new CalendarAppointment
@@ -314,6 +341,7 @@ else
             End = end,
             Text = t.Title,
             Task = t,
+            IsAllDay = allDay,
             FilterKey = t.ProjectId is int pid ? $"p:{pid}" : "none"
         };
     }
@@ -389,12 +417,12 @@ else
         var newStart = appt.Start + moved.TimeSpan;
         var newEnd   = appt.End + moved.TimeSpan;
 
-        // Ganztägig (kein Start/Ende) bleibt ganztägig – nur das Datum ändert sich.
-        var isTimed = task.StartTime is not null && task.EndTime is not null;
-
+        // Jedes Feld behält seinen Zustand: Ohne Uhrzeit bleibt der Task ohne Uhrzeit,
+        // und eine fehlende Bis-Zeit wird beim Verschieben nicht plötzlich gesetzt –
+        // die Standarddauer ist nur Anzeige, sie gehört nicht in die Datenbank.
         DateTime? due   = newStart.Date;
-        DateTime? start = isTimed ? newStart : null;
-        DateTime? end   = isTimed ? newEnd : null;
+        DateTime? start = task.StartTime is not null ? newStart : null;
+        DateTime? end   = task.EndTime is not null ? newEnd : null;
 
         var updated = await Api.SetTaskScheduleAsync(task.Id, due, start, end);
         if (updated is null) return;
@@ -410,8 +438,15 @@ else
         if (args.Data is not { } appointment) return; // ohne Termin nichts einzufärben
 
         var color = appointment.IsGoogle ? "#4285F4" : (ProjectColor(appointment.Task?.ProjectId) ?? "#6c757d");
-        args.Attributes["style"] =
+        var style =
             $"background-color: {color}1A; border: 1px solid {color}; border-left: 3px solid {color}; color: #212529;";
+
+        // Ohne Uhrzeit: als flache Pille zeichnen. Die runde Form sagt "kein Zeitraum",
+        // damit die halbe Stunde Höhe nicht als echte Dauer missverstanden wird.
+        if (appointment.IsAllDay)
+            style += " border-radius: 0.9rem; padding: 0 0.5rem; font-size: 0.75rem; overflow: hidden;";
+
+        args.Attributes["style"] = style;
     }
 
     // Sub-Task (Voraussetzung) direkt im Tages-Termin abhaken. Aktualisiert den
@@ -485,6 +520,10 @@ else
         public TaskResponseDto? Task { get; set; }
 
         public bool IsGoogle { get; set; }
+
+        // Termin ohne Uhrzeit. Start/End tragen dann nur die halbe Stunde, mit der er
+        // als flache Leiste am Tagesanfang gezeichnet wird – nicht seine echte Dauer.
+        public bool IsAllDay { get; set; }
 
         // Schlüssel für die Filter-Legende: "p:{projektId}", "none" oder "google".
         public string FilterKey { get; set; } = "none";
