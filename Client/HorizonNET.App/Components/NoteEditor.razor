@@ -96,6 +96,10 @@ else
     // Macht Links im contenteditable-Bereich des Editors anklickbar (siehe noteLinks.js).
     private IJSObjectReference? linkModule;
 
+    // Wandelt "- ", "1. ", "# " am Zeilenanfang in Listen und Überschriften
+    // (siehe noteAutoFormat.js).
+    private IJSObjectReference? autoFormatModule;
+
     // Zuordnung (Projekt/Task) – aus der geladenen Notiz übernommen, per Dropdown änderbar.
     private int? selectedProjectId;
     private int? selectedTaskId;
@@ -117,6 +121,9 @@ else
 
         linkModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/noteLinks.js");
         await linkModule.InvokeVoidAsync("attach");
+
+        autoFormatModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/noteAutoFormat.js");
+        await autoFormatModule.InvokeVoidAsync("attach");
     }
 
     // Alle Ordner mit vollem Pfad – die Aufbereitung teilen wir uns mit der
@@ -349,10 +356,17 @@ else
         await ReleaseLockAsync(loaded?.Id);
         if (tabLock is not null) await tabLock.DisposeAsync();
 
-        if (linkModule is not null)
-        {
-            try { await linkModule.DisposeAsync(); }
-            catch (JSDisconnectedException) { }
-        }
+        await DisposeModuleAsync(linkModule);
+        await DisposeModuleAsync(autoFormatModule);
+    }
+
+    // Beim Verlassen der Seite ist die JS-Verbindung oft schon weg; das ist kein Fehler,
+    // sondern der Normalfall und darf das Aufräumen der übrigen Module nicht abbrechen.
+    private static async ValueTask DisposeModuleAsync(IJSObjectReference? module)
+    {
+        if (module is null) return;
+
+        try { await module.DisposeAsync(); }
+        catch (JSDisconnectedException) { }
     }
 }
