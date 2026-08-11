@@ -4,6 +4,9 @@
 @inject WorkspaceState WorkspaceState
 @inject SettingsState Settings
 @inject ToastService Toast
+@inject ContextMenuService ContextMenu
+@inject NavigationManager Nav
+@inject SoundService Sound
 
 <PageTitle>Kalender – HorizonNET</PageTitle>
 
@@ -141,7 +144,12 @@ else
                         // Terminen mit Uhrzeit (genug Höhe) – sonst kompakt nur mit Status-Icon.
                         var showInline = selectedViewIndex == 0 && hasPrereqs && !appt.IsAllDay;
 
-                        <div class="cal-appt @(appt.IsAllDay ? "cal-appt-allday" : "")">
+                        @* Rechtsklick öffnet das Termin-Menü. Der Scheduler bietet dafür kein
+                           eigenes Ereignis – das Template gehört aber uns, also hängt es hier. *@
+                        <div class="cal-appt @(appt.IsAllDay ? "cal-appt-allday" : "")"
+                             @oncontextmenu="e => ShowApptMenu(e, t)"
+                             @oncontextmenu:preventDefault="true"
+                             @oncontextmenu:stopPropagation="true">
                             <div class="cal-appt-title">
                                 @if (hasPrereqs && !t.IsCompleted)
                                 {
@@ -464,6 +472,114 @@ else
         if (idx >= 0) parent.SubTasks[idx] = updated;
 
         await RefreshAsync();
+    }
+
+    // ── Kontextmenü am Termin ─────────────────────────────────────────────────
+    // Google-Termine bekommen keins: Sie sind read-only, jeder Eintrag wäre wirkungslos.
+
+    private enum ApptAction { Done, Open, Details, Unschedule, Delete }
+
+    private void ShowApptMenu(MouseEventArgs args, TaskResponseDto task)
+    {
+        var items = new List<ContextMenuItem>
+        {
+            // Der erste Eintrag ist der Ein-Klick-Griff und schaltet in beide Richtungen –
+            // die Beschriftung folgt dem Zustand, wie der Haken in den Task-Listen.
+            new() { Text = task.IsCompleted ? "Wieder öffnen" : "Erledigt", Value = ApptAction.Done },
+            new() { Text = "Öffnen",           Value = ApptAction.Open },
+            new() { Text = "Zur Detailseite",  Value = ApptAction.Details },
+            new() { Text = "Termin entfernen", Value = ApptAction.Unschedule },
+            new() { Text = "Löschen",          Value = ApptAction.Delete }
+        };
+
+        // Radzens Rückruf ist synchron; die Aktionen sind es nicht. Deshalb hier anstoßen
+        // und im Handler selbst über InvokeAsync zurück in den Renderkontext.
+        ContextMenu.Open(args, items, e => _ = HandleApptMenuAsync(e, task));
+    }
+
+    private async Task HandleApptMenuAsync(MenuItemEventArgs e, TaskResponseDto task)
+    {
+        ContextMenu.Close();
+
+        // Wie bei den Scheduler-Rückrufen: Radzens Ereignisargumente sind nicht auf
+        // Nullbarkeit annotiert, also geprüft statt hart umgewandelt.
+        if (e.Value is not ApptAction action) return;
+
+        switch (action)
+        {
+            case ApptAction.Done:
+                await ToggleDoneAsync(task);
+                break;
+
+            case ApptAction.Open:
+                selectedTask = task;
+                break;
+
+            case ApptAction.Details:
+                Nav.NavigateTo($"tasks/{task.Id}");
+                return;
+
+            case ApptAction.Unschedule:
+                await UnscheduleAsync(task);
+                break;
+
+            case ApptAction.Delete:
+                if (await Api.DeleteTaskAsync(task.Id)) await HandleTaskDeleted(task.Id);
+                break;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // Abhaken direkt aus dem Kalender – dieselbe Regel wie der Haken in den Task-Listen:
+    // an → "Fertig", aus → zurück auf "Geplant", bewusst ohne den vorherigen Status zu merken.
+    private async Task ToggleDoneAsync(TaskResponseDto task)
+    {
+        var target = task.IsCompleted ? WorkStatus.Planned : WorkStatus.Done;
+
+        var updated = await Api.SetTaskStatusAsync(task.Id, target);
+        if (updated is null)
+        {
+            await Sound.ErrorAsync();
+            Toast.ShowError("Status konnte nicht geändert werden.");
+            return;
+        }
+
+        ReplaceTask(updated);
+        await RefreshAsync();
+
+        if (target == WorkStatus.Done) await Sound.SuccessAsync();
+    }
+
+    // Termin entfernen = Datum und Uhrzeiten löschen. Der Task verschwindet damit aus dem
+    // Kalender und steht wieder in der Ungeplant-Leiste. Bisher ging das nur über den
+    // Umweg "Dialog öffnen, Fälligkeitsdatum leeren, speichern".
+    private async Task UnscheduleAsync(TaskResponseDto task)
+    {
+        // Für das Rückgängig VOR dem Aufruf sichern – danach sind die Werte weg.
+        var due   = task.DueDate;
+        var start = task.StartTime;
+        var end   = task.EndTime;
+
+        var updated = await Api.SetTaskScheduleAsync(task.Id, null, null, null);
+        if (updated is null)
+        {
+            Toast.ShowError("Termin konnte nicht entfernt werden.");
+            return;
+        }
+
+        ReplaceTask(updated);
+        await RefreshAsync();
+
+        Toast.ShowUndo($"{task.Title}: Termin entfernt", async () =>
+        {
+            var restored = await Api.SetTaskScheduleAsync(task.Id, due, start, end);
+            if (restored is null) return;
+
+            ReplaceTask(restored);
+            await RefreshAsync();
+            await InvokeAsync(StateHasChanged);
+        });
     }
 
     // ── Dialog-Callbacks ───────────────────────────────────────────────────────

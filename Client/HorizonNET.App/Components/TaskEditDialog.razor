@@ -53,6 +53,19 @@
                             <InputDate Type="InputDateType.Time" class="form-control" @bind-Value="editModel.EndTime"
                                        disabled="@(editModel.DueDate is null)" />
                         </div>
+
+                        @* Leert alle drei Felder auf einen Griff – der Task wandert damit
+                           zurück in die Ungeplant-Leiste des Kalenders. Wirksam wird es
+                           wie jede andere Änderung erst beim Speichern. *@
+                        @if (editModel.DueDate is not null)
+                        {
+                            <div class="col-12">
+                                <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none"
+                                        @onclick="() => editModel.DueDate = null">
+                                    Termin entfernen
+                                </button>
+                            </div>
+                        }
                     </div>
                     <div class="row g-2">
                         <div class="col-md-6">
