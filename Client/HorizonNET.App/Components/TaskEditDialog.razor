@@ -54,11 +54,33 @@
                                        disabled="@(editModel.DueDate is null)" />
                         </div>
 
-                        @* Leert alle drei Felder auf einen Griff – der Task wandert damit
-                           zurück in die Ungeplant-Leiste des Kalenders. Wirksam wird es
-                           wie jede andere Änderung erst beim Speichern. *@
+                        @* Erinnerung und "Termin entfernen" hängen beide am Fälligkeitsdatum:
+                           ohne Termin gibt es nichts zu erinnern und nichts zu entfernen. *@
                         @if (editModel.DueDate is not null)
                         {
+                            <div class="col-md-6">
+                                <label class="form-label">Erinnerung</label>
+                                <select class="form-select"
+                                        value="@(editModel.ReminderMinutes?.ToString() ?? "")"
+                                        @onchange="OnReminderChanged">
+                                    <option value="">Standard</option>
+                                    <option value="@TaskReminder.None">Keine</option>
+                                    <option value="0">Zum Termin</option>
+                                    <option value="10">10 Minuten vorher</option>
+                                    <option value="15">15 Minuten vorher</option>
+                                    <option value="30">30 Minuten vorher</option>
+                                    <option value="60">1 Stunde vorher</option>
+                                    <option value="1440">1 Tag vorher</option>
+                                </select>
+                                <div class="form-text">
+                                    Gilt für den Google-Termin. „Standard" übernimmt den Wert
+                                    aus den Einstellungen; erledigte Tasks erinnern nie.
+                                </div>
+                            </div>
+
+                            @* Leert Datum und Uhrzeiten auf einen Griff – der Task wandert damit
+                               zurück in die Ungeplant-Leiste des Kalenders. Wirksam wird es
+                               wie jede andere Änderung erst beim Speichern. *@
                             <div class="col-12">
                                 <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none"
                                         @onclick="() => editModel.DueDate = null">
@@ -269,11 +291,19 @@
             Status      = Task.Status,
             Link        = Task.Link,
             WaitingFor  = Task.WaitingFor,
-            ProjectId   = Task.ProjectId
+            ProjectId   = Task.ProjectId,
+            ReminderMinutes = Task.ReminderMinutes
         };
 
         showLink       = Task.Link is not null;
         showWaitingFor = Task.WaitingFor is not null;
+    }
+
+    // Leere Auswahl = "Standard" = null; alles andere ist eine Zahl (auch TaskReminder.None).
+    private void OnReminderChanged(ChangeEventArgs e)
+    {
+        var rohwert = e.Value?.ToString();
+        editModel.ReminderMinutes = string.IsNullOrEmpty(rohwert) ? null : int.Parse(rohwert);
     }
 
     // Feld entfernen heißt Wert leeren – wirksam wird das erst beim Speichern.
@@ -340,7 +370,7 @@
                 editModel.Title, description,
                 editModel.DueDate, editModel.StartTime, editModel.EndTime,
                 editModel.Status, editModel.Priority, editModel.ProjectId,
-                link, waitingFor));
+                link, waitingFor, editModel.ReminderMinutes));
         }
 
         isSaving = false;
@@ -442,6 +472,11 @@
 
         public DateTime? StartTime { get; set; }
         public DateTime? EndTime { get; set; }
+
+        // Erinnerung am Google-Termin: null = Standard aus den Einstellungen erben,
+        // TaskReminder.None = an diesem Task keine. Siehe TaskReminder.
+        public int? ReminderMinutes { get; set; }
+
         public Priority Priority { get; set; } = Priority.Medium;
         public WorkStatus Status { get; set; } = WorkStatus.Planned;
         public int? ProjectId { get; set; }

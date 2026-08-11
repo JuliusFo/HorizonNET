@@ -11,7 +11,9 @@ public record TaskCreateDto(
     Priority Priority,
     int? ProjectId,
     int? ParentTaskId = null,
-    WorkStatus Status = WorkStatus.Planned
+    WorkStatus Status = WorkStatus.Planned,
+    // Erinnerung am Google-Termin; null = Standard erben. Siehe TaskReminder.
+    int? ReminderMinutes = null
 );
 
 // Vollersatz aller Felder – nur für die echten Editoren (Detailseite, Bearbeiten-Dialog),
@@ -31,7 +33,11 @@ public record TaskUpdateDto(
     Priority Priority,
     int? ProjectId,
     string? Link,
-    string? WaitingFor
+    string? WaitingFor,
+    // Erinnerung am Google-Termin; null = Standard erben, TaskReminder.None = keine.
+    // Wie Link bewusst ohne Default: Ein Vollersatz, der das Feld vergisst, würde eine
+    // gesetzte Erinnerung stillschweigend auf "Standard" zurückdrehen.
+    int? ReminderMinutes
 );
 
 // ── Teil-Updates ────────────────────────────────────────────────────────────────
@@ -76,7 +82,9 @@ public record TaskResponseDto(
     // Zeiterfassung: Summe der abgeschlossenen Intervalle in Sekunden.
     int TrackedSeconds = 0,
     // Startzeitpunkt des laufenden Intervalls; null = Timer läuft nicht.
-    DateTime? RunningSince = null
+    DateTime? RunningSince = null,
+    // Erinnerung am Google-Termin; null = Standard erben. Siehe TaskReminder.
+    int? ReminderMinutes = null
 )
 {
     public bool IsCompleted => Status == WorkStatus.Done || Status == WorkStatus.Abandoned;

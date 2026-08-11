@@ -30,7 +30,8 @@ public class TasksController(
             TrackedSeconds: (int)t.TimeEntries
                 .Where(e => e.EndedAt != null)
                 .Sum(e => (e.EndedAt!.Value - e.StartedAt).TotalSeconds),
-            RunningSince: t.TimeEntries.FirstOrDefault(e => e.EndedAt == null)?.StartedAt);
+            RunningSince: t.TimeEntries.FirstOrDefault(e => e.EndedAt == null)?.StartedAt,
+            ReminderMinutes: t.ReminderMinutes);
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
@@ -70,6 +71,9 @@ public class TasksController(
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] TaskCreateDto dto)
     {
+        if (!TaskReminder.IsValid(dto.ReminderMinutes))
+            return BadRequest("Erinnerung liegt außerhalb des erlaubten Bereichs.");
+
         var task = new TaskItem
         {
             Title = dto.Title,
@@ -81,7 +85,8 @@ public class TasksController(
             Priority = dto.Priority,
             ProjectId = dto.ProjectId,
             ParentTaskId = dto.ParentTaskId,
-            Status = dto.Status
+            Status = dto.Status,
+            ReminderMinutes = dto.ReminderMinutes
         };
         var created = await repo.CreateAsync(task);
         await google.SyncTaskAsync(created); // geplanten Task in Google spiegeln (best-effort)
@@ -128,6 +133,9 @@ public class TasksController(
         if (link is not null && !TaskLink.IsValid(link))
             return BadRequest("Link muss mit http:// oder https:// beginnen.");
 
+        if (!TaskReminder.IsValid(dto.ReminderMinutes))
+            return BadRequest("Erinnerung liegt außerhalb des erlaubten Bereichs.");
+
         var updated = await repo.UpdateAsync(id, new TaskItem
         {
             Title = dto.Title,
@@ -141,7 +149,8 @@ public class TasksController(
             Priority = dto.Priority,
             ProjectId = dto.ProjectId,
             Link = link,
-            WaitingFor = string.IsNullOrWhiteSpace(dto.WaitingFor) ? null : dto.WaitingFor.Trim()
+            WaitingFor = string.IsNullOrWhiteSpace(dto.WaitingFor) ? null : dto.WaitingFor.Trim(),
+            ReminderMinutes = dto.ReminderMinutes
         });
         if (updated is null) return NotFound();
         await google.SyncTaskAsync(updated); // Änderung nach Google spiegeln (best-effort)

@@ -84,6 +84,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IDataProtectio
             e.Property(c => c.Email).HasMaxLength(320);
         });
 
+        modelBuilder.Entity<AppSetting>(e =>
+        {
+            // Der Schlüssel IST der Primärschlüssel – eine Einstellung gibt es je Name genau einmal.
+            e.HasKey(s => s.Key);
+            e.Property(s => s.Key).HasMaxLength(100);
+            e.Property(s => s.Value).IsRequired().HasMaxLength(500);
+        });
+
         modelBuilder.Entity<Note>(e =>
         {
             e.HasKey(n => n.Id);
@@ -318,6 +326,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IDataProtectio
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
 
     public DbSet<GoogleConnection> GoogleConnections => Set<GoogleConnection>();
+
+    public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 
     public DbSet<Note> Notes => Set<Note>();
 

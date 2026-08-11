@@ -136,6 +136,7 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         existing.WaitingFor = updated.WaitingFor;
         existing.Priority = updated.Priority;
         existing.ProjectId = updated.ProjectId;
+        existing.ReminderMinutes = updated.ReminderMinutes;
         await MoveSubTasksToProjectAsync(existing, previousProjectId, updated.ProjectId);
         ApplySchedule(existing, updated.DueDate, updated.StartTime, updated.EndTime);
         existing.UpdatedAt = DateTime.Now;

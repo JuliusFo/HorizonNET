@@ -1,4 +1,5 @@
 using HorizonNET.Api.Services;
+using HorizonNET.Shared.Transfer.DTOs;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HorizonNET.Api.Controllers;
@@ -42,6 +43,21 @@ public class GoogleController(GoogleCalendarService google, IConfiguration confi
     [HttpGet("events")]
     public async Task<IActionResult> Events([FromQuery] DateTimeOffset from, [FromQuery] DateTimeOffset to)
         => Ok(await google.GetEventsAsync(from.UtcDateTime, to.UtcDateTime));
+
+    // Vorlaufzeit der Erinnerung an den gespiegelten Terminen. Wirkt erst beim nächsten
+    // Spiegeln eines Tasks – bestehende Google-Termine werden nicht rückwirkend angefasst.
+    [HttpGet("reminder")]
+    public async Task<IActionResult> GetReminder() =>
+        Ok(new GoogleReminderDto(await google.GetReminderMinutesAsync()));
+
+    [HttpPut("reminder")]
+    public async Task<IActionResult> SetReminder([FromBody] GoogleReminderDto dto)
+    {
+        if (dto.Minutes is < 0 or > 40320) return BadRequest(); // Google erlaubt max. 4 Wochen
+
+        await google.SetReminderMinutesAsync(dto.Minutes);
+        return NoContent();
+    }
 
     [HttpDelete]
     public async Task<IActionResult> Disconnect()

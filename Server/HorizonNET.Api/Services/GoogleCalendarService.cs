@@ -10,6 +10,7 @@ using Google.Apis.Calendar.v3.Data;
 using Google.Apis.Services;
 using HorizonNET.Domain.Entities;
 using HorizonNET.Domain.Interfaces;
+using HorizonNET.Shared.Transfer;
 using HorizonNET.Shared.Transfer.DTOs;
 
 namespace HorizonNET.Api.Services;
@@ -29,15 +30,25 @@ public class GoogleCalendarService
         "https://www.googleapis.com/auth/userinfo.email" // nur zum Anzeigen der verbundenen Adresse
     ];
 
+    // Vorlaufzeit der Erinnerung am gespiegelten Termin, in Minuten. Fehlt der Wert,
+    // gilt "keine Erinnerung" – siehe ReminderMinutesAsync.
+    public const string ReminderSettingKey = "google.reminderMinutes";
+
     private readonly IGoogleConnectionRepository repo;
     private readonly ITaskRepository taskRepo;
+    private readonly IAppSettingRepository settings;
     private readonly string clientId;
     private readonly string clientSecret;
 
-    public GoogleCalendarService(IConfiguration config, IGoogleConnectionRepository repo, ITaskRepository taskRepo)
+    public GoogleCalendarService(
+        IConfiguration config,
+        IGoogleConnectionRepository repo,
+        ITaskRepository taskRepo,
+        IAppSettingRepository settings)
     {
         this.repo = repo;
         this.taskRepo = taskRepo;
+        this.settings = settings;
         clientId = config["Google:ClientId"]
             ?? throw new InvalidOperationException("Google:ClientId ist nicht konfiguriert.");
         clientSecret = config["Google:ClientSecret"]
@@ -244,7 +255,7 @@ public class GoogleCalendarService
                 return;
             }
 
-            var body = BuildEvent(task);
+            var body = BuildEvent(task, await ReminderMinutesAsync());
 
             if (string.IsNullOrEmpty(task.GoogleEventId))
             {
@@ -321,12 +332,45 @@ public class GoogleCalendarService
         }
     }
 
+    // ── Erinnerungen ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Eingestellte Vorlaufzeit in Minuten; null = keine Erinnerung.
+    /// </summary>
+    public async Task<int?> GetReminderMinutesAsync() => await ReminderMinutesAsync();
+
+    public async Task SetReminderMinutesAsync(int? minutes) =>
+        await settings.SetAsync(ReminderSettingKey, minutes?.ToString() ?? string.Empty);
+
+    // Ohne gespeicherten Wert bewusst KEINE Erinnerung: Vorher wurde am Termin gar kein
+    // Reminders-Feld gesetzt, wodurch Google die Standard-Erinnerung des Kalenders anwandte –
+    // genau die Benachrichtigung, die auf dem Handy auch bei längst erledigten Tasks ankam.
+    private async Task<int?> ReminderMinutesAsync()
+    {
+        var gespeichert = await settings.GetAsync(ReminderSettingKey);
+        return int.TryParse(gespeichert, out var minuten) && minuten >= 0 ? minuten : null;
+    }
+
     // Baut den Google-Event-Body aus einem Task. Mit Start-/Endzeit → Termin mit Uhrzeit,
     // sonst ganztägig (End-Datum exklusiv) – spiegelt die Anzeige im Kalender.
-    private static Event BuildEvent(TaskItem task)
+    //
+    // Erledigte Tasks bleiben als Termin stehen (die Historie ist der Sinn eines Kalenders),
+    // werden aber entschärft: keine Erinnerung, "✓" im Titel und "frei" statt "beschäftigt".
+    private static Event BuildEvent(TaskItem task, int? defaultReminderMinutes)
     {
+        // Der Wert am Task schlägt den Standard; erledigt schlägt beide.
+        var erinnerung = task.IsCompleted
+            ? null
+            : TaskReminder.Effective(task.ReminderMinutes, defaultReminderMinutes);
+
         var date = task.DueDate!.Value.Date;
-        var ev = new Event { Summary = task.Title, Description = task.Description };
+        var ev = new Event
+        {
+            Summary = task.IsCompleted ? $"✓ {task.Title}" : task.Title,
+            Description = task.Description,
+            Transparency = task.IsCompleted ? "transparent" : "opaque",
+            Reminders = BuildReminders(erinnerung)
+        };
 
         if (task.StartTime is not null && task.EndTime is not null)
         {
@@ -345,6 +389,17 @@ public class GoogleCalendarService
 
         return ev;
     }
+
+    // UseDefault=false ist der entscheidende Teil: Nur damit hört Google auf, die
+    // Standard-Erinnerung des Kalenders anzuwenden. Eine leere Override-Liste heißt dann
+    // "gar keine Erinnerung", ein Eintrag setzt genau die gewünschte Vorlaufzeit.
+    private static Event.RemindersData BuildReminders(int? minutes) => new()
+    {
+        UseDefault = false,
+        Overrides = minutes is int m
+            ? [new EventReminder { Method = "popup", Minutes = m }]
+            : []
+    };
 }
 
 // Wird beim Verbinden ausgelöst, wenn die Kalender-Berechtigung nicht erteilt wurde.

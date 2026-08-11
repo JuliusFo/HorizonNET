@@ -123,6 +123,7 @@ public class TasksControllerTests
             })
             .Build();
 
-        return new GoogleCalendarService(config, new GoogleConnectionRepository(ctx), new TaskRepository(ctx));
+        return new GoogleCalendarService(
+            config, new GoogleConnectionRepository(ctx), new TaskRepository(ctx), new AppSettingRepository(ctx));
     }
 }

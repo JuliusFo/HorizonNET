@@ -6,6 +6,10 @@ public record GoogleStatusDto(
     string? Email
 );
 
+// Vorlaufzeit der Erinnerung am gespiegelten Google-Termin.
+// null = keine Erinnerung. Erledigte Tasks bekommen unabhängig davon nie eine.
+public record GoogleReminderDto(int? Minutes);
+
 // Ein Termin aus dem Google-Kalender (read-only-Anzeige im Kalender).
 public record GoogleEventDto(
     string Id,

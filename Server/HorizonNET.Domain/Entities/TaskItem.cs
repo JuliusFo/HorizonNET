@@ -25,6 +25,10 @@ public class TaskItem
 
     public DateTime? EndTime { get; set; }
 
+    // Erinnerung am gespiegelten Google-Termin, in Minuten Vorlauf. null = Standard aus
+    // den Einstellungen erben, TaskReminder.None = an diesem Task keine. Siehe TaskReminder.
+    public int? ReminderMinutes { get; set; }
+
     public WorkStatus Status { get; set; } = WorkStatus.Planned;
 
     // Manuelle Reihenfolge innerhalb einer Kanban-Spalte (Status) – bei Sub-Tasks

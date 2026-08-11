@@ -151,6 +151,25 @@
                     <span class="ms-2">@status.Email</span>
                 }
             </div>
+            <label for="googleReminder" class="form-label">Erinnerung am gespiegelten Termin</label>
+            <select id="googleReminder" class="form-select" style="max-width: 16rem;"
+                    value="@(reminderMinutes?.ToString() ?? "")"
+                    @onchange="OnReminderChanged">
+                <option value="">Keine Erinnerung</option>
+                <option value="0">Zum Termin</option>
+                <option value="10">10 Minuten vorher</option>
+                <option value="15">15 Minuten vorher</option>
+                <option value="30">30 Minuten vorher</option>
+                <option value="60">1 Stunde vorher</option>
+                <option value="1440">1 Tag vorher</option>
+            </select>
+            <div class="form-text mb-3">
+                Gilt für Tasks, die in deinen Google-Kalender geschrieben werden.
+                <strong>Erledigte Tasks erinnern nie</strong> – ihr Termin bleibt sichtbar, wird mit „✓"
+                gekennzeichnet und zählt als „frei". Änderungen wirken beim nächsten Speichern
+                eines Tasks; bestehende Google-Termine bleiben bis dahin, wie sie sind.
+            </div>
+
             <button type="button" class="btn btn-outline-danger" @onclick="DisconnectAsync" disabled="@busy">
                 Verbindung trennen
             </button>
@@ -199,6 +218,10 @@
     private bool busy;
     private string newPin = string.Empty;
 
+    // Vorlaufzeit der Google-Erinnerung; null = keine. Liegt serverseitig, weil die API
+    // sie beim Spiegeln braucht – anders als die übrigen Einstellungen auf dieser Seite.
+    private int? reminderMinutes;
+
     // Vollständige Navigation zur API (anderer Origin), die den OAuth-Flow startet.
     private string ConnectUrl =>
         $"{(Config["ApiSettings:BaseUrl"] ?? string.Empty).TrimEnd('/')}/api/google/connect";
@@ -209,6 +232,24 @@
         await JournalLock.EnsureLoadedAsync();
         await Version.EnsureApiLoadedAsync();
         status = await Api.GetGoogleStatusAsync();
+
+        // Nur bei bestehender Verbindung – ohne sie ist die Auswahl gar nicht sichtbar.
+        if (status?.Connected == true) reminderMinutes = await Api.GetGoogleReminderAsync();
+    }
+
+    private async Task OnReminderChanged(ChangeEventArgs e)
+    {
+        var rohwert = e.Value?.ToString();
+        var minuten = string.IsNullOrEmpty(rohwert) ? (int?)null : int.Parse(rohwert);
+
+        if (!await Api.SetGoogleReminderAsync(minuten))
+        {
+            Toast.ShowError("Erinnerung konnte nicht gespeichert werden.");
+            return;
+        }
+
+        reminderMinutes = minuten;
+        Toast.ShowSuccess("Erinnerung gespeichert");
     }
 
     // ── Journal-Sperre ───────────────────────────────────────────────────────────

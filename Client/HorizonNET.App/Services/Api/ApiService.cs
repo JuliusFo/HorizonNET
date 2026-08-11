@@ -112,6 +112,24 @@ public partial class ApiService(HttpClient http)
 
     public Task<bool> DisconnectGoogleAsync() => DeleteAsync("api/google");
 
+    // Vorlaufzeit der Erinnerung am gespiegelten Termin (null = keine). Fehler werden
+    // geschluckt wie bei den übrigen Google-Aufrufen – die Einstellungsseite bleibt nutzbar.
+    public async Task<int?> GetGoogleReminderAsync()
+    {
+        try { return (await http.GetFromJsonAsync<GoogleReminderDto>("api/google/reminder"))?.Minutes; }
+        catch { return null; }
+    }
+
+    public async Task<bool> SetGoogleReminderAsync(int? minutes)
+    {
+        try
+        {
+            var antwort = await http.PutAsJsonAsync("api/google/reminder", new GoogleReminderDto(minutes));
+            return antwort.IsSuccessStatusCode;
+        }
+        catch { return false; }
+    }
+
     // Holt die Google-Termine eines Zeitraums. Fehler (z. B. nicht verbunden oder
     // Google nicht erreichbar) werden geschluckt, damit der Kalender trotzdem funktioniert.
     public async Task<List<GoogleEventDto>> GetGoogleEventsAsync(DateTime fromUtc, DateTime toUtc)
