@@ -122,6 +122,90 @@ public class TaskRepositoryTests
         Assert.Equal(earlier, (await assert.Tasks.FindAsync(id))!.DueDate);
     }
 
+    // ── Auswahllisten (GetOptionsAsync) ──────────────────────────────────────────
+    // Die schlanke Liste für Klappfelder. Wichtig ist beides: dass alles Nötige drin ist
+    // (Titel, Projekt, Sub-Tasks) und dass sie sich wie die anderen Lesepfade verhält –
+    // gelöschte Tasks bleiben draußen, Sub-Tasks stehen nicht doppelt oben.
+
+    [Fact]
+    public async Task GetOptions_NestsSubTasksUnderTheirParent()
+    {
+        using var db = new TestDatabase();
+        var (from, _) = await SeedTwoProjectsAsync(db);
+        var (parent, sub) = await SeedParentWithSubAsync(db, projectId: from);
+
+        using var act = db.NewContext();
+        var options = (await new TaskRepository(act).GetOptionsAsync()).ToList();
+
+        // Nur der Haupt-Task steht oben; der Sub-Task hängt darunter und nicht daneben.
+        var option = Assert.Single(options);
+        Assert.Equal(parent, option.Id);
+        Assert.Equal("Haupt", option.Title);
+        Assert.Equal(from, option.ProjectId);
+
+        var subOption = Assert.Single(option.SubTasks!);
+        Assert.Equal(sub, subOption.Id);
+        Assert.Equal("Sub", subOption.Title);
+    }
+
+    [Fact]
+    public async Task GetOptions_SortsByTitle()
+    {
+        using var db = new TestDatabase();
+        await SeedNamedTaskAsync(db, "Zebra");
+        await SeedNamedTaskAsync(db, "Anker");
+        await SeedNamedTaskAsync(db, "Möbel");
+
+        using var act = db.NewContext();
+        var titles = (await new TaskRepository(act).GetOptionsAsync()).Select(o => o.Title).ToList();
+
+        Assert.Equal(["Anker", "Möbel", "Zebra"], titles);
+    }
+
+    [Fact]
+    public async Task GetOptions_IgnoresSoftDeleted()
+    {
+        using var db = new TestDatabase();
+        var id = await SeedNamedTaskAsync(db, "Gelöscht");
+        await SeedNamedTaskAsync(db, "Aktiv");
+
+        using (var act = db.NewContext())
+            await new TaskRepository(act).DeleteAsync(id);
+
+        using var assert = db.NewContext();
+        var options = await new TaskRepository(assert).GetOptionsAsync();
+
+        Assert.Equal("Aktiv", Assert.Single(options).Title);
+    }
+
+    // Der eigentliche Zweck der Methode: Die Zeiteinträge sind der Grund, warum
+    // GetAllAsync teuer ist – sie dürfen hier nicht mitkommen. Ein Task mit laufender und
+    // abgeschlossener Zeit liefert dieselbe schlanke Antwort wie einer ohne.
+    [Fact]
+    public async Task GetOptions_DoesNotDependOnTimeEntries()
+    {
+        using var db = new TestDatabase();
+        var id = await SeedTaskAsync(db, WorkStatus.InProgress, withRunningTimer: true);
+
+        using (var seed = db.NewContext())
+        {
+            seed.TimeEntries.Add(new TimeEntry
+            {
+                TaskItemId = id,
+                StartedAt = DateTime.Now.AddHours(-2),
+                EndedAt = DateTime.Now.AddHours(-1)
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        using var act = db.NewContext();
+        var option = Assert.Single(await new TaskRepository(act).GetOptionsAsync());
+
+        Assert.Equal(id, option.Id);
+        Assert.Equal("Task", option.Title);
+        Assert.Empty(option.SubTasks!);
+    }
+
     // ── Umsortieren im Kanban-Board ──────────────────────────────────────────────
     // ReorderAsync meldet zurück, welche Tasks ein neues Fälligkeitsdatum bekommen haben.
     // Daran hängt der Google-Sync: Nur diese Tasks werden gespiegelt. Meldet die Methode
@@ -375,6 +459,15 @@ public class TaskRepositoryTests
             await ctx.SaveChangesAsync();
         }
 
+        return task.Id;
+    }
+
+    private static async Task<int> SeedNamedTaskAsync(TestDatabase db, string title)
+    {
+        using var ctx = db.NewContext();
+        var task = new TaskItem { Title = title, Status = WorkStatus.Planned };
+        ctx.Tasks.Add(task);
+        await ctx.SaveChangesAsync();
         return task.Id;
     }
 

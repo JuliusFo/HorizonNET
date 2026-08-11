@@ -99,7 +99,7 @@ else
     private int? selectedProjectId;
     private int? selectedTaskId;
     private int? selectedFolderId;
-    private List<TaskResponseDto> allTasks = new();
+    private List<TaskOptionDto> allTasks = new();
     private List<TaskOption> taskOptions = new();
 
     // Manuelle Ordner mit vollem Pfad ("Ideen / 2026"), damit gleichnamige Unterordner
@@ -113,7 +113,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        allTasks = await Api.GetTasksAsync() ?? new();
+        allTasks = await Api.GetTaskOptionsAsync() ?? new();
         RebuildTaskOptions();
         await LoadFolderOptionsAsync();
 

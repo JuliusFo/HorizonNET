@@ -89,7 +89,7 @@ else
     // Zuordnung (Projekt/Task)
     private int? selectedProjectId;
     private int? selectedTaskId;
-    private List<TaskResponseDto> allTasks = new();
+    private List<TaskOptionDto> allTasks = new();
     private List<TaskOption> taskOptions = new();
 
     private record TaskOption(int Id, string Label);
@@ -109,7 +109,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        allTasks = await Api.GetTasksAsync() ?? new();
+        allTasks = await Api.GetTaskOptionsAsync() ?? new();
         RebuildTaskOptions();
     }
 

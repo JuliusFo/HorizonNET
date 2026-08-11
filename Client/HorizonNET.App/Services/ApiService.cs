@@ -100,6 +100,12 @@ public class ApiService(HttpClient http)
     public Task<TaskResponseDto?> GetTaskAsync(int id) =>
         http.GetFromJsonAsync<TaskResponseDto>($"api/tasks/{id}");
 
+    // Nur Titel und Zuordnung – für Auswahlfelder. Bewusst getrennt von GetTasksAsync:
+    // Dessen Antwort trägt an jedem Task die Zeiterfassung mit, was eine Klappliste
+    // teuer macht, ohne dass sie etwas davon zeigt.
+    public Task<List<TaskOptionDto>?> GetTaskOptionsAsync() =>
+        http.GetFromJsonAsync<List<TaskOptionDto>>("api/tasks/options");
+
     public async Task<TaskResponseDto?> CreateTaskAsync(TaskCreateDto dto)
     {
         var response = await http.PostAsJsonAsync("api/tasks", dto);

@@ -94,3 +94,17 @@ public record TaskReorderDto(
     WorkStatus Status,
     List<int> OrderedTaskIds
 );
+
+// Nur so viel Task, wie eine Auswahlliste braucht: Bezeichnung, Zuordnung, Verschachtelung.
+// Bewusst KEIN abgespecktes TaskResponseDto, sondern ein eigener Typ – wer hier ein Feld
+// vermisst, soll den vollen Task holen und nicht still ein halb gefülltes Objekt bekommen.
+//
+// Der Unterschied ist nicht kosmetisch: TaskResponseDto zieht serverseitig alle Zeit-
+// einträge des Tasks UND seiner Sub-Tasks mit, nur um TrackedSeconds zu bilden. Für eine
+// Klappliste mit Titeln ist das die gesamte erfasste Zeit der App als Beifang.
+public record TaskOptionDto(
+    int Id,
+    string Title,
+    int? ProjectId,
+    List<TaskOptionDto>? SubTasks = null
+);

@@ -1,5 +1,6 @@
 using HorizonNET.Domain.Entities;
 using HorizonNET.Domain.Interfaces;
+using HorizonNET.Shared.Transfer.DTOs;
 using HorizonNET.Shared.Transfer.Enums;
 using Microsoft.EntityFrameworkCore;
 
@@ -40,6 +41,32 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
             .Include(t => t.TimeEntries)
             .Include(t => t.SubTasks).ThenInclude(s => s.TimeEntries)
             .AsSplitQuery()
+            .ToListAsync();
+
+    // Auswahllisten (Notiz-/Zeichnungs-Editor, Notiz-Übersicht) brauchen von einem Task nur
+    // Bezeichnung und Zuordnung. Die Projektion steht deshalb IM Ausdruck und nicht dahinter:
+    // So landet sie in der SELECT-Liste, und die Datenbank liest weder Beschreibung noch
+    // Termine noch – vor allem – die Zeiteinträge. Genau die machen GetAllAsync teuer und
+    // wachsen mit jeder erfassten Stunde weiter.
+    //
+    // Kein AsSplitQuery: Hier hängt nur EINE Sammlung dran (die Sub-Tasks), da entsteht kein
+    // Kreuzprodukt. Die Begründung oben gilt für drei gleichzeitig geladene Sammlungen.
+    //
+    // Die Sortierung hier sorgt nur für eine stabile Antwort. Was der Nutzer sieht, sortieren
+    // die Editoren weiterhin selbst – kulturabhängig und ohne Rücksicht auf Groß-/Kleinschreibung,
+    // was SQLite mit seiner BINARY-Kollation nicht nachbilden würde.
+    public async Task<IEnumerable<TaskOptionDto>> GetOptionsAsync() =>
+        await context.Tasks
+            .Where(t => t.ParentTaskId == null)
+            .OrderBy(t => t.Title)
+            .Select(t => new TaskOptionDto(
+                t.Id,
+                t.Title,
+                t.ProjectId,
+                t.SubTasks
+                    .OrderBy(s => s.Title)
+                    .Select(s => new TaskOptionDto(s.Id, s.Title, s.ProjectId))
+                    .ToList()))
             .ToListAsync();
 
     public async Task<TaskItem?> GetByIdAsync(int id) =>

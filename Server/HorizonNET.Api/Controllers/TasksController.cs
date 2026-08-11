@@ -53,6 +53,12 @@ public class TasksController(
         return Ok(tasks.Select(ToDto));
     }
 
+    // Schlanke Liste für Auswahlfelder: Id, Titel, Projekt, Sub-Tasks. Wer einen Task
+    // anzeigen oder bearbeiten will, nimmt weiterhin GET /api/tasks – dieser Endpunkt
+    // existiert allein, damit eine Klappliste nicht die gesamte Zeiterfassung mitzieht.
+    [HttpGet("options")]
+    public async Task<IActionResult> GetOptions() => Ok(await repo.GetOptionsAsync());
+
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetById(int id)
     {

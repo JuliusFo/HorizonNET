@@ -351,7 +351,7 @@
                 p.WorkspaceId is int wid && workspaceNames.TryGetValue(wid, out var ws) ? ws : null));
 
         // Sub-Tasks mitnehmen: Auch an ihnen kann eine Notiz hängen.
-        var tasks = await Api.GetTasksAsync() ?? new();
+        var tasks = await Api.GetTaskOptionsAsync() ?? new();
         taskProjects = tasks
             .SelectMany(t => new[] { t }.Concat(t.SubTasks ?? []))
             .GroupBy(t => t.Id)

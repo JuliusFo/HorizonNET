@@ -1,4 +1,5 @@
 using HorizonNET.Domain.Entities;
+using HorizonNET.Shared.Transfer.DTOs;
 using HorizonNET.Shared.Transfer.Enums;
 
 namespace HorizonNET.Domain.Interfaces;
@@ -34,6 +35,13 @@ public interface ITaskRepository
     // Alle gesetzten Google-Event-Ids – um beim Lesen die von der App selbst
     // gespiegelten Termine auszublenden (sonst Doppelanzeige Task + Google-Event).
     Task<HashSet<string>> GetGoogleEventIdsAsync();
+
+    // Nur Id, Titel und Projektzuordnung (samt Sub-Tasks) – für Auswahllisten.
+    // Ausnahme von der Regel "Repositories liefern Entitäten": Hier gibt es bewusst keine
+    // Entität zurückzugeben. Der Sinn der Methode ist, dass die Datenbank die ungenutzten
+    // Spalten und die Zeiteinträge gar nicht erst anfasst; ein TaskItem zurückzugeben hieße,
+    // ein halb gefülltes Objekt in Umlauf zu bringen.
+    Task<IEnumerable<TaskOptionDto>> GetOptionsAsync();
 
     // Setzt für die übergebenen Tasks SortOrder = Listenindex und Status = status.
     // Zurück kommen die Tasks, deren Fälligkeitsdatum sich dadurch geändert hat – nur die
