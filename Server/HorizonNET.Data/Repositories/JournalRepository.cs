@@ -108,8 +108,8 @@ public class JournalRepository(AppDbContext context) : IJournalRepository
             .ToListAsync();
 
     // Durchsucht wird der sichtbare Text, nicht das HTML: Sonst träfe eine Suche nach
-    // "span" oder "style" das Markup statt des Inhalts (dieser Fehler steckt heute noch
-    // in der Notizsuche).
+    // "span" oder "style" das Markup statt des Inhalts. Die Notizsuche macht es seit
+    // demselben Befund genauso (siehe NoteRepository.SearchAsync).
     private static bool Matches(JournalEntry entry, string[] terms)
     {
         var haystack = string.Join(' ',

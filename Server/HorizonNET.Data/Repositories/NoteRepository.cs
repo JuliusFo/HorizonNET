@@ -1,5 +1,6 @@
 using HorizonNET.Domain.Entities;
 using HorizonNET.Domain.Interfaces;
+using HorizonNET.Shared.Transfer;
 using HorizonNET.Shared.Transfer.Enums;
 using Microsoft.EntityFrameworkCore;
 
@@ -68,19 +69,48 @@ public class NoteRepository(AppDbContext context) : INoteRepository
         return true;
     }
 
+    // Gesucht wird im sichtbaren Text, nicht im Markup – dafür muss der Inhalt aus der
+    // Datenbank heraus. Derselbe zweistufige Weg wie im JournalRepository, nur aus einem
+    // anderen Grund: Dort erzwingt ihn die Verschlüsselung, hier das HTML.
+    //
+    // Ein LIKE über die Content-Spalte kann das prinzipiell nicht leisten und lag in
+    // BEIDE Richtungen daneben: „span" oder „style" trafen das Markup statt des Inhalts,
+    // und „mit Anna" fand nichts, sobald zwischen den Wörtern ein </p><p> stand.
+    //
+    // Alles zu laden ist hier bezahlbar (die gesamte Datenbank liegt im dreistelligen
+    // KB-Bereich). Sollte der Notizbestand je so wachsen, dass es sich lohnt, wäre der
+    // nächste Schritt eine mitgeschriebene Klartextspalte – nicht vorher.
     public async Task<IEnumerable<Note>> SearchAsync(string query, int limit)
     {
+        // Zeichnungen bleiben vollständig in SQL: Sie werden ohnehin nur über den Titel
+        // gesucht (ein Treffer auf „path" oder „stroke" im SVG wäre Unsinn), und so wird
+        // ihr Content – der größte Brocken im Bestand – gar nicht erst geladen.
         var pattern = SearchPattern.For(query);
-        return await WithIncludes()
-            // Zeichnungen (Kind == Drawing) nur über den Titel durchsuchen – ein LIKE über
-            // deren SVG-Content in Content würde bei „path", „stroke" o. Ä. Unsinn treffen.
-            .Where(n => EF.Functions.Like(n.Title, pattern, SearchPattern.Escape)
-                     || (n.Kind == NoteKind.Html
-                         && EF.Functions.Like(n.Content, pattern, SearchPattern.Escape)))
+        var drawings = await WithIncludes()
+            .Where(n => n.Kind == NoteKind.Drawing
+                     && EF.Functions.Like(n.Title, pattern, SearchPattern.Escape))
+            .ToListAsync();
+
+        // HTML-Notizen: laden, Markup entfernen, dann prüfen.
+        var htmlNotes = await WithIncludes()
+            .Where(n => n.Kind == NoteKind.Html)
+            .ToListAsync();
+
+        return drawings
+            .Concat(htmlNotes.Where(n => Matches(n, query)))
             .OrderByDescending(n => n.UpdatedAt)
             .Take(limit)
-            .ToListAsync();
+            .ToList();
     }
+
+    // Teilstring-Vergleich wie zuvor und wie bei Tasks und Projekten – nur eben über den
+    // Klartext. Die Trefferregel der Palette bleibt damit für alle Kategorien dieselbe.
+    // NoteSnippet ist dieselbe Umwandlung, die auch die Vorschau in der Liste erzeugt:
+    // Was dort zu lesen ist, ist genau das, was hier durchsucht wird.
+    private static bool Matches(Note note, string query) =>
+        note.Title.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+        || NoteSnippet.From(note.Content, int.MaxValue)
+                      .Contains(query, StringComparison.CurrentCultureIgnoreCase);
 
     public async Task<bool> RestoreAsync(int id)
     {
