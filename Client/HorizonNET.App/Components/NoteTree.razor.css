@@ -31,12 +31,35 @@
     border: 0;
     background: transparent;
     text-align: left;
-    padding-top: 0.25rem;
-    padding-bottom: 0.25rem;
-    padding-right: 0.5rem;
+    padding: 0.25rem 0.5rem 0.25rem 0.4rem;
     font-size: 0.82rem;
     color: #343a40;
     cursor: pointer;
+}
+
+/* Eine Ebene tiefer: fester Versatz plus Führungslinie. Weil die Ebenen im DOM
+   ineinander liegen, ergibt sich der Gesamteinzug von selbst und die Linie steht
+   genau an der Kante der jeweiligen Ebene. */
+.note-tree-children {
+    margin-left: 0.95rem;
+    padding-left: 0.15rem;
+    border-left: 1px solid #e9ecef;
+}
+
+/* Notizen einer Ebene: um Chevron + Punkt + Abstände nach rechts, damit ihre Titel
+   auf der Beschriftung eines Unterordners sitzen statt auf dessen Symbol. */
+/* 1,45rem = Zeilen-Polsterung (0,4) + Chevron (0,7) + Abstand (0,35). Die Notizzeilen
+   bringen ihre Punkt-Spalte selbst mit (siehe .note-list-dot) – sie tritt hier an die
+   Stelle des Ordner-Symbols, dadurch stehen Punkt unter Punkt und Titel unter Beschriftung. */
+.note-tree-notes {
+    padding-left: 1.45rem;
+    padding-right: 0.25rem;
+}
+
+/* Die eingebettete NoteList bringt im schlanken Modus einen eigenen linken Abstand mit.
+   Der käme hier zum Einzug oben hinzu und verschöbe die Titel gegenüber den Ordnerzeilen. */
+.note-tree-notes ::deep .note-list-item.compact {
+    padding-left: 0;
 }
 
 .note-tree-chevron {
@@ -46,9 +69,28 @@
     color: #868e96;
 }
 
+/* Fester Platz für das Symbol: Vorher standen hier Emoji unterschiedlicher Breite,
+   dadurch verrutschte der Textanfang von Ebene zu Ebene. */
 .note-tree-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     flex: 0 0 auto;
-    font-size: 0.8rem;
+    width: 0.7rem;
+}
+
+/* Gefüllt = Arbeitsbereich/Projekt in seiner Farbe, hohl = Task/Ordner. */
+.note-tree-dot {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 2px;
+    border: 1px solid #adb5bd;
+    background-color: #adb5bd;
+}
+
+.note-tree-dot.is-hollow {
+    background-color: transparent;
+    border-color: #adb5bd;
 }
 
 /* min-width:0 erlaubt dem Label erst zu schrumpfen, damit text-truncate greift. */
@@ -62,10 +104,4 @@
     flex: 0 0 auto;
     font-size: 0.7rem;
     color: #868e96;
-}
-
-/* Die eingebettete NoteList bekommt links den Einzug der jeweiligen Ebene; der Rest
-   ihres Aussehens bleibt unverändert (eigene CSS-Isolation). */
-.note-tree-notes {
-    padding-right: 0.25rem;
 }

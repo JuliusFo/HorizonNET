@@ -70,8 +70,28 @@
         }
         else
         {
-            <NoteTree Nodes="Tree" Collapsed="collapsed"
-                      SelectedId="selected?.Id" OnSelect="SelectAsync" />
+            @* Die drei Wurzeln ("Projekte", "Ohne Projekt", "Ohne Zuordnung") sind reine
+               Rubriken – als Baumknoten kosteten sie eine ganze Einzugs-Ebene, ohne selbst
+               etwas zu sagen. Als Abschnitts-Überschrift sehen sie aus wie "Meine Ordner"
+               darunter, und alles darin rückt eine Stufe weiter nach links. *@
+            @foreach (var root in Tree)
+            {
+                <div class="notes-section-header" @key="root.Key">
+                    <span>@root.Label</span>
+                    <span class="notes-section-count">@NoteTreeBuilder.CountNotes(root)</span>
+                </div>
+
+                @if (root.Notes.Count > 0)
+                {
+                    <div class="notes-section-notes">
+                        <NoteList Notes="root.Notes" SelectedId="selected?.Id"
+                                  OnSelect="SelectAsync" Compact="true" />
+                    </div>
+                }
+
+                <NoteTree Nodes="root.Children" Collapsed="collapsed"
+                          SelectedId="selected?.Id" OnSelect="SelectAsync" />
+            }
 
             @* Zweiter, unabhängiger Bereich: die selbst angelegten Ordner. Bewusst NICHT
                mit der Sicht oben vermischt – eine Notiz kann in einem Ordner liegen und
@@ -341,14 +361,16 @@
         await ProjectState.EnsureLoadedAsync();
         await WorkspaceState.EnsureLoadedAsync();
 
-        var workspaceNames = (WorkspaceState.Workspaces ?? []).ToDictionary(w => w.Id, w => w.Name);
+        // Name UND Farbe des Arbeitsbereichs: Die Farbe wird im Baum zum Punkt vor der Zeile.
+        var workspaces = (WorkspaceState.Workspaces ?? []).ToDictionary(w => w.Id, w => w);
 
         projectRefs = (ProjectState.Projects ?? []).ToDictionary(
             p => p.Id,
-            p => new NoteTreeBuilder.ProjectRef(
-                p.Id,
-                p.Name,
-                p.WorkspaceId is int wid && workspaceNames.TryGetValue(wid, out var ws) ? ws : null));
+            p =>
+            {
+                var ws = p.WorkspaceId is int wid && workspaces.TryGetValue(wid, out var found) ? found : null;
+                return new NoteTreeBuilder.ProjectRef(p.Id, p.Name, ws?.Name, p.Color, ws?.Color);
+            });
 
         // Sub-Tasks mitnehmen: Auch an ihnen kann eine Notiz hängen.
         var tasks = await Api.GetTaskOptionsAsync() ?? new();

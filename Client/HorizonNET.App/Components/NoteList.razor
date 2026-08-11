@@ -12,6 +12,14 @@
             <button type="button" class="note-list-item @(Compact ? "compact" : "") @(SelectedId == n.Id ? "active" : "")"
                     @onclick="() => OnSelect.InvokeAsync(n)">
                 <div class="note-list-title">
+                    @* Nur im Baum: Punkt in derselben Spalte wie die Symbole der Ordnerzeilen,
+                       damit eine Notiz als eigener Eintrag erkennbar ist statt als loser Text.
+                       In der flachen Liste (Detailseiten, Suchtreffer) gibt es keine Spalte,
+                       an der er ausgerichtet wäre – dort bleibt es beim reinen Titel. *@
+                    @if (Compact)
+                    {
+                        <span class="note-list-dot" aria-hidden="true"></span>
+                    }
                     @if (n.Kind == NoteKind.Drawing)
                     {
                         <span class="note-list-kind" title="Zeichnung" aria-hidden="true">✏️</span>

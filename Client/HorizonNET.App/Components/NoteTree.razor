@@ -1,11 +1,18 @@
-@* Abgeleiteter Ordnerbaum der Notizen (Projekte → Arbeitsbereich → Projekt → Task).
+@* Abgeleiteter Ordnerbaum der Notizen (Arbeitsbereich → Projekt → Task).
    Die Blätter rendern die vorhandene NoteList weiter – dadurch sehen Auswahl, Snippet
    und Zeichnungs-Vorschau aus wie in der flachen Liste, und die Komponente bleibt an
    den anderen Einsatzorten (Task- und Projekt-Detailseite) unangetastet.
 
-   Die Komponente ruft sich für Unterebenen selbst auf. Der Aufklapp-Zustand wird als
-   Menge der ZUGEklappten Schlüssel durchgereicht: leer = alles offen, was bei wenigen
-   Notizen der freundlichere Startzustand ist. Gemerkt wird er bewusst nicht. *@
+   Die Komponente ruft sich für Unterebenen selbst auf. Der Einzug entsteht dabei durch
+   die VERSCHACHTELUNG (margin an .note-tree-children), nicht durch einen aus der Tiefe
+   gerechneten Abstand. Das war vorher die Fehlerquelle: Die Ordnerzeilen rückten über
+   padding PLUS Chevron und Icon ein, die eingebettete Notizliste nur über padding – ihre
+   Notizen standen dadurch links von ihrem eigenen Ordner. Jetzt trägt jede Ebene denselben
+   Versatz, und die Führungslinie sitzt automatisch an der richtigen Stelle.
+
+   Der Aufklapp-Zustand wird als Menge der ZUGEklappten Schlüssel durchgereicht:
+   leer = alles offen, was bei wenigen Notizen der freundlichere Startzustand ist.
+   Gemerkt wird er bewusst nicht. *@
 @foreach (var node in Nodes)
 {
     var offen = !Collapsed.Contains(node.Key);
@@ -15,33 +22,38 @@
            ungültiges HTML und der Klick landete beim falschen Ziel. *@
         <div class="note-tree-row">
             <button type="button" class="note-tree-folder"
-                    style="padding-left:@(FormattableString.Invariant($"{0.4 + Depth * 0.85:0.##}"))rem"
                     @onclick="() => Toggle(node.Key)"
                     title="@node.Label">
                 <span class="note-tree-chevron" aria-hidden="true">@(offen ? "▾" : "▸")</span>
-                <span class="note-tree-icon" aria-hidden="true">@Icon(node.Kind)</span>
+                <span class="note-tree-icon" aria-hidden="true">
+                    <span class="note-tree-dot @(IsHollow(node.Kind) ? "is-hollow" : "")"
+                          style="@DotStyle(node)"></span>
+                </span>
                 <span class="note-tree-label text-truncate">@node.Label</span>
                 <span class="note-tree-count">@NoteTreeBuilder.CountNotes(node)</span>
             </button>
             @NodeActions?.Invoke(node)
         </div>
 
-        @if (offen)
+        @if (offen && (node.Notes.Count > 0 || node.Children.Count > 0))
         {
-            @* Notizen direkt in diesem Ordner (z. B. am Projekt statt am Task). *@
-            @if (node.Notes.Count > 0)
-            {
-                <div class="note-tree-notes"
-                     style="padding-left:@(FormattableString.Invariant($"{0.4 + (Depth + 1) * 0.85:0.##}"))rem">
-                    <NoteList Notes="node.Notes" SelectedId="SelectedId" OnSelect="OnSelect" Compact="true" />
-                </div>
-            }
+            <div class="note-tree-children">
+                @* Notizen direkt in diesem Ordner (z. B. am Projekt statt am Task). Der
+                   Zusatz-Einzug bringt ihre Titel auf die Höhe der Beschriftung eines
+                   Unterordners – sie sind Geschwister von dessen Zeile, nicht davon. *@
+                @if (node.Notes.Count > 0)
+                {
+                    <div class="note-tree-notes">
+                        <NoteList Notes="node.Notes" SelectedId="SelectedId" OnSelect="OnSelect" Compact="true" />
+                    </div>
+                }
 
-            @if (node.Children.Count > 0)
-            {
-                <NoteTree Nodes="node.Children" Depth="Depth + 1" Collapsed="Collapsed"
-                          SelectedId="SelectedId" OnSelect="OnSelect" NodeActions="NodeActions" />
-            }
+                @if (node.Children.Count > 0)
+                {
+                    <NoteTree Nodes="node.Children" Collapsed="Collapsed"
+                              SelectedId="SelectedId" OnSelect="OnSelect" NodeActions="NodeActions" />
+                }
+            </div>
         }
     </div>
 }
@@ -53,7 +65,6 @@
     // Auf-/Zuklappen einer Ebene nicht die anderen zurücksetzt.
     [Parameter, EditorRequired] public HashSet<string> Collapsed { get; set; } = new();
 
-    [Parameter] public int Depth { get; set; }
     [Parameter] public int? SelectedId { get; set; }
     [Parameter] public EventCallback<NoteListItemDto> OnSelect { get; set; }
 
@@ -66,12 +77,12 @@
         if (!Collapsed.Remove(key)) Collapsed.Add(key);
     }
 
-    private static string Icon(NoteTreeBuilder.NodeKind kind) => kind switch
-    {
-        NoteTreeBuilder.NodeKind.Workspace => "🗂",
-        NoteTreeBuilder.NodeKind.Project   => "📁",
-        NoteTreeBuilder.NodeKind.Task      => "🗒",
-        NoteTreeBuilder.NodeKind.Folder    => "📁",
-        _                                  => "📂"
-    };
+    // Arbeitsbereich und Projekt tragen ihre Farbe als gefüllten Punkt – dieselbe
+    // Farbsprache wie Kalender und Projektkarten. Task und Ordner haben keine eigene
+    // Farbe und bekommen einen hohlen Punkt; das unterscheidet sie auch in Graustufen.
+    private static bool IsHollow(NoteTreeBuilder.NodeKind kind) =>
+        kind is NoteTreeBuilder.NodeKind.Task or NoteTreeBuilder.NodeKind.Folder;
+
+    private static string? DotStyle(NoteTreeBuilder.Node node) =>
+        node.Color is string color ? $"background-color:{color};border-color:{color};" : null;
 }

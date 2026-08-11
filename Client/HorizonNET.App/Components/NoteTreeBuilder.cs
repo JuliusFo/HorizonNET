@@ -18,10 +18,14 @@ public static class NoteTreeBuilder
         string Label,
         NodeKind Kind,
         List<Node> Children,
-        List<NoteListItemDto> Notes);   // Notizen direkt in diesem Knoten
+        List<NoteListItemDto> Notes,    // Notizen direkt in diesem Knoten
+        string? Color = null);          // Arbeitsbereichs-/Projektfarbe für den Punkt in der Zeile
 
     // Der Baum braucht Projektname UND Arbeitsbereich; die Notiz kennt nur die ProjektId.
-    public sealed record ProjectRef(int Id, string Name, string? Workspace);
+    // Die beiden Farben sind rein für die Anzeige und dürfen fehlen (dann: neutraler Punkt).
+    public sealed record ProjectRef(
+        int Id, string Name, string? Workspace,
+        string? Color = null, string? WorkspaceColor = null);
 
     public const string OhneArbeitsbereich = "Ohne Arbeitsbereich";
 
@@ -52,8 +56,8 @@ public static class NoteTreeBuilder
                     ? OhneArbeitsbereich
                     : project.Workspace!;
 
-                var ws       = Child(projekte, $"ws:{wsLabel}", wsLabel, NodeKind.Workspace);
-                var projNode = Child(ws, $"proj:{project.Id}", project.Name, NodeKind.Project);
+                var ws       = Child(projekte, $"ws:{wsLabel}", wsLabel, NodeKind.Workspace, project.WorkspaceColor);
+                var projNode = Child(ws, $"proj:{project.Id}", project.Name, NodeKind.Project, project.Color);
 
                 // Am Task hängende Notizen bekommen darunter einen eigenen Knoten,
                 // Notizen direkt am Projekt stehen auf Projektebene.
@@ -143,12 +147,12 @@ public static class NoteTreeBuilder
         return note.ProjectName is not null ? new ProjectRef(id, note.ProjectName, null) : null;
     }
 
-    private static Node Child(Node parent, string key, string label, NodeKind kind)
+    private static Node Child(Node parent, string key, string label, NodeKind kind, string? color = null)
     {
         var existing = parent.Children.FirstOrDefault(c => c.Key == key);
         if (existing is not null) return existing;
 
-        var created = new Node(key, label, kind, [], []);
+        var created = new Node(key, label, kind, [], [], color);
         parent.Children.Add(created);
         return created;
     }

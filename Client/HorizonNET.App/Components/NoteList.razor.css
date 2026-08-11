@@ -58,6 +58,28 @@
     margin-top: 0.1rem;
 }
 
+/* Punkt vor der Notiz im Ordnerbaum. Er belegt dieselbe Spaltenbreite wie das Symbol
+   der Ordnerzeilen (0,7rem + 0,35rem Abstand), damit Punkt unter Punkt und Titel unter
+   Beschriftung sitzt. Rund und kleiner als die eckigen Ordner-Punkte: eine Notiz ist ein
+   Blatt, kein Ordner. */
+.note-list-dot {
+    display: inline-block;
+    width: 0.7rem;
+    margin-right: 0.35rem;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.note-list-dot::before {
+    content: "";
+    display: inline-block;
+    width: 0.35rem;
+    height: 0.35rem;
+    border-radius: 50%;
+    background-color: #adb5bd;
+    vertical-align: middle;
+}
+
 /* Kennzeichnet eine Zeichnung im Titel. */
 .note-list-kind {
     margin-right: 0.25rem;
