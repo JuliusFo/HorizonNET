@@ -371,3 +371,14 @@ appsettings.Secrets.json
 
 # Lokale Planungs-/Konzeptdokumente (nicht committen)
 docs/
+
+# Datenbank-Sicherungen (scripts/backup-database.ps1). Enthalten die Datenbank UND den
+# DataProtection-Schlüsselring – wer das committet, gibt die verschlüsselten Journal-
+# Inhalte samt ihrem Schlüssel aus der Hand.
+#
+# Bewusst explizit, obwohl es heute schon ignoriert wird: Bisher griff dafür allein das
+# Visual-Studio-Muster "Backup*/" weiter oben, und das auch nur, weil Git unter Windows
+# Groß-/Kleinschreibung ignoriert. Auf einem case-sensitiven Dateisystem (Linux, Container
+# – vgl. Livegang) fiele diese Deckung weg. Die Datenbank finge dann noch *.db ab, der
+# Schlüsselring aber ist eine .xml und stünde ungeschützt da.
+backups/
