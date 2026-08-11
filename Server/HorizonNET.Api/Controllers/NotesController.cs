@@ -14,14 +14,16 @@ public class NotesController(INoteRepository repo) : ControllerBase
     private static NoteResponseDto ToDto(Note n) =>
         new(n.Id, n.Title, n.Content, n.CreatedAt, n.UpdatedAt,
             n.TaskItemId, n.TaskItem?.Title, n.ProjectId, n.Project?.Name,
-            n.Kind, n.Thumbnail, n.NoteFolderId);
+            n.Kind, n.Thumbnail, n.NoteFolderId,
+            n.WorkspaceId, n.Workspace?.Name);
 
     // Schlankes Listen-DTO: kein Content, dafür ein serverseitiger Snippet (nur HTML).
     private static NoteListItemDto ToListItem(Note n) =>
         new(n.Id, n.Title,
             n.Kind == NoteKind.Html ? NoteSnippet.From(n.Content) : null,
             n.UpdatedAt, n.Kind, n.Thumbnail,
-            n.TaskItemId, n.TaskItem?.Title, n.ProjectId, n.Project?.Name, n.NoteFolderId);
+            n.TaskItemId, n.TaskItem?.Title, n.ProjectId, n.Project?.Name, n.NoteFolderId,
+            n.WorkspaceId, n.Workspace?.Name);
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
@@ -52,6 +54,15 @@ public class NotesController(INoteRepository repo) : ControllerBase
         return Ok(notes.Select(ToListItem));
     }
 
+    // Nur die direkt am Arbeitsbereich hängenden Notizen; die seiner Projekte stehen
+    // auf deren eigenen Detailseiten.
+    [HttpGet("workspace/{workspaceId:int}")]
+    public async Task<IActionResult> GetByWorkspace(int workspaceId)
+    {
+        var notes = await repo.GetByWorkspaceIdAsync(workspaceId);
+        return Ok(notes.Select(ToListItem));
+    }
+
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] NoteCreateDto dto)
     {
@@ -61,6 +72,7 @@ public class NotesController(INoteRepository repo) : ControllerBase
             Content = dto.Content ?? string.Empty,
             TaskItemId = dto.TaskItemId,
             ProjectId = dto.ProjectId,
+            WorkspaceId = dto.WorkspaceId,
             Kind = dto.Kind,
             Thumbnail = dto.Thumbnail,
             NoteFolderId = dto.NoteFolderId
@@ -78,6 +90,7 @@ public class NotesController(INoteRepository repo) : ControllerBase
             Content = dto.Content ?? string.Empty,
             TaskItemId = dto.TaskItemId,
             ProjectId = dto.ProjectId,
+            WorkspaceId = dto.WorkspaceId,
             Thumbnail = dto.Thumbnail,
             NoteFolderId = dto.NoteFolderId
         });

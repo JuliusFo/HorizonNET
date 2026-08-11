@@ -1,5 +1,6 @@
 @inject ApiService Api
 @inject IJSRuntime JS
+@inject WorkspaceState WorkspaceState
 @implements IAsyncDisposable
 
 @* Editor für eine einzelne Notiz mit debounced Auto-Save (2 s nach letzter Änderung).
@@ -31,6 +32,14 @@ else
         </div>
 
         <div class="note-editor-meta">
+            @* Arbeitsbereich als eigene Zuordnung – die oberste Sprosse der Hierarchie.
+               Greift nur, solange kein Projekt gewählt ist: Das trägt seinen Bereich
+               ohnehin, zwei Angaben wären widersprüchlich statt genauer. *@
+            <RadzenDropDown TValue="int?" Data="workspaceOptions" TextProperty="Label" ValueProperty="Id"
+                            @bind-Value="selectedWorkspaceId" Change="OnAssignmentChanged"
+                            AllowClear="true" Disabled="@(readOnly || selectedProjectId is not null)"
+                            Placeholder="— kein Arbeitsbereich —" class="note-assign-workspace" />
+
             <ProjectSelect @bind-Value="selectedProjectId" Change="OnProjectChanged" Disabled="readOnly" />
 
             <RadzenDropDown TValue="int?" Data="taskOptions" TextProperty="Label" ValueProperty="Id"
@@ -100,12 +109,15 @@ else
     // (siehe noteAutoFormat.js).
     private IJSObjectReference? autoFormatModule;
 
-    // Zuordnung (Projekt/Task) – aus der geladenen Notiz übernommen, per Dropdown änderbar.
+    // Zuordnung (Arbeitsbereich/Projekt/Task) – aus der geladenen Notiz übernommen,
+    // per Dropdown änderbar.
+    private int? selectedWorkspaceId;
     private int? selectedProjectId;
     private int? selectedTaskId;
     private int? selectedFolderId;
     private List<TaskOptionDto> allTasks = new();
     private List<SelectOption> taskOptions = new();
+    private List<SelectOption> workspaceOptions = new();
 
     // Manuelle Ordner mit vollem Pfad ("Ideen / 2026"), damit gleichnamige Unterordner
     // in der flachen Auswahlliste unterscheidbar bleiben.
@@ -118,6 +130,11 @@ else
         allTasks = await Api.GetTaskOptionsAsync() ?? new();
         RebuildTaskOptions();
         await LoadFolderOptionsAsync();
+
+        await WorkspaceState.EnsureLoadedAsync();
+        workspaceOptions = (WorkspaceState.Workspaces ?? [])
+            .Select(w => new SelectOption(w.Id, w.Name))
+            .ToList();
 
         linkModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/noteLinks.js");
         await linkModule.InvokeVoidAsync("attach");
@@ -177,6 +194,7 @@ else
         title             = Note.Title;
         content           = Note.Content ?? string.Empty;
         editorValue       = content; // nur hier setzen → Editor schreibt den DOM nur beim Wechsel
+        selectedWorkspaceId = Note.WorkspaceId;
         selectedProjectId = Note.ProjectId;
         selectedTaskId    = Note.TaskItemId;
         selectedFolderId  = Note.NoteFolderId;
@@ -231,6 +249,7 @@ else
         title             = fresh.Title;
         content           = fresh.Content ?? string.Empty;
         editorValue       = content;
+        selectedWorkspaceId = fresh.WorkspaceId;
         selectedProjectId = fresh.ProjectId;
         selectedTaskId    = fresh.TaskItemId;
         selectedFolderId  = fresh.NoteFolderId;
@@ -255,6 +274,10 @@ else
 
         if (selectedTaskId is int taskId && taskOptions.All(o => o.Id != taskId))
             selectedTaskId = null;
+
+        // Ein Projekt bringt seinen Arbeitsbereich mit; eine zusätzliche eigene Angabe
+        // wäre keine Zusatzinfo, sondern eine zweite Wahrheit. Deshalb verwerfen.
+        if (selectedProjectId is not null) selectedWorkspaceId = null;
 
         ScheduleSave();
     }
@@ -315,6 +338,7 @@ else
         // HTML-Notizen ist der Wert ohnehin null – aber die Regel gilt hier wie im
         // DrawingEditor, der umgekehrt den Ordner durchreicht.
         var dto = new NoteUpdateDto(title.Trim(), content, selectedTaskId, selectedProjectId,
+                                    WorkspaceId: selectedWorkspaceId,
                                     Thumbnail: loaded.Thumbnail,
                                     NoteFolderId: selectedFolderId);
         var updated = await Api.UpdateNoteAsync(loaded.Id, dto);

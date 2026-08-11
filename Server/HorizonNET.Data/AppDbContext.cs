@@ -114,6 +114,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IDataProtectio
                 .HasForeignKey(n => n.ProjectId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            e.HasOne(n => n.Workspace)
+                .WithMany()
+                .HasForeignKey(n => n.WorkspaceId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             // Ordner: Beim endgültigen Entfernen eines Ordners bleibt die Notiz erhalten
             // und landet wieder auf oberster Ebene.
             e.HasOne(n => n.NoteFolder)

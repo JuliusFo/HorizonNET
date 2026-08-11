@@ -36,6 +36,14 @@ public class Note
 
     public Project? Project { get; set; }
 
+    // Optionale Zuordnung DIREKT an einen Arbeitsbereich – die bis dahin fehlende
+    // oberste Sprosse: Notizen konnten an Task und Projekt hängen, aber nicht an dem
+    // Bereich darüber. Unabhängig von ProjectId: Wer beides setzt, sieht die Notiz im
+    // Baum unter ihrem Projekt (das ohnehin im Arbeitsbereich liegt).
+    public int? WorkspaceId { get; set; }
+
+    public Workspace? Workspace { get; set; }
+
     // Optionale Ablage in einem manuell angelegten Ordner. Unabhängig von Projekt/Task:
     // die Ordner sind eine zweite Sicht, keine Alternative zur fachlichen Zuordnung.
     public int? NoteFolderId { get; set; }

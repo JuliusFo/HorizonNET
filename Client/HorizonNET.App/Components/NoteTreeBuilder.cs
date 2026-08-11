@@ -22,10 +22,11 @@ public static class NoteTreeBuilder
         string? Color = null);          // Arbeitsbereichs-/Projektfarbe für den Punkt in der Zeile
 
     // Der Baum braucht Projektname UND Arbeitsbereich; die Notiz kennt nur die ProjektId.
-    // Die beiden Farben sind rein für die Anzeige und dürfen fehlen (dann: neutraler Punkt).
-    public sealed record ProjectRef(
-        int Id, string Name, string? Workspace,
-        string? Color = null, string? WorkspaceColor = null);
+    // Die Farbe ist rein für die Anzeige und darf fehlen (dann: neutraler Punkt).
+    // Die Arbeitsbereichsfarbe steht NICHT hier, sondern im separaten Nachschlagewerk:
+    // Ein Arbeitsbereich kann inzwischen auch ganz ohne Projekt im Baum auftauchen,
+    // nämlich wenn eine Notiz direkt an ihm hängt.
+    public sealed record ProjectRef(int Id, string Name, string? Workspace, string? Color = null);
 
     public const string OhneArbeitsbereich = "Ohne Arbeitsbereich";
 
@@ -36,11 +37,20 @@ public static class NoteTreeBuilder
     /// Editor manuell so gesetzt). Ohne den Rückfall landete sie sichtbar falsch unter
     /// „Ohne Projekt", obwohl ihr Task zu einem Projekt gehört.
     /// </param>
+    /// <param name="workspaceColors">
+    /// Arbeitsbereichsname → Farbe, für den Punkt an der Zeile. Nach NAME statt Id, weil
+    /// die Knoten ohnehin nach Namen zusammengeführt werden – ein Arbeitsbereich kann hier
+    /// über zwei Wege auftauchen: über seine Projekte und über direkt an ihm hängende Notizen.
+    /// </param>
     public static List<Node> Build(
         IEnumerable<NoteListItemDto> notes,
         IReadOnlyDictionary<int, ProjectRef> projects,
-        IReadOnlyDictionary<int, int?> taskProjects)
+        IReadOnlyDictionary<int, int?> taskProjects,
+        IReadOnlyDictionary<string, string?>? workspaceColors = null)
     {
+        string? FarbeVon(string arbeitsbereich) =>
+            workspaceColors is not null && workspaceColors.TryGetValue(arbeitsbereich, out var c) ? c : null;
+
         var projekte      = new Node("root:projects",  "Projekte",        NodeKind.Group, [], []);
         var ohneProjekt   = new Node("root:noproject", "Ohne Projekt",    NodeKind.Group, [], []);
         var ohneZuordnung = new Node("root:none",      "Ohne Zuordnung",  NodeKind.Group, [], []);
@@ -56,7 +66,7 @@ public static class NoteTreeBuilder
                     ? OhneArbeitsbereich
                     : project.Workspace!;
 
-                var ws       = Child(projekte, $"ws:{wsLabel}", wsLabel, NodeKind.Workspace, project.WorkspaceColor);
+                var ws       = Child(projekte, $"ws:{wsLabel}", wsLabel, NodeKind.Workspace, FarbeVon(wsLabel));
                 var projNode = Child(ws, $"proj:{project.Id}", project.Name, NodeKind.Project, project.Color);
 
                 // Am Task hängende Notizen bekommen darunter einen eigenen Knoten,
@@ -65,6 +75,13 @@ public static class NoteTreeBuilder
                     Child(projNode, $"task:{taskId}", note.TaskItemTitle ?? "Task", NodeKind.Task).Notes.Add(note);
                 else
                     projNode.Notes.Add(note);
+            }
+            else if (note.WorkspaceName is string arbeitsbereich)
+            {
+                // Direkt am Arbeitsbereich – ohne Projekt dazwischen. Sie steht damit auf
+                // derselben Ebene wie die Projekte des Bereichs, nicht in einem davon.
+                Child(projekte, $"ws:{arbeitsbereich}", arbeitsbereich, NodeKind.Workspace, FarbeVon(arbeitsbereich))
+                    .Notes.Add(note);
             }
             else if (note.TaskItemId is int taskId)
             {

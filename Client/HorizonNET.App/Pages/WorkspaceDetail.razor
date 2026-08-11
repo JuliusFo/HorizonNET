@@ -252,6 +252,44 @@ else
             }
         </div>
     }
+
+    @* ── Notizen zum Arbeitsbereich (Muster wie Projekt- und Task-Detailseite) ──
+       Bewusst nur die DIREKT hier hängenden: Die Notizen der Projekte stehen auf deren
+       eigenen Seiten, sonst stünde hier eine Sammelliste des halben Arbeitsbereichs. *@
+    <hr class="my-4" />
+
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h2 class="h5 mb-0">Notizen</h2>
+        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="CreateNoteAsync">
+            + Neue Notiz
+        </button>
+    </div>
+
+    @if (notes is null)
+    {
+        <p class="text-muted small mb-0">Wird geladen…</p>
+    }
+    else
+    {
+        @if (notes.Count > 0)
+        {
+            <div class="border rounded mb-3">
+                <NoteList Notes="notes" SelectedId="selectedNote?.Id" OnSelect="SelectNoteAsync" />
+            </div>
+        }
+        else if (selectedNote is null)
+        {
+            <p class="text-muted small">Noch keine Notizen zu diesem Arbeitsbereich.</p>
+        }
+
+        @if (selectedNote is not null)
+        {
+            <div class="border rounded p-2 mb-4">
+                <NoteEditor @ref="noteEditor" Note="selectedNote"
+                            OnSaved="HandleNoteSaved" OnDeleted="HandleNoteDeleted" />
+            </div>
+        }
+    }
 }
 
 @* Ein Dialog für beides: Task gesetzt → bearbeiten, Task = null → anlegen
@@ -279,6 +317,11 @@ else
     private List<TaskResponseDto>? tasks;
     private bool loading = true;
     private int? loadedId;
+
+    // Notizen, die DIREKT am Arbeitsbereich hängen (Muster wie TaskDetail/ProjectDetail).
+    private List<NoteListItemDto>? notes;
+    private NoteResponseDto? selectedNote;
+    private NoteEditor? noteEditor;
 
     // Drag & Drop
     private TaskResponseDto? draggedTask;
@@ -376,9 +419,16 @@ else
     protected override async Task OnParametersSetAsync()
     {
         if (loadedId == Id) return;
+
+        // Der NoteEditor wird beim Wechsel nicht disposed (nur Note = null), deshalb
+        // greift der Dispose-Flush nicht – offene Änderungen hier sichern.
+        if (noteEditor is not null) await noteEditor.FlushAsync();
+
         loadedId = Id;
         loading  = true;
         tasks    = null;
+        notes    = null;
+        selectedNote = null;
         projectFilter.Clear();
         showInactive = false;
 
@@ -403,9 +453,66 @@ else
                 foreach (var s in Columns)
                     collapsed[s] = s is WorkStatus.Done or WorkStatus.Abandoned;
             }
+
+            notes = await Api.GetNotesByWorkspaceAsync(Id) ?? new();
         }
 
         loading = false;
+    }
+
+    // ── Notizen (Muster wie ProjectDetail) ───────────────────────────────────────
+
+    private async Task CreateNoteAsync()
+    {
+        if (noteEditor is not null) await noteEditor.FlushAsync();
+
+        var created = await Api.CreateNoteAsync(new NoteCreateDto("Neue Notiz", null, WorkspaceId: Id));
+        if (created is null || notes is null) return;
+
+        notes.Insert(0, NoteListItemDto.From(created));
+        selectedNote = created;
+    }
+
+    private async Task SelectNoteAsync(NoteListItemDto note)
+    {
+        if (selectedNote?.Id == note.Id) return;
+        if (noteEditor is not null) await noteEditor.FlushAsync(); // offene Änderungen sichern
+        selectedNote = await Api.GetNoteAsync(note.Id);            // volle Notiz inkl. Content laden
+    }
+
+    private void HandleNoteSaved(NoteResponseDto updated)
+    {
+        if (notes is null) return;
+
+        // Wurde die Notiz im Editor einem Projekt zugeordnet, hängt sie nicht mehr direkt
+        // am Arbeitsbereich und gehört damit nicht mehr in diese Liste.
+        if (updated.WorkspaceId != Id)
+        {
+            notes.RemoveAll(n => n.Id == updated.Id);
+            if (selectedNote?.Id == updated.Id) selectedNote = null;
+            StateHasChanged();
+            return;
+        }
+
+        var idx = notes.FindIndex(n => n.Id == updated.Id);
+        if (idx >= 0) notes[idx] = NoteListItemDto.From(updated);
+        if (selectedNote?.Id == updated.Id) selectedNote = updated;
+
+        StateHasChanged();
+    }
+
+    private void HandleNoteDeleted(int id)
+    {
+        var title = notes?.FirstOrDefault(n => n.Id == id)?.Title;
+        notes?.RemoveAll(n => n.Id == id);
+        if (selectedNote?.Id == id) selectedNote = null;
+
+        Toast.ShowUndo(string.IsNullOrWhiteSpace(title) ? "Notiz gelöscht" : $"{title} gelöscht", async () =>
+        {
+            if (!await Api.RestoreNoteAsync(id)) return;
+            notes = await Api.GetNotesByWorkspaceAsync(Id) ?? notes;
+            await InvokeAsync(StateHasChanged);
+        });
     }
 
     private void ToggleColumn(WorkStatus status) => collapsed[status] = !collapsed[status];

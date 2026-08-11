@@ -11,7 +11,7 @@ public class NoteRepository(AppDbContext context) : INoteRepository
     // TaskItem/Project werden mitgeladen, damit das DTO Titel/Projektname für die
     // Liste liefern kann. Sortierung: zuletzt geändert zuerst.
     private IQueryable<Note> WithIncludes() =>
-        context.Notes.Include(n => n.TaskItem).Include(n => n.Project);
+        context.Notes.Include(n => n.TaskItem).Include(n => n.Project).Include(n => n.Workspace);
 
     public async Task<IEnumerable<Note>> GetAllAsync() =>
         await WithIncludes().OrderByDescending(n => n.UpdatedAt).ToListAsync();
@@ -28,6 +28,12 @@ public class NoteRepository(AppDbContext context) : INoteRepository
     public async Task<IEnumerable<Note>> GetByProjectIdAsync(int projectId) =>
         await WithIncludes()
             .Where(n => n.ProjectId == projectId)
+            .OrderByDescending(n => n.UpdatedAt)
+            .ToListAsync();
+
+    public async Task<IEnumerable<Note>> GetByWorkspaceIdAsync(int workspaceId) =>
+        await WithIncludes()
+            .Where(n => n.WorkspaceId == workspaceId)
             .OrderByDescending(n => n.UpdatedAt)
             .ToListAsync();
 
@@ -51,6 +57,7 @@ public class NoteRepository(AppDbContext context) : INoteRepository
         existing.Content = updated.Content;
         existing.TaskItemId = updated.TaskItemId;
         existing.ProjectId = updated.ProjectId;
+        existing.WorkspaceId = updated.WorkspaceId;
         existing.NoteFolderId = updated.NoteFolderId;
         existing.Thumbnail = updated.Thumbnail;
         // Kind bewusst NICHT übernehmen – die Art einer Notiz bleibt, wie sie angelegt wurde.

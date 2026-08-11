@@ -41,6 +41,10 @@ public partial class ApiService
     public Task<List<NoteListItemDto>?> GetNotesByProjectAsync(int projectId) =>
         http.GetFromJsonAsync<List<NoteListItemDto>>($"api/notes/project/{projectId}");
 
+    // Nur die direkt am Arbeitsbereich hängenden Notizen – nicht die seiner Projekte.
+    public Task<List<NoteListItemDto>?> GetNotesByWorkspaceAsync(int workspaceId) =>
+        http.GetFromJsonAsync<List<NoteListItemDto>>($"api/notes/workspace/{workspaceId}");
+
     public Task<NoteResponseDto?> CreateNoteAsync(NoteCreateDto dto) =>
         PostAsync<NoteResponseDto>("api/notes", dto);
 

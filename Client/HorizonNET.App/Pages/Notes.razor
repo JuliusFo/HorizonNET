@@ -196,8 +196,12 @@
     private Dictionary<int, NoteTreeBuilder.ProjectRef> projectRefs = new();
     private Dictionary<int, int?> taskProjects = new();
 
+    // Arbeitsbereichsname → Farbe. Nach Namen, weil ein Arbeitsbereich im Baum über zwei
+    // Wege entsteht: über seine Projekte und über direkt an ihm hängende Notizen.
+    private Dictionary<string, string?> workspaceColors = new();
+
     private List<NoteTreeBuilder.Node> Tree =>
-        NoteTreeBuilder.Build(Filtered, projectRefs, taskProjects);
+        NoteTreeBuilder.Build(Filtered, projectRefs, taskProjects, workspaceColors);
 
     // ── Manuelle Ordner ──────────────────────────────────────────────────────
 
@@ -361,15 +365,20 @@
         await ProjectState.EnsureLoadedAsync();
         await WorkspaceState.EnsureLoadedAsync();
 
-        // Name UND Farbe des Arbeitsbereichs: Die Farbe wird im Baum zum Punkt vor der Zeile.
         var workspaces = (WorkspaceState.Workspaces ?? []).ToDictionary(w => w.Id, w => w);
+
+        // Farben der Arbeitsbereiche getrennt vom Projekt-Nachschlagewerk: Ein Bereich kann
+        // im Baum auch ohne eigenes Projekt stehen, wenn eine Notiz direkt an ihm hängt.
+        workspaceColors = (WorkspaceState.Workspaces ?? [])
+            .GroupBy(w => w.Name)
+            .ToDictionary(g => g.Key, g => g.First().Color);
 
         projectRefs = (ProjectState.Projects ?? []).ToDictionary(
             p => p.Id,
             p =>
             {
                 var ws = p.WorkspaceId is int wid && workspaces.TryGetValue(wid, out var found) ? found : null;
-                return new NoteTreeBuilder.ProjectRef(p.Id, p.Name, ws?.Name, p.Color, ws?.Color);
+                return new NoteTreeBuilder.ProjectRef(p.Id, p.Name, ws?.Name, p.Color);
             });
 
         // Sub-Tasks mitnehmen: Auch an ihnen kann eine Notiz hängen.

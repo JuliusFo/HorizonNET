@@ -12,6 +12,10 @@ public interface INoteRepository
 
     Task<IEnumerable<Note>> GetByProjectIdAsync(int projectId);
 
+    // Nur die DIREKT am Arbeitsbereich hängenden Notizen – nicht die seiner Projekte.
+    // Die Detailseite listet darunter ohnehin die Projekte mit ihren eigenen Notizen.
+    Task<IEnumerable<Note>> GetByWorkspaceIdAsync(int workspaceId);
+
     Task<Note> CreateAsync(Note note);
 
     Task<Note?> UpdateAsync(int id, Note note);

@@ -7,6 +7,8 @@ public record NoteCreateDto(
     string? Content,
     int? TaskItemId = null,
     int? ProjectId = null,
+    // Zuordnung direkt an einen Arbeitsbereich – unabhängig von Projekt/Task.
+    int? WorkspaceId = null,
     // Kind wird nur beim Anlegen gesetzt (danach unveränderlich). Thumbnail nur bei Zeichnungen.
     NoteKind Kind = NoteKind.Html,
     string? Thumbnail = null,
@@ -24,6 +26,7 @@ public record NoteUpdateDto(
     string? Content,
     int? TaskItemId,
     int? ProjectId,
+    int? WorkspaceId,
     // Kind bewusst NICHT im Update-DTO – eine Notiz wird nicht in eine Zeichnung umgewandelt.
     string? Thumbnail,
     int? NoteFolderId
@@ -41,7 +44,9 @@ public record NoteResponseDto(
     string? ProjectName = null,
     NoteKind Kind = NoteKind.Html,
     string? Thumbnail = null,
-    int? NoteFolderId = null
+    int? NoteFolderId = null,
+    int? WorkspaceId = null,
+    string? WorkspaceName = null
 );
 
 // Schlanke Variante für Listen (9e): OHNE Content – bei Zeichnungen kann das SVG
@@ -58,7 +63,9 @@ public record NoteListItemDto(
     string? TaskItemTitle = null,
     int? ProjectId = null,
     string? ProjectName = null,
-    int? NoteFolderId = null
+    int? NoteFolderId = null,
+    int? WorkspaceId = null,
+    string? WorkspaceName = null
 )
 {
     // Baut das Listen-Item aus einer vollen Notiz – genutzt vom Client, um die Liste
@@ -67,5 +74,6 @@ public record NoteListItemDto(
         new(n.Id, n.Title,
             n.Kind == NoteKind.Html ? NoteSnippet.From(n.Content) : null,
             n.UpdatedAt, n.Kind, n.Thumbnail,
-            n.TaskItemId, n.TaskItemTitle, n.ProjectId, n.ProjectName, n.NoteFolderId);
+            n.TaskItemId, n.TaskItemTitle, n.ProjectId, n.ProjectName, n.NoteFolderId,
+            n.WorkspaceId, n.WorkspaceName);
 }

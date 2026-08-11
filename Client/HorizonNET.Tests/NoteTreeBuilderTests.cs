@@ -158,6 +158,56 @@ public class NoteTreeBuilderTests
         Assert.Empty(Assert.Single(baum).Notes);
     }
 
+    // ── Notizen direkt am Arbeitsbereich ─────────────────────────────────────
+
+    [Fact]
+    public void NotizAmArbeitsbereich_StehtAufArbeitsbereichsebene()
+    {
+        var baum = NoteTreeBuilder.Build(
+            [Note(20, workspaceId: 2, workspaceName: "Arbeit")],
+            Projekte(),
+            TaskProjekte());
+
+        var projekte = Assert.Single(baum);
+        var ws = Assert.Single(projekte.Children);
+        Assert.Equal("Arbeit", ws.Label);
+        Assert.Equal(NoteTreeBuilder.NodeKind.Workspace, ws.Kind);
+        Assert.Empty(ws.Children);                       // kein Projekt-Zwischenknoten
+        Assert.Equal(20, Assert.Single(ws.Notes).Id);
+    }
+
+    // Der Knoten wird über beide Wege erzeugt (Projekt-Ableitung und direkte Zuordnung)
+    // und muss derselbe bleiben – sonst stünde "Arbeit" zweimal im Baum.
+    [Fact]
+    public void ArbeitsbereichAusProjektUndDirekterNotiz_IstEinKnoten()
+    {
+        var baum = NoteTreeBuilder.Build(
+            [Note(21, projectId: 12, projectName: "Gepard"), Note(22, workspaceId: 2, workspaceName: "Arbeit")],
+            Projekte(P(12, "Gepard", "Arbeit")),
+            TaskProjekte());
+
+        var ws = Assert.Single(baum[0].Children);
+        Assert.Equal("Arbeit", ws.Label);
+        Assert.Equal(22, Assert.Single(ws.Notes).Id);           // direkt am Bereich
+        Assert.Equal("Gepard", Assert.Single(ws.Children).Label); // Projekt daneben
+        Assert.Equal(2, NoteTreeBuilder.CountNotes(ws));
+    }
+
+    // Das Projekt trägt seinen Arbeitsbereich schon; die Notiz gehört unter das Projekt,
+    // nicht zusätzlich auf die Bereichsebene.
+    [Fact]
+    public void ProjektSchlaegtArbeitsbereich()
+    {
+        var baum = NoteTreeBuilder.Build(
+            [Note(23, projectId: 12, projectName: "Gepard", workspaceId: 2, workspaceName: "Arbeit")],
+            Projekte(P(12, "Gepard", "Arbeit")),
+            TaskProjekte());
+
+        var ws = baum[0].Children[0];
+        Assert.Empty(ws.Notes);
+        Assert.Equal(23, Assert.Single(ws.Children[0].Notes).Id);
+    }
+
     // ── Helfer ───────────────────────────────────────────────────────────────
 
     private static NoteFolderResponseDto Ordner(int id, string name, int? parent = null) =>
@@ -166,9 +216,10 @@ public class NoteTreeBuilderTests
     private static NoteListItemDto Note(
         int id, int? projectId = null, string? projectName = null,
         int? taskId = null, string? taskTitle = null, int minutenAlt = 0,
-        int? folderId = null) =>
+        int? folderId = null, int? workspaceId = null, string? workspaceName = null) =>
         new(id, $"Notiz {id}", null, DateTime.Now.AddMinutes(-minutenAlt),
-            NoteKind.Html, null, taskId, taskTitle, projectId, projectName, folderId);
+            NoteKind.Html, null, taskId, taskTitle, projectId, projectName, folderId,
+            workspaceId, workspaceName);
 
     private static NoteTreeBuilder.ProjectRef P(int id, string name, string? workspace) =>
         new(id, name, workspace);

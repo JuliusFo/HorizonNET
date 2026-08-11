@@ -286,7 +286,9 @@ else
         // automatische Speicherung eine Zeichnung aus ihrem Ordner geworfen – heute nicht
         // erreichbar, weil nur der NoteEditor Ordner setzt, aber eine Mine für den Tag, an
         // dem Zeichnungen eine Ordner-Auswahl oder der Baum Drag & Drop bekommt.
-        var dto = new NoteUpdateDto(title.Trim(), svg, selectedTaskId, selectedProjectId, thumbnail,
+        var dto = new NoteUpdateDto(title.Trim(), svg, selectedTaskId, selectedProjectId,
+                                    WorkspaceId: loaded.WorkspaceId,
+                                    Thumbnail: thumbnail,
                                     NoteFolderId: loaded.NoteFolderId);
         var updated = await Api.UpdateNoteAsync(loaded.Id, dto);
 
