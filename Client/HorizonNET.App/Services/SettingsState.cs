@@ -9,6 +9,7 @@ public class SettingsState(IJSRuntime js)
 {
     private const string CalendarViewKey = "settings.calendarDefaultView";
     private const string SoundsEnabledKey = "settings.soundsEnabled";
+    private const string SubTasksCollapsedKey = "settings.subTasksCollapsed";
 
     private bool loaded;
 
@@ -18,6 +19,12 @@ public class SettingsState(IJSRuntime js)
 
     // Ob UI-Sounds abgespielt werden (Default: an).
     public bool SoundsEnabled { get; private set; } = true;
+
+    // Ob der Sub-Task-Block eines Tasks standardmäßig zugeklappt ist (Default: an –
+    // die Liste bleibt damit auch bei vielen Sub-Tasks überschaubar).
+    // Gilt für die Projekt-Task-Liste und die SubTaskList (Detailseite/Edit-Dialog);
+    // je Task lässt sich der Standard danach umdrehen.
+    public bool SubTasksCollapsed { get; private set; } = true;
 
     public event Action? OnChange;
 
@@ -35,6 +42,10 @@ public class SettingsState(IJSRuntime js)
         if (sounds is not null)
             SoundsEnabled = sounds != "false"; // alles außer "false" = an
 
+        var subTasks = await js.InvokeAsync<string?>("localStorage.getItem", SubTasksCollapsedKey);
+        if (subTasks is not null)
+            SubTasksCollapsed = subTasks != "false"; // alles außer "false" = zugeklappt
+
         OnChange?.Invoke();
     }
 
@@ -42,6 +53,13 @@ public class SettingsState(IJSRuntime js)
     {
         SoundsEnabled = enabled;
         await js.InvokeVoidAsync("localStorage.setItem", SoundsEnabledKey, enabled ? "true" : "false");
+        OnChange?.Invoke();
+    }
+
+    public async Task SetSubTasksCollapsedAsync(bool collapsed)
+    {
+        SubTasksCollapsed = collapsed;
+        await js.InvokeVoidAsync("localStorage.setItem", SubTasksCollapsedKey, collapsed ? "true" : "false");
         OnChange?.Invoke();
     }
 

@@ -30,6 +30,16 @@
             <label class="form-check-label" for="soundsToggle">Sound-Effekte</label>
         </div>
         <div class="form-text">Kurze Töne bei erledigten Tasks und Daily Tasks.</div>
+
+        <div class="form-check form-switch mt-3">
+            <input class="form-check-input" type="checkbox" id="subTasksToggle"
+                   checked="@AppSettings.SubTasksCollapsed" @onchange="OnSubTasksCollapsedChanged" />
+            <label class="form-check-label" for="subTasksToggle">Sub-Tasks eingeklappt starten</label>
+        </div>
+        <div class="form-text">
+            Zeigt bei Tasks mit Sub-Tasks zunächst nur den Fortschritt (z. B. 2/5).
+            Je Task lässt sich das mit dem Pfeil vor dem Titel umschalten.
+        </div>
     </div>
 </div>
 
@@ -243,6 +253,12 @@
     {
         if (e.Value is bool enabled)
             await AppSettings.SetSoundsEnabledAsync(enabled);
+    }
+
+    private async Task OnSubTasksCollapsedChanged(ChangeEventArgs e)
+    {
+        if (e.Value is bool collapsed)
+            await AppSettings.SetSubTasksCollapsedAsync(collapsed);
     }
 
     private async Task DisconnectAsync()

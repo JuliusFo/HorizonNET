@@ -1,3 +1,15 @@
+/* Haupt-Task: dunkler Balken links – das Gegenstück zum blauen Balken der Sub-Tasks.
+   Gleiche Breite wie dort, unterschieden wird allein über die Farbe:
+   dunkel = Haupt-Task, blau + eingerückt = Sub-Task. */
+.maintask-item {
+    border-left: 3px solid #343a40;
+}
+
+/* Erledigt tritt der Balken zurück, sonst zieht er den Blick auf abgehakte Zeilen. */
+.maintask-item.task-completed {
+    border-left-color: #adb5bd;
+}
+
 .subtask-item {
     border-left: 3px solid #0d6efd;
     background-color: #fafafa;
@@ -45,6 +57,53 @@
 
 .task-drop-before {
     box-shadow: 0 -2px 0 -1px var(--bs-primary, #0d6efd);
+}
+
+/* Pfeil vor dem Task-Titel, der seine Sub-Tasks auf- und zuklappt. Sieht aus wie das
+   Caret der Erledigt-Gruppe, ist aber Teil der Task-Zeile. */
+.subtask-caret {
+    width: 1rem;
+    flex-shrink: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: #6c757d;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.subtask-caret:hover {
+    color: #212529;
+}
+
+/* Platzhalter, damit Tasks ohne Sub-Tasks (bzw. Zeilen ohne Ziehgriff) nicht
+   gegenüber ihren Nachbarn verspringen. */
+.subtask-caret-empty {
+    width: 1rem;
+    flex-shrink: 0;
+}
+
+.task-handle-empty {
+    width: 0.75rem;
+    flex-shrink: 0;
+}
+
+/* Fortschritt am zugeklappten Task: "2/5". Bewusst zurückhaltend – die Zahl ergänzt
+   den Titel, sie soll ihn nicht überstimmen. */
+.subtask-summary {
+    margin-left: 0.4rem;
+    padding: 0.05rem 0.35rem;
+    border-radius: 0.75rem;
+    background-color: #e9ecef;
+    color: #6c757d;
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+/* Erledigt-Gruppe INNERHALB eines Sub-Task-Blocks: gleiche Kopfzeile wie bei den
+   Haupt-Tasks, nur auf Sub-Task-Ebene eingerückt. */
+.subtask-done-group {
+    padding: 0 0 0 3rem;
 }
 
 /* Kopfzeile der Erledigt-Gruppe: unauffällig, aber über die ganze Breite klickbar. */

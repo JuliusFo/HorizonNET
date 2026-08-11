@@ -1,36 +1,51 @@
 @inject ApiService Api
 @inject ToastService Toast
+@inject SettingsState Settings
 
 @* Wiederverwendbare Sub-Task-Liste: Hinzufügen, Abhaken, Löschen und Sortieren
    per Drag&Drop. Wirkt sofort über die API und meldet jede Änderung über
-   SubTasksChanged an den Aufrufer (z. B. Edit-Dialog oder Detail-Seite). *@
+   SubTasksChanged an den Aufrufer (z. B. Edit-Dialog oder Detail-Seite).
+
+   Zwei Klapp-Ebenen wie in der Projekt-Task-Liste: die ganze Liste (Startwert aus den
+   Einstellungen) und darin die erledigten Sub-Tasks. *@
 @if (items.Count > 0)
 {
-    <div class="fw-semibold mb-2">
-        Sub-Tasks <span class="text-muted fw-normal">(@items.Count(s => s.IsCompleted)/@items.Count)</span>
-    </div>
-    <ul class="list-group mb-2">
-        @foreach (var sub in items)
-        {
-            <li class="list-group-item d-flex align-items-center gap-2 py-1 px-2 @(dragOverSubId == sub.Id ? "subtask-drop-before" : "")"
-                draggable="true"
-                @ondragstart="() => draggedSub = sub"
-                @ondragend="() => { draggedSub = null; dragOverSubId = null; }"
-                @ondragover:preventDefault="true"
-                @ondragover="() => { if (draggedSub is not null) dragOverSubId = sub.Id; }"
-                @ondrop="() => DropSubTaskAsync(sub)">
-                <span class="subtask-handle" title="Zum Sortieren ziehen">⠿</span>
-                <label class="d-flex align-items-center gap-2 mb-0 flex-grow-1" style="cursor:pointer;">
-                    <input type="checkbox" class="form-check-input mt-0"
-                           checked="@sub.IsCompleted"
-                           @onchange="() => ToggleSubTaskAsync(sub)" />
-                    <span class="@(sub.IsCompleted ? "text-decoration-line-through text-muted" : "")">@sub.Title</span>
-                </label>
-                <button type="button" class="btn btn-sm btn-outline-danger border-0"
-                        @onclick="() => DeleteSubTaskAsync(sub)" title="Löschen">🗑</button>
-            </li>
-        }
-    </ul>
+    <button type="button" class="subtask-toggle mb-2" @onclick="() => collapsed = !collapsed"
+            title="@(collapsed ? "Sub-Tasks einblenden" : "Sub-Tasks ausblenden")">
+        <span class="subtask-caret">@(collapsed ? "▸" : "▾")</span>
+        <span class="fw-semibold">Sub-Tasks</span>
+        <span class="text-muted fw-normal">(@DoneCount/@items.Count)</span>
+    </button>
+
+    @if (!collapsed)
+    {
+        <ul class="list-group mb-2">
+            @foreach (var sub in items.Where(s => !s.IsCompleted))
+            {
+                @SubTaskRow(sub, sortable: true)
+            }
+
+            @if (DoneCount > 0)
+            {
+                <li class="list-group-item p-0">
+                    <button type="button" class="subtask-toggle subtask-done-toggle"
+                            @onclick="() => doneExpanded = !doneExpanded"
+                            title="@(doneExpanded ? "Erledigte Sub-Tasks ausblenden" : "Erledigte Sub-Tasks einblenden")">
+                        <span class="subtask-caret">@(doneExpanded ? "▾" : "▸")</span>
+                        <span>Erledigt (@DoneCount)</span>
+                    </button>
+                </li>
+
+                @if (doneExpanded)
+                {
+                    @foreach (var sub in items.Where(s => s.IsCompleted))
+                    {
+                        @SubTaskRow(sub, sortable: false)
+                    }
+                }
+            }
+        </ul>
+    }
 }
 
 <div class="d-flex gap-2 @(items.Count > 0 ? "mt-3" : "")">
@@ -44,6 +59,39 @@
 </div>
 
 @code {
+    // Eine Sub-Task-Zeile. Erledigte sind nicht sortierbar – in der Erledigt-Gruppe spielt
+    // die Reihenfolge keine Rolle, und ein Drop dorthin landete außerhalb der Sicht.
+    private RenderFragment SubTaskRow(TaskResponseDto sub, bool sortable) => __builder =>
+    {
+        @* draggable als Zeichenkette, nicht als bool: Ein false-bool ließe Blazor das
+           Attribut ganz weg – draggable wertet das als "auto" statt als "nein". *@
+        <li @key="sub.Id"
+            class="list-group-item d-flex align-items-center gap-2 py-1 px-2 @(dragOverSubId == sub.Id ? "subtask-drop-before" : "")"
+            draggable="@(sortable ? "true" : "false")"
+            @ondragstart="() => { if (sortable) draggedSub = sub; }"
+            @ondragend="() => { draggedSub = null; dragOverSubId = null; }"
+            @ondragover:preventDefault="true"
+            @ondragover="() => { if (sortable && draggedSub is not null) dragOverSubId = sub.Id; }"
+            @ondrop="() => sortable ? DropSubTaskAsync(sub) : Task.CompletedTask">
+            @if (sortable)
+            {
+                <span class="subtask-handle" title="Zum Sortieren ziehen">⠿</span>
+            }
+            else
+            {
+                <span class="subtask-handle-empty"></span>
+            }
+            <label class="d-flex align-items-center gap-2 mb-0 flex-grow-1" style="cursor:pointer;">
+                <input type="checkbox" class="form-check-input mt-0"
+                       checked="@sub.IsCompleted"
+                       @onchange="() => ToggleSubTaskAsync(sub)" />
+                <span class="@(sub.IsCompleted ? "text-decoration-line-through text-muted" : "")">@sub.Title</span>
+            </label>
+            <button type="button" class="btn btn-sm btn-outline-danger border-0"
+                    @onclick="() => DeleteSubTaskAsync(sub)" title="Löschen">🗑</button>
+        </li>
+    };
+
     // Haupt-Task, dem die Sub-Tasks gehören.
     [Parameter, EditorRequired] public int ParentTaskId { get; set; }
 
@@ -64,14 +112,25 @@
     private int? dragOverSubId;
     private int? loadedParentId;
 
-    protected override void OnParametersSet()
+    // Klapp-Zustand, reiner Seitenzustand: die ganze Liste bzw. die Erledigt-Gruppe darin.
+    private bool collapsed;
+    private bool doneExpanded;
+
+    private int DoneCount => items.Count(s => s.IsCompleted);
+
+    protected override async Task OnParametersSetAsync()
     {
+        // Liefert den Startzustand von collapsed (SubTasksCollapsed).
+        await Settings.EnsureLoadedAsync();
+
         // Interne Liste nur (neu) aufbauen, wenn ein anderer Haupt-Task übergeben
         // wurde – nicht beim Echo der eigenen Änderungen (dann ist items maßgeblich).
         if (loadedParentId == ParentTaskId) return;
         loadedParentId  = ParentTaskId;
         newSubTaskTitle = string.Empty;
         items = SubTasks?.OrderBy(s => s.SortOrder).ToList() ?? new();
+        collapsed    = Settings.SubTasksCollapsed;
+        doneExpanded = false;
     }
 
     private async Task AddSubTaskAsync()
@@ -87,6 +146,9 @@
 
         items.Add(created);
         newSubTaskTitle = string.Empty;
+
+        // Zugeklappt wäre der neue Sub-Task unsichtbar – wer anlegt, will das Ergebnis sehen.
+        collapsed = false;
         await NotifyChangedAsync();
 
         // Fokus zurück ins Feld: Titel → Enter → Titel → Enter, ohne Mausgriff.

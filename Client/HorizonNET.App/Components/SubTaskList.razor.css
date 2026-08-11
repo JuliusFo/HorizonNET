@@ -9,6 +9,46 @@
     cursor: grabbing;
 }
 
+/* Platzhalter für erledigte Sub-Tasks: ohne ihn rutschen die Zeilen der Erledigt-Gruppe
+   gegenüber den offenen nach links. */
+.subtask-handle-empty {
+    width: 0.75rem;
+    flex-shrink: 0;
+}
+
 .subtask-drop-before {
     box-shadow: 0 -2px 0 -1px var(--bs-primary, #0d6efd);
+}
+
+/* Überschrift "Sub-Tasks (2/5)" und Kopfzeile der Erledigt-Gruppe: beides Schalter,
+   die aussehen wie Text. */
+.subtask-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.subtask-done-toggle {
+    padding: 0.35rem 0.5rem;
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+
+.subtask-done-toggle:hover {
+    color: #212529;
+}
+
+.subtask-caret {
+    width: 0.75rem;
+    flex-shrink: 0;
+    color: #868e96;
+    font-size: 0.8rem;
+    line-height: 1;
 }

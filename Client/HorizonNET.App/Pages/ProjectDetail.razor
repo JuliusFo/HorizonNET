@@ -5,6 +5,7 @@
 @inject IStringLocalizer<Enums> EnumL
 @inject ToastService Toast
 @inject SoundService Sound
+@inject SettingsState Settings
 
 <PageTitle>Projekt – HorizonNET</PageTitle>
 
@@ -214,6 +215,9 @@ else
     // zwischen zwei Projekten (gleiche Komponenteninstanz, nur Id ändert sich).
     protected override async Task OnParametersSetAsync()
     {
+        // Liefert den Startzustand der Sub-Task-Blöcke (SubTasksCollapsed).
+        await Settings.EnsureLoadedAsync();
+
         if (loadedId == Id) return;
 
         // Der NoteEditor wird beim Projektwechsel nicht disposed (nur Note = null),
@@ -230,6 +234,8 @@ else
         selectedTask       = null;
         showForm           = false;
         addingSubTaskForId = null;
+        subTasksToggled.Clear();
+        subDoneExpanded.Clear();
 
         project = await Api.GetProjectAsync(Id);
         tasks   = await Api.GetTasksByProjectAsync(Id);
@@ -256,10 +262,42 @@ else
 
     private int DoneCount => tasks?.Count(t => t.IsCompleted) ?? 0;
 
-    // Sub-Tasks: rein manuell über SortOrder – bewusst ohne die Erledigt-Gruppierung,
-    // damit die Reihenfolge exakt der SubTaskList (Detailseite/Edit-Dialog) entspricht.
+    // Sub-Tasks: rein manuell über SortOrder – dieselbe Reihenfolge wie in der SubTaskList
+    // (Detailseite/Edit-Dialog), nur zusätzlich in "offen" und "erledigt" geteilt.
     private static IEnumerable<TaskResponseDto> OrderedSubTasks(TaskResponseDto parent) =>
         (parent.SubTasks ?? []).OrderBy(s => s.SortOrder);
+
+    private static IEnumerable<TaskResponseDto> OpenSubTasks(TaskResponseDto parent) =>
+        OrderedSubTasks(parent).Where(s => !s.IsCompleted);
+
+    private static IEnumerable<TaskResponseDto> DoneSubTasks(TaskResponseDto parent) =>
+        OrderedSubTasks(parent).Where(s => s.IsCompleted);
+
+    private static int DoneSubCount(TaskResponseDto parent) =>
+        parent.SubTasks?.Count(s => s.IsCompleted) ?? 0;
+
+    // ── Sub-Tasks ein-/ausklappen ────────────────────────────────────────────
+    // Zwei ineinander liegende Klapp-Ebenen, beide nur Seitenzustand:
+    //   1. der ganze Sub-Task-Block eines Tasks (Startwert aus den Einstellungen),
+    //   2. darin die erledigten Sub-Tasks – wie die Erledigt-Gruppe der Haupt-Tasks.
+    //
+    // Gemerkt wird nicht der Zustand, sondern die ABWEICHUNG vom Standard. Sonst müsste
+    // beim Umstellen der Einstellung jeder bereits angefasste Task nachgezogen werden.
+    private readonly HashSet<int> subTasksToggled = new();
+    private readonly HashSet<int> subDoneExpanded = new();
+
+    private bool SubTasksCollapsed(int taskId) =>
+        Settings.SubTasksCollapsed ^ subTasksToggled.Contains(taskId);
+
+    private void ToggleSubTasks(int taskId)
+    {
+        if (!subTasksToggled.Remove(taskId)) subTasksToggled.Add(taskId);
+    }
+
+    private void ToggleSubDone(int taskId)
+    {
+        if (!subDoneExpanded.Remove(taskId)) subDoneExpanded.Add(taskId);
+    }
 
     // ── Sortieren per Drag & Drop ────────────────────────────────────────────
 
@@ -338,7 +376,7 @@ else
            Dropdown des nachrückenden Tasks behielte dann die vom Nutzer gewählte
            Auswahl (z. B. "Fertig"), weil sich sein value-Attribut nicht ändert. *@
         <li @key="task.Id"
-            class="list-group-item @(task.IsCompleted ? "task-completed" : "") @(dragOverTaskId == task.Id ? "task-drop-before" : "")"
+            class="list-group-item maintask-item @(task.IsCompleted ? "task-completed" : "") @(dragOverTaskId == task.Id ? "task-drop-before" : "")"
             draggable="true"
             @ondragstart="() => draggedTask = task"
             @ondragend="ResetDrag"
@@ -348,21 +386,33 @@ else
             @TaskRow(task, isSubTask: false)
         </li>
 
-        @* Sub-Tasks eingerückt darunter *@
-        @if (task.SubTasks is { Count: > 0 })
+        @* Sub-Tasks eingerückt darunter – offene zuerst, erledigte in einer eigenen
+           Klapp-Gruppe. Der ganze Block hängt am Pfeil in der Eltern-Zeile. *@
+        @if (task.SubTasks is { Count: > 0 } && !SubTasksCollapsed(task.Id))
         {
-            @foreach (var sub in OrderedSubTasks(task))
+            @foreach (var sub in OpenSubTasks(task))
             {
-                <li @key="sub.Id"
-                    class="list-group-item ps-5 @(sub.IsCompleted ? "task-completed" : "") subtask-item @(dragOverTaskId == sub.Id ? "task-drop-before" : "")"
-                    draggable="true"
-                    @ondragstart="() => draggedTask = sub"
-                    @ondragend="ResetDrag"
-                    @ondragover:preventDefault="true"
-                    @ondragover="() => { if (draggedTask?.ParentTaskId == sub.ParentTaskId) dragOverTaskId = sub.Id; }"
-                    @ondrop="() => DropSubTaskAsync(task, sub)">
-                    @TaskRow(sub, isSubTask: true)
+                @SubTaskRow(task, sub, sortable: true)
+            }
+
+            @if (DoneSubCount(task) > 0)
+            {
+                <li class="list-group-item subtask-item subtask-done-group">
+                    <button type="button" class="done-group-toggle"
+                            @onclick="() => ToggleSubDone(task.Id)"
+                            title="@(subDoneExpanded.Contains(task.Id) ? "Erledigte Sub-Tasks ausblenden" : "Erledigte Sub-Tasks einblenden")">
+                        <span class="done-group-caret">@(subDoneExpanded.Contains(task.Id) ? "▾" : "▸")</span>
+                        <span>@string.Format(L["Done_Group"], DoneSubCount(task))</span>
+                    </button>
                 </li>
+
+                @if (subDoneExpanded.Contains(task.Id))
+                {
+                    @foreach (var sub in DoneSubTasks(task))
+                    {
+                        @SubTaskRow(task, sub, sortable: false)
+                    }
+                }
             }
         }
 
@@ -401,11 +451,55 @@ else
         }
     };
 
-    private RenderFragment TaskRow(TaskResponseDto task, bool isSubTask) => __builder =>
+    // Eine Sub-Task-Zeile. Erledigte sind bewusst NICHT sortierbar: In der Erledigt-Gruppe
+    // spielt die Reihenfolge keine Rolle, und ein Drop dorthin setzte einen offenen Sub-Task
+    // an eine Stelle, die man in der geteilten Liste gar nicht sieht.
+    private RenderFragment SubTaskRow(TaskResponseDto parent, TaskResponseDto sub, bool sortable) => __builder =>
+    {
+        @* draggable als Zeichenkette, nicht als bool: Ein false-bool ließe Blazor das
+           Attribut ganz weg – draggable wertet das als "auto" statt als "nein". *@
+        <li @key="sub.Id"
+            class="list-group-item ps-5 @(sub.IsCompleted ? "task-completed" : "") subtask-item @(dragOverTaskId == sub.Id ? "task-drop-before" : "")"
+            draggable="@(sortable ? "true" : "false")"
+            @ondragstart="() => { if (sortable) draggedTask = sub; }"
+            @ondragend="ResetDrag"
+            @ondragover:preventDefault="true"
+            @ondragover="() => { if (sortable && draggedTask?.ParentTaskId == sub.ParentTaskId) dragOverTaskId = sub.Id; }"
+            @ondrop="() => sortable ? DropSubTaskAsync(parent, sub) : Task.CompletedTask">
+            @TaskRow(sub, isSubTask: true, sortable: sortable)
+        </li>
+    };
+
+    private RenderFragment TaskRow(TaskResponseDto task, bool isSubTask, bool sortable = true) => __builder =>
     {
         <div class="d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center gap-3">
-                <span class="task-handle" title="Zum Sortieren ziehen">⠿</span>
+                @* Pfeil zum Ein-/Ausklappen der Sub-Tasks. Tasks ohne Sub-Tasks bekommen
+                   einen Platzhalter, damit die Spalten der Liste in einer Flucht bleiben. *@
+                @if (!isSubTask)
+                {
+                    @if (task.SubTasks is { Count: > 0 })
+                    {
+                        <button type="button" class="subtask-caret"
+                                @onclick="() => ToggleSubTasks(task.Id)"
+                                title="@(SubTasksCollapsed(task.Id) ? "Sub-Tasks einblenden" : "Sub-Tasks ausblenden")">
+                            @(SubTasksCollapsed(task.Id) ? "▸" : "▾")
+                        </button>
+                    }
+                    else
+                    {
+                        <span class="subtask-caret-empty"></span>
+                    }
+                }
+
+                @if (sortable)
+                {
+                    <span class="task-handle" title="Zum Sortieren ziehen">⠿</span>
+                }
+                else
+                {
+                    <span class="task-handle-empty"></span>
+                }
 
                 @* Schnell-Abschluss: Haken setzt auf "Fertig", Abwählen zurück auf "Geplant". *@
                 <input type="checkbox" class="form-check-input task-done-check flex-shrink-0"
@@ -427,6 +521,14 @@ else
                             @task.Title
                         </strong>
                     </a>
+                    @* Zugeklappt bleibt der Fortschritt sichtbar – sonst wäre nicht zu
+                       erkennen, ob unter dem Task noch etwas offen ist. *@
+                    @if (!isSubTask && task.SubTasks is { Count: > 0 } && SubTasksCollapsed(task.Id))
+                    {
+                        <span class="subtask-summary" title="Erledigte Sub-Tasks">
+                            @DoneSubCount(task)/@task.SubTasks.Count
+                        </span>
+                    }
                     @if (task.Description is not null)
                     {
                         <span class="text-muted ms-2">@task.Description</span>
@@ -598,6 +700,10 @@ else
         addingSubTaskForId  = parentId;
         subTaskErrorMessage = null;
         newSubTask          = new();
+
+        // Zugeklappt bliebe das Formular unsichtbar – wer einen Sub-Task anlegt, will den
+        // Block sehen. Der Task gilt danach als vom Nutzer aufgeklappt.
+        if (SubTasksCollapsed(parentId)) ToggleSubTasks(parentId);
     }
 
     private void CancelSubTask()
