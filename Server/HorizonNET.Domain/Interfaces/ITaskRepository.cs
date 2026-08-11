@@ -36,7 +36,9 @@ public interface ITaskRepository
     Task<HashSet<string>> GetGoogleEventIdsAsync();
 
     // Setzt für die übergebenen Tasks SortOrder = Listenindex und Status = status.
-    Task ReorderAsync(WorkStatus status, IList<int> orderedTaskIds);
+    // Zurück kommen die Tasks, deren Fälligkeitsdatum sich dadurch geändert hat – nur die
+    // sind für den Google-Kalender überhaupt von Belang.
+    Task<IReadOnlyList<TaskItem>> ReorderAsync(WorkStatus status, IList<int> orderedTaskIds);
 
     // Setzt nur SortOrder = Listenindex (Status bleibt unverändert) – für Sub-Tasks.
     Task ReorderSubTasksAsync(IList<int> orderedTaskIds);

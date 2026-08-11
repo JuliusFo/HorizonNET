@@ -85,18 +85,14 @@ public class TasksController(
     [HttpPut("reorder")]
     public async Task<IActionResult> Reorder([FromBody] TaskReorderDto dto)
     {
-        await repo.ReorderAsync(dto.Status, dto.OrderedTaskIds);
+        // Ein Statuswechsel kann das Fälligkeitsdatum setzen ("Geplant Heute"), und das
+        // gehört nach Google. Welche Tasks das betrifft, weiß das Repository – es hat den
+        // Wechsel gerade vollzogen. Wer nur seine Position in der Spalte ändert, ist nicht
+        // dabei und kostet damit auch keinen Netzaufruf.
+        var rescheduled = await repo.ReorderAsync(dto.Status, dto.OrderedTaskIds);
 
-        // Sonderfall "Geplant Heute": Das Repository setzt dabei das Fälligkeitsdatum,
-        // also muss – anders als bei den übrigen Spalten – auch Google nachgezogen werden.
-        if (dto.Status == WorkStatus.PlannedToday)
-        {
-            foreach (var id in dto.OrderedTaskIds)
-            {
-                var task = await repo.GetByIdAsync(id);
-                if (task is not null) await google.SyncTaskAsync(task); // best-effort
-            }
-        }
+        foreach (var task in rescheduled)
+            await google.SyncTaskAsync(task); // best-effort
 
         return NoContent();
     }

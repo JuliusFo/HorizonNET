@@ -295,11 +295,21 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         return ids.ToHashSet();
     }
 
-    public async Task ReorderAsync(WorkStatus status, IList<int> orderedTaskIds)
+    // Liefert die Tasks zurück, deren FÄLLIGKEITSDATUM sich dabei geändert hat – und nur
+    // die. Das ist genau die Menge, die der Aufrufer nach Google spiegeln muss (Google
+    // kennt vom Task Titel, Beschreibung und Termin, nicht seine Position im Board).
+    //
+    // Bewusst am tatsächlich geänderten Datum festgemacht statt am Zielstatus: Beim
+    // Umsortieren INNERHALB von "Geplant Heute" ändert sich nichts am Termin, die Karten
+    // stehen dort ja schon. Vorher galt die ganze Spalte pauschal als betroffen, und ein
+    // Verschieben um eine Position kostete einen Google-Aufruf pro Karte.
+    public async Task<IReadOnlyList<TaskItem>> ReorderAsync(WorkStatus status, IList<int> orderedTaskIds)
     {
         var tasks = await context.Tasks
             .Where(t => orderedTaskIds.Contains(t.Id))
             .ToListAsync();
+
+        var rescheduled = new List<TaskItem>();
 
         foreach (var t in tasks)
         {
@@ -308,9 +318,13 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
             // Auch das Verschieben im Kanban-Board ist ein Statuswechsel und steuert
             // damit den Timer (Spalte "In Arbeit" startet, jede andere stoppt) sowie
             // das Fälligkeitsdatum (Spalte "Geplant Heute" setzt es auf heute).
+            var previousDueDate = t.DueDate;
             await ApplyStatusChangeAsync(t, status);
+            if (t.DueDate != previousDueDate) rescheduled.Add(t);
         }
+
         await context.SaveChangesAsync();
+        return rescheduled;
     }
 
     public async Task ReorderSubTasksAsync(IList<int> orderedTaskIds)

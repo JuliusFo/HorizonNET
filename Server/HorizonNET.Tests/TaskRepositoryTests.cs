@@ -122,6 +122,89 @@ public class TaskRepositoryTests
         Assert.Equal(earlier, (await assert.Tasks.FindAsync(id))!.DueDate);
     }
 
+    // ── Umsortieren im Kanban-Board ──────────────────────────────────────────────
+    // ReorderAsync meldet zurück, welche Tasks ein neues Fälligkeitsdatum bekommen haben.
+    // Daran hängt der Google-Sync: Nur diese Tasks werden gespiegelt. Meldet die Methode
+    // zu viel, kostet jedes Verschieben unnötige Netzaufrufe; meldet sie zu wenig, steht
+    // im Kalender ein veralteter Termin.
+
+    [Fact]
+    public async Task Reorder_IntoPlannedToday_ReportsTaskWithNewDueDate()
+    {
+        using var db = new TestDatabase();
+        var id = await SeedTaskAsync(db, WorkStatus.Planned);
+
+        using var act = db.NewContext();
+        var rescheduled = await new TaskRepository(act).ReorderAsync(WorkStatus.PlannedToday, [id]);
+
+        Assert.Equal(id, Assert.Single(rescheduled).Id);
+        Assert.Equal(DateTime.Today, Assert.Single(rescheduled).DueDate?.Date);
+    }
+
+    // Der eigentliche Punkt: Karten, die schon in der Spalte stehen, bekommen beim
+    // Umsortieren kein neues Datum – und dürfen deshalb auch nicht gemeldet werden.
+    [Fact]
+    public async Task Reorder_WithinPlannedToday_ReportsNothing()
+    {
+        using var db = new TestDatabase();
+        var a = await SeedTaskAsync(db, WorkStatus.PlannedToday, dueDate: DateTime.Today);
+        var b = await SeedTaskAsync(db, WorkStatus.PlannedToday, dueDate: DateTime.Today);
+
+        using var act = db.NewContext();
+        var rescheduled = await new TaskRepository(act).ReorderAsync(WorkStatus.PlannedToday, [b, a]);
+
+        Assert.Empty(rescheduled);
+    }
+
+    // Gemischte Spalte: Nur der Neuzugang wird gemeldet, nicht die ganze Spalte.
+    [Fact]
+    public async Task Reorder_IntoPlannedToday_ReportsOnlyTheNewcomer()
+    {
+        using var db = new TestDatabase();
+        var resident = await SeedTaskAsync(db, WorkStatus.PlannedToday, dueDate: DateTime.Today);
+        var newcomer = await SeedTaskAsync(db, WorkStatus.Planned);
+
+        using var act = db.NewContext();
+        var rescheduled = await new TaskRepository(act).ReorderAsync(
+            WorkStatus.PlannedToday, [newcomer, resident]);
+
+        Assert.Equal(newcomer, Assert.Single(rescheduled).Id);
+    }
+
+    // Jede andere Spalte rührt das Fälligkeitsdatum nicht an – dort ist nie etwas zu
+    // spiegeln, auch wenn Status und Timer sich sehr wohl ändern.
+    [Theory]
+    [InlineData(WorkStatus.Planned)]
+    [InlineData(WorkStatus.InProgress)]
+    [InlineData(WorkStatus.Done)]
+    public async Task Reorder_IntoOtherColumn_ReportsNothing(WorkStatus target)
+    {
+        using var db = new TestDatabase();
+        var id = await SeedTaskAsync(db, WorkStatus.PlannedPriority);
+
+        using var act = db.NewContext();
+        var rescheduled = await new TaskRepository(act).ReorderAsync(target, [id]);
+
+        Assert.Empty(rescheduled);
+    }
+
+    // Die eigentliche Aufgabe der Methode darf darüber nicht verloren gehen.
+    [Fact]
+    public async Task Reorder_AppliesPositionAndStatus()
+    {
+        using var db = new TestDatabase();
+        var a = await SeedTaskAsync(db, WorkStatus.Planned);
+        var b = await SeedTaskAsync(db, WorkStatus.Planned);
+
+        using (var act = db.NewContext())
+            await new TaskRepository(act).ReorderAsync(WorkStatus.Done, [b, a]);
+
+        using var assert = db.NewContext();
+        Assert.Equal(0, (await assert.Tasks.FindAsync(b))!.SortOrder);
+        Assert.Equal(1, (await assert.Tasks.FindAsync(a))!.SortOrder);
+        Assert.Equal(WorkStatus.Done, (await assert.Tasks.FindAsync(a))!.Status);
+    }
+
     // ── "Warten auf" ─────────────────────────────────────────────────────────────
     // Frisch ausgefüllt ruht der Task → "Pausiert". Aber nur beim Wechsel von leer auf
     // gefüllt: Wer trotz Warten schon anfängt (Status "In Arbeit" setzt), soll das dürfen.
