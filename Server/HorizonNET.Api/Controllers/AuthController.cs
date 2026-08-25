@@ -1,11 +1,16 @@
 using HorizonNET.Shared.Transfer.DTOs;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HorizonNET.Api.Controllers;
 
+// AllowAnonymous auf dem ganzen Controller: Login muss ohne Sitzung erreichbar sein,
+// Logout soll auch mit abgelaufener Sitzung nie fehlschlagen, und Me beantwortet die
+// Frage "bin ich eingeloggt?" selbst mit 200 oder 401.
 [ApiController]
 [Route("api/auth")]
+[AllowAnonymous]
 public class AuthController(SignInManager<IdentityUser> signInManager) : ControllerBase
 {
     [HttpPost("login")]

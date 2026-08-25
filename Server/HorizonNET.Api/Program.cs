@@ -5,6 +5,7 @@ using HorizonNET.Data;
 using HorizonNET.Data.Repositories;
 using HorizonNET.Domain.Interfaces;
 using HorizonNET.Shared.Transfer.DTOs;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
@@ -85,6 +86,14 @@ builder.Services.AddScoped<GoogleCalendarService>();
 builder.Services.AddIdentity<IdentityUser, IdentityRole>()
     .AddEntityFrameworkStores<AppDbContext>();
 
+// Fallback-Policy: Jeder Endpunkt OHNE eigene Auth-Angabe verlangt einen angemeldeten
+// Benutzer. So ist "geschützt" der Standard und Ausnahmen ([AllowAnonymous]) sind
+// explizit – ein vergessenes [Authorize] kann kein Loch mehr reißen.
+builder.Services.AddAuthorization(options =>
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build());
+
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.Cookie.Name = "HorizonNET.Auth";
@@ -115,11 +124,12 @@ var app = builder.Build();
 // eine vollständige, anonym lesbare Beschreibung der gesamten API (Phase 12a).
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    // AllowAnonymous wegen der Fallback-Policy – sonst wäre Scalar nur mit Cookie nutzbar.
+    app.MapOpenApi().AllowAnonymous();
     app.MapScalarApiReference(options =>
     {
         options.Title = "HorizonNET API";
-    });
+    }).AllowAnonymous();
 }
 else
 {
@@ -147,7 +157,7 @@ app.MapGet("/api/version", () =>
         ? File.GetLastWriteTimeUtc(asm.Location)
         : null;
     return Results.Ok(new AppVersionDto(version, buildUtc));
-});
+}).AllowAnonymous();
 
 using (var scope = app.Services.CreateScope())
 {

@@ -1,5 +1,6 @@
 using HorizonNET.Api.Services;
 using HorizonNET.Shared.Transfer.DTOs;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HorizonNET.Api.Controllers;
@@ -13,7 +14,10 @@ public class GoogleController(GoogleCalendarService google, IConfiguration confi
     public IActionResult Connect() => Redirect(google.BuildAuthorizationUrl(RedirectUri()));
 
     // Rückleitung von Google: Code gegen Tokens tauschen, dann zurück zur Einstellungsseite.
+    // Anonym, weil der Browser hier per Redirect von accounts.google.com landet – wäre die
+    // Sitzung genau dann abgelaufen, würde der ganze OAuth-Flow an einem 401 sterben.
     [HttpGet("callback")]
+    [AllowAnonymous]
     public async Task<IActionResult> Callback(string? code, string? error)
     {
         if (!string.IsNullOrEmpty(error) || string.IsNullOrEmpty(code))
