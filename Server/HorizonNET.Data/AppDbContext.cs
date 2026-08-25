@@ -1,6 +1,8 @@
 using HorizonNET.Domain.Entities;
 using HorizonNET.Shared.Transfer.Enums;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace HorizonNET.Data;
@@ -12,13 +14,21 @@ namespace HorizonNET.Data;
 // Hinweis: EF cachet das Modell je Kontext-Typ, der Konverter hält also den beim ersten
 // Modellaufbau erzeugten Protector fest. In der App unkritisch (DataProtection ist ein
 // Singleton); in Tests deshalb einen gemeinsamen Provider verwenden (siehe TestDatabase).
+//
+// IdentityDbContext statt DbContext: bringt die Benutzer-Tabellen (AspNetUsers etc.) für
+// die Cookie-Auth mit. Das Standard-IdentityUser reicht – Einzelnutzer, keine Zusatzfelder,
+// und die Datentabellen bekommen bewusst KEINE UserId-Spalte.
 public class AppDbContext(DbContextOptions<AppDbContext> options, IDataProtectionProvider dataProtection)
-    : DbContext(options)
+    : IdentityDbContext<IdentityUser>(options)
 {
     #region Creation
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // Zuerst die Identity-Konfiguration (Schlüssel, Indizes der AspNet*-Tabellen) –
+        // ohne diesen Aufruf scheitert der Modellaufbau.
+        base.OnModelCreating(modelBuilder);
+
         modelBuilder.Entity<Workspace>(e =>
         {
             e.HasKey(w => w.Id);

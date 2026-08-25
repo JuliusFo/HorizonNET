@@ -12,9 +12,16 @@
     Der ursprüngliche Plan (1.0.0 nach Phase 9, siehe docs/konzept-versionierung.md) wurde
     bewusst verworfen – die 1.0 kommt später. Minor zählt weiter hoch: nach 0.11.0 folgt
     0.12.0, nicht 0.2.
+
+    LÜCKE 0.12.0–0.15.0: Die Phasen 12 (Kleinere UI/UX-Verbesserungen), 13 (Notizen in
+    Ordnern und Kommentare), 14 (Journal) und 15 (Refactoring) sind abgeschlossen, ohne
+    dass diese Zeile mitgezogen wurde. Statt vier Nummern nachzutragen, die nie eine
+    gebaute Assembly getragen hat, springt die Version nach Phase 16 direkt auf 0.16.0 –
+    die Regel "Minor = Phasennummer" ist damit wieder gültig und bleibt die einzige, die
+    man sich merken muss.
   -->
   <PropertyGroup>
-    <Version>0.11.0</Version>
+    <Version>0.16.0</Version>
   </PropertyGroup>
 
 </Project>

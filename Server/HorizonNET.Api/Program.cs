@@ -5,6 +5,7 @@ using HorizonNET.Data;
 using HorizonNET.Data.Repositories;
 using HorizonNET.Domain.Interfaces;
 using HorizonNET.Shared.Transfer.DTOs;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 
@@ -22,7 +23,11 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
             builder.Configuration["Cors:AllowedOrigin"]
                 ?? throw new InvalidOperationException("Cors:AllowedOrigin ist nicht konfiguriert."))
           .AllowAnyHeader()
-          .AllowAnyMethod()));
+          .AllowAnyMethod()
+          // Nötig, damit der Browser das Auth-Cookie bei Cross-Origin-Aufrufen mitschickt
+          // (Client und API laufen lokal auf verschiedenen Ports). Entfällt mit dem
+          // Same-Origin-Hosting beim Livegang.
+          .AllowCredentials()));
 
 // Eingebaute .NET 10 OpenAPI-Unterstützung
 builder.Services.AddOpenApi();
@@ -74,6 +79,36 @@ builder.Services.AddScoped<IJournalTemplateRepository, JournalTemplateRepository
 // Google-Kalender-Anbindung (OAuth + späterer Calendar-Zugriff)
 builder.Services.AddScoped<GoogleCalendarService>();
 
+// Authentifizierung: ein lokales Benutzerkonto (ASP.NET Core Identity) mit Cookie-Sitzung.
+// Das volle AddIdentity statt AddIdentityCore, weil es Cookie-Schemata und
+// Security-Stamp-Validierung komplett verdrahtet; Rollen bleiben schlicht ungenutzt.
+builder.Services.AddIdentity<IdentityUser, IdentityRole>()
+    .AddEntityFrameworkStores<AppDbContext>();
+
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.Cookie.Name = "HorizonNET.Auth";
+    // HttpOnly ist Standard (JS kommt nicht an den Cookie); Secure erzwingen, weil die
+    // API ohnehin nur über HTTPS läuft – lokal wie hinter dem Tunnel.
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.ExpireTimeSpan = TimeSpan.FromDays(14);
+    options.SlidingExpiration = true;
+
+    // Identity ist auf Websites mit Login-SEITE ausgelegt und würde per 302 dorthin
+    // umleiten. Für eine API sind Statuscodes richtig – der Blazor-Client reagiert
+    // auf 401 selbst (Paket c).
+    options.Events.OnRedirectToLogin = ctx =>
+    {
+        ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return Task.CompletedTask;
+    };
+    options.Events.OnRedirectToAccessDenied = ctx =>
+    {
+        ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return Task.CompletedTask;
+    };
+});
+
 var app = builder.Build();
 
 // OpenAPI-JSON-Endpunkt und Scalar-UI – nur in der Entwicklung. In Produktion wäre das
@@ -95,6 +130,7 @@ else
 
 app.UseCors();
 app.UseHttpsRedirection();
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
@@ -132,6 +168,34 @@ using (var scope = app.Services.CreateScope())
 
     // Ausstehende Migrationen beim Start automatisch anwenden
     db.Database.Migrate();
+
+    // Benutzer-Seed: Solange kein Konto existiert, wird es aus der Konfiguration angelegt
+    // (Auth:Username + Auth:InitialPassword, lokal in appsettings.Secrets.json). Das
+    // Passwort wird nur für diesen einen Seed gelesen – existiert das Konto, ist ein
+    // späterer Wert in der Konfiguration wirkungslos.
+    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
+    if (!userManager.Users.Any())
+    {
+        var username = app.Configuration["Auth:Username"];
+        var password = app.Configuration["Auth:InitialPassword"];
+
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+        {
+            // Kein Abbruch: Die API läuft weiter, nur einloggen kann sich niemand,
+            // bis die Werte gesetzt sind und der nächste Start den Seed nachholt.
+            app.Logger.LogWarning(
+                "Kein Benutzerkonto vorhanden und Auth:Username/Auth:InitialPassword nicht konfiguriert – Login ist bis zum nächsten Start mit gesetzten Werten nicht möglich.");
+        }
+        else
+        {
+            var created = await userManager.CreateAsync(new IdentityUser(username), password);
+            if (!created.Succeeded)
+                throw new InvalidOperationException("Benutzer-Seed fehlgeschlagen: "
+                    + string.Join("; ", created.Errors.Select(e => e.Description)));
+
+            app.Logger.LogInformation("Benutzerkonto '{Username}' angelegt.", username);
+        }
+    }
 }
 
 app.Run();
