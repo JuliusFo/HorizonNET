@@ -34,6 +34,22 @@ public partial class ApiService
 
     public Task<bool> LogoutAsync() => PostAsync("api/auth/logout");
 
+    // null = geändert; sonst die anzeigbare Fehlermeldung aus der API
+    // (falsches aktuelles Passwort, Passwort-Regeln).
+    public async Task<string?> ChangePasswordAsync(string currentPassword, string newPassword)
+    {
+        var response = await http.PutAsJsonAsync("api/auth/password",
+            new ChangePasswordDto(currentPassword, newPassword));
+
+        if (response.IsSuccessStatusCode)
+            return null;
+
+        // BadRequest(string) kommt von MVC als text/plain (StringOutputFormatter),
+        // deshalb kein JSON-Parsen.
+        var text = await response.Content.ReadAsStringAsync();
+        return string.IsNullOrWhiteSpace(text) ? "Passwort konnte nicht geändert werden." : text;
+    }
+
     // Wer bin ich laut Cookie? null = keine (gültige) Sitzung.
     public async Task<AuthUserDto?> GetCurrentUserAsync()
     {

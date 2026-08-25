@@ -6,6 +6,7 @@
 @inject JournalLockState JournalLock
 @inject ToastService Toast
 @inject ConfirmService Confirm
+@inject AuthState Auth
 
 <PageTitle>Einstellungen – HorizonNET</PageTitle>
 
@@ -39,6 +40,45 @@
         <div class="form-text">
             Zeigt bei Tasks mit Sub-Tasks zunächst nur den Fortschritt (z. B. 2/5).
             Je Task lässt sich das mit dem Pfeil vor dem Titel umschalten.
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3 settings-card">
+    <div class="card-header fw-semibold">Konto</div>
+    <div class="card-body">
+        <p class="text-muted">
+            Angemeldet als <strong>@Auth.Username</strong>. Das Passwort gilt für die
+            gesamte App – die laufende Sitzung bleibt nach der Änderung angemeldet.
+        </p>
+
+        <div style="max-width: 22rem;">
+            <label for="pwCurrent" class="form-label">Aktuelles Passwort</label>
+            <input id="pwCurrent" type="password" class="form-control" autocomplete="current-password"
+                   @bind="currentPassword" @bind:event="oninput" disabled="@passwordBusy" />
+
+            <label for="pwNew" class="form-label mt-3">Neues Passwort</label>
+            <input id="pwNew" type="password" class="form-control" autocomplete="new-password"
+                   @bind="newPassword" @bind:event="oninput" disabled="@passwordBusy" />
+
+            <label for="pwRepeat" class="form-label mt-3">Neues Passwort wiederholen</label>
+            <input id="pwRepeat" type="password" class="form-control" autocomplete="new-password"
+                   @bind="newPasswordRepeat" @bind:event="oninput" disabled="@passwordBusy" />
+
+            @if (RepeatMismatch)
+            {
+                <div class="form-text text-danger">Die Wiederholung stimmt nicht überein.</div>
+            }
+
+            @if (passwordError is not null)
+            {
+                <div class="alert alert-danger py-2 mt-3 mb-0" role="alert">@passwordError</div>
+            }
+
+            <button type="button" class="btn btn-primary mt-3" @onclick="ChangePasswordAsync"
+                    disabled="@(!CanChangePassword)">
+                @(passwordBusy ? "Ändern…" : "Passwort ändern")
+            </button>
         </div>
     </div>
 </div>
@@ -217,6 +257,39 @@
     private GoogleStatusDto? status;
     private bool busy;
     private string newPin = string.Empty;
+
+    // ── Passwort ändern ──────────────────────────────────────────────────────────
+
+    private string currentPassword = string.Empty;
+    private string newPassword = string.Empty;
+    private string newPasswordRepeat = string.Empty;
+    private string? passwordError;
+    private bool passwordBusy;
+
+    // Erst anmeckern, wenn die Wiederholung vollständig sein könnte – nicht beim Tippen
+    // des ersten Zeichens.
+    private bool RepeatMismatch =>
+        newPasswordRepeat.Length >= newPassword.Length && newPassword != newPasswordRepeat;
+
+    private bool CanChangePassword =>
+        !passwordBusy
+        && currentPassword.Length > 0
+        && newPassword.Length > 0
+        && newPassword == newPasswordRepeat;
+
+    private async Task ChangePasswordAsync()
+    {
+        if (!CanChangePassword) return;
+
+        passwordBusy = true;
+        passwordError = await Api.ChangePasswordAsync(currentPassword, newPassword);
+        passwordBusy = false;
+
+        if (passwordError is not null) return;
+
+        currentPassword = newPassword = newPasswordRepeat = string.Empty;
+        Toast.ShowSuccess("Passwort geändert.");
+    }
 
     // Vorlaufzeit der Google-Erinnerung; null = keine. Liegt serverseitig, weil die API
     // sie beim Spiegeln braucht – anders als die übrigen Einstellungen auf dieser Seite.
