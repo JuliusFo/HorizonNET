@@ -4,10 +4,12 @@ using Microsoft.AspNetCore.DataProtection;
 using HorizonNET.Data;
 using HorizonNET.Data.Repositories;
 using HorizonNET.Domain.Interfaces;
+using System.Threading.RateLimiting;
 using HorizonNET.Shared.Transfer.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 
@@ -74,6 +76,25 @@ builder.Services.AddScoped<GoogleCalendarService>();
 // Security-Stamp-Validierung komplett verdrahtet; Rollen bleiben schlicht ungenutzt.
 builder.Services.AddIdentity<IdentityUser, IdentityRole>()
     .AddEntityFrameworkStores<AppDbContext>();
+
+// Bremse für den Login: Er ist der einzige anonym erreichbare Endpunkt mit
+// Passwort-Prüfung und damit das natürliche Ziel für Durchprobieren. 5 Versuche pro
+// Minute und Absender-IP – Identitys Konto-Lockout (nach 5 Fehlversuchen) bleibt als
+// zweite Schicht dahinter. Dank ForwardedHeaders ist die IP hinter dem Tunnel die des
+// echten Besuchers, nicht die von cloudflared.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("login", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unbekannt",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+});
 
 // Fallback-Policy: Jeder Endpunkt OHNE eigene Auth-Angabe verlangt einen angemeldeten
 // Benutzer. So ist "geschützt" der Standard und Ausnahmen ([AllowAnonymous]) sind
@@ -150,6 +171,7 @@ app.UseHttpsRedirection();
 app.UseBlazorFrameworkFiles();
 app.UseStaticFiles();
 
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

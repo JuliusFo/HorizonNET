@@ -57,6 +57,7 @@
             LoginOutcome.Success          => null,
             LoginOutcome.WrongCredentials => "Benutzername oder Passwort ist falsch.",
             LoginOutcome.LockedOut        => "Zu viele Fehlversuche – bitte in ein paar Minuten erneut.",
+            LoginOutcome.RateLimited      => "Zu viele Versuche – bitte eine Minute warten.",
             _                             => "Anmeldung fehlgeschlagen – ist der Server erreichbar?"
         };
         password = string.Empty;

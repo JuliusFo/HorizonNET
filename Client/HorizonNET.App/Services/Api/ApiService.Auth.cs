@@ -11,6 +11,7 @@ public enum LoginOutcome
     Success,
     WrongCredentials,
     LockedOut,
+    RateLimited,
     Error
 }
 
@@ -25,10 +26,11 @@ public partial class ApiService
         var response = await http.PostAsJsonAsync("api/auth/login", new LoginRequestDto(username, password));
         return response.StatusCode switch
         {
-            HttpStatusCode.OK           => LoginOutcome.Success,
-            HttpStatusCode.Unauthorized => LoginOutcome.WrongCredentials,
-            HttpStatusCode.Locked       => LoginOutcome.LockedOut,
-            _                           => LoginOutcome.Error
+            HttpStatusCode.OK              => LoginOutcome.Success,
+            HttpStatusCode.Unauthorized    => LoginOutcome.WrongCredentials,
+            HttpStatusCode.Locked          => LoginOutcome.LockedOut,
+            HttpStatusCode.TooManyRequests => LoginOutcome.RateLimited,
+            _                              => LoginOutcome.Error
         };
     }
 
