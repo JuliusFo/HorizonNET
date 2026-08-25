@@ -20,18 +20,25 @@ builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped<ConfirmService>();
 
 // HttpClient für den ApiService mit der konfigurierten Server-URL registrieren.
-// Ein DelegatingHandler meldet fehlgeschlagene Aufrufe zentral als Toast.
+// Kette: ApiErrorHandler (Fehler → Toast, 401 → Login-Maske) →
+// ApiCredentialsHandler (Auth-Cookie mitschicken) → Browser-fetch.
+// AuthState kommt als späte Func in den Handler, weil er selbst am HttpClient hängt.
 builder.Services.AddScoped(sp =>
 {
-    var handler = new ApiErrorHandler(sp.GetRequiredService<ToastService>())
+    var handler = new ApiErrorHandler(
+        sp.GetRequiredService<ToastService>(),
+        () => sp.GetRequiredService<AuthState>())
     {
-        InnerHandler = new HttpClientHandler()
+        InnerHandler = new ApiCredentialsHandler { InnerHandler = new HttpClientHandler() }
     };
     return new HttpClient(handler) { BaseAddress = new Uri(apiBaseUrl) };
 });
 
 // ApiService für Dependency Injection registrieren
 builder.Services.AddScoped<ApiService>();
+
+// Angemeldet-Zustand (Cookie-Sitzung); das MainLayout zeigt ohne Sitzung die Login-Maske
+builder.Services.AddScoped<AuthState>();
 
 // Radzen-Komponenten (u. a. für den Kalender-Scheduler)
 builder.Services.AddRadzenComponents();

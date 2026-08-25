@@ -1,41 +1,69 @@
 @inherits LayoutComponentBase
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+@implements IDisposable
 
-    <main>
-        <div class="top-row px-4">
-            <button class="btn btn-sm btn-outline-secondary me-auto search-btn" @onclick="OpenSearchAsync"
-                    title="Globale Suche (Strg+K)">
-                🔍 Suchen <kbd>Strg</kbd><span class="kbd-plus">+</span><kbd>K</kbd>
-            </button>
-            <RunningTimerIndicator />
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+@if (!Auth.Initialized)
+{
+    @* Sitzungsprüfung läuft – bewusst leer, um weder App noch Login aufblitzen zu lassen. *@
+}
+else if (!Auth.IsLoggedIn)
+{
+    <LoginGate />
+    <ToastHost />
+}
+else
+{
+    <div class="page">
+        <div class="sidebar">
+            <NavMenu />
         </div>
 
-        <article class="content px-4">
-            @Body
-        </article>
-    </main>
-</div>
+        <main>
+            <div class="top-row px-4">
+                <button class="btn btn-sm btn-outline-secondary me-auto search-btn" @onclick="OpenSearchAsync"
+                        title="Globale Suche (Strg+K)">
+                    🔍 Suchen <kbd>Strg</kbd><span class="kbd-plus">+</span><kbd>K</kbd>
+                </button>
+                <RunningTimerIndicator />
+                <button class="btn btn-sm btn-link" @onclick="Auth.LogoutAsync" title="Abmelden (@Auth.Username)">
+                    Abmelden
+                </button>
+            </div>
 
-<ToastHost />
-<ConfirmDialogHost />
-<SearchPalette @ref="searchPalette" />
+            <article class="content px-4">
+                @Body
+            </article>
+        </main>
+    </div>
 
-@* Host für die Radzen-Dialoge. Ohne ihn bleiben die Toolbar-Buttons des RadzenHtmlEditor,
-   die einen Dialog öffnen (Link, Bild, Farbe), folgenlos. *@
-<RadzenComponents />
+    <ToastHost />
+    <ConfirmDialogHost />
+    <SearchPalette @ref="searchPalette" />
+
+    @* Host für die Radzen-Dialoge. Ohne ihn bleiben die Toolbar-Buttons des RadzenHtmlEditor,
+       die einen Dialog öffnen (Link, Bild, Farbe), folgenlos. *@
+    <RadzenComponents />
+}
 
 @inject VersionState Version
+@inject AuthState Auth
 
 @code {
     private SearchPalette? searchPalette;
 
-    // Beim App-Start die API-Version prüfen und bei Versatz zum Neuladen auffordern.
-    // Bewusst nicht awaiten, damit die GET-Anfrage das Layout-Rendern nicht blockiert.
-    protected override void OnInitialized() => _ = Version.CheckForMismatchAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        // Login/Logout/Sitzungsablauf schalten zwischen App und Login-Maske um.
+        Auth.Changed += OnAuthChanged;
+        await Auth.InitializeAsync();
+
+        // API-Version prüfen und bei Versatz zum Neuladen auffordern (Endpunkt ist anonym).
+        // Bewusst nicht awaiten, damit die GET-Anfrage das Layout-Rendern nicht blockiert.
+        _ = Version.CheckForMismatchAsync();
+    }
+
+    private void OnAuthChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Auth.Changed -= OnAuthChanged;
 
     private async Task OpenSearchAsync()
     {

@@ -1,0 +1,65 @@
+@inject AuthState Auth
+
+@* Vollbild-Login. Wird vom MainLayout anstelle der gesamten App gerendert,
+   solange keine Sitzung besteht – Seiten und Navigation existieren dann nicht. *@
+<div class="login-backdrop">
+    <form class="login-card" @onsubmit="SubmitAsync" @onsubmit:preventDefault>
+        <h1>HorizonNET</h1>
+
+        <label class="form-label" for="login-username">Benutzername</label>
+        <input id="login-username" class="form-control" @ref="usernameInput"
+               @bind="username" @bind:event="oninput"
+               autocomplete="username" disabled="@busy" />
+
+        <label class="form-label mt-3" for="login-password">Passwort</label>
+        <input id="login-password" type="password" class="form-control"
+               @bind="password" @bind:event="oninput"
+               autocomplete="current-password" disabled="@busy" />
+
+        @if (error is not null)
+        {
+            <p class="login-error" role="alert">@error</p>
+        }
+
+        <button type="submit" class="btn btn-primary w-100 mt-4"
+                disabled="@(busy || string.IsNullOrWhiteSpace(username) || string.IsNullOrEmpty(password))">
+            @(busy ? "Anmelden…" : "Anmelden")
+        </button>
+    </form>
+</div>
+
+@code {
+    private ElementReference usernameInput;
+    private string username = string.Empty;
+    private string password = string.Empty;
+    private string? error;
+    private bool busy;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await usernameInput.FocusAsync();
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (busy || string.IsNullOrWhiteSpace(username) || string.IsNullOrEmpty(password))
+            return;
+
+        busy = true;
+        error = null;
+
+        var outcome = await Auth.LoginAsync(username.Trim(), password);
+
+        // Bei Erfolg verschwindet diese Komponente mit dem nächsten Layout-Render.
+        error = outcome switch
+        {
+            LoginOutcome.Success          => null,
+            LoginOutcome.WrongCredentials => "Benutzername oder Passwort ist falsch.",
+            LoginOutcome.LockedOut        => "Zu viele Fehlversuche – bitte in ein paar Minuten erneut.",
+            _                             => "Anmeldung fehlgeschlagen – ist der Server erreichbar?"
+        };
+        password = string.Empty;
+        busy = false;
+    }
+}

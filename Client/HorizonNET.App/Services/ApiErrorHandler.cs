@@ -13,12 +13,21 @@ namespace HorizonNET.App.Services;
 //    damit GetFromJsonAsync sauber null liefert statt zu werfen.
 //  • POST/PUT/DELETE: bei Verbindungsabbruch wird 503 zurückgegeben, damit die
 //    ApiService-Methoden regulär null/false liefern.
-public class ApiErrorHandler(ToastService toast) : DelegatingHandler
+//
+// auth kommt als Func, nicht als Instanz: Der Handler wird beim Bau des HttpClient
+// erzeugt, AuthState hängt aber (über den ApiService) selbst am HttpClient – die
+// späte Auflösung durchbricht diesen Kreis.
+public class ApiErrorHandler(ToastService toast, Func<AuthState> auth) : DelegatingHandler
 {
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var isGet = request.Method == HttpMethod.Get;
+
+        // Die Auth-Endpunkte werten ihre Statuscodes selbst aus (401 heißt dort
+        // "falsches Passwort" bzw. "keine Sitzung", nicht "Fehler") – nichts anfassen.
+        var isAuthCall = request.RequestUri?.AbsolutePath
+            .StartsWith("/api/auth/", StringComparison.OrdinalIgnoreCase) == true;
 
         HttpResponseMessage response;
         try
@@ -34,8 +43,24 @@ public class ApiErrorHandler(ToastService toast) : DelegatingHandler
                 : new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) { RequestMessage = request };
         }
 
-        if (response.IsSuccessStatusCode)
+        if (isAuthCall || response.IsSuccessStatusCode)
             return response;
+
+        // Sitzung abgelaufen (oder nie angemeldet): Login-Maske statt Fehlertoast.
+        // Bei parallel laufenden Aufrufen meldet nur der erste die abgelaufene Sitzung.
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            var authState = auth();
+            if (authState.IsLoggedIn)
+                toast.ShowError("Sitzung abgelaufen – bitte neu anmelden.");
+            authState.NotifySessionExpired();
+
+            if (!isGet)
+                return response;
+
+            response.Dispose();
+            return EmptyJson(request);
+        }
 
         // Server erreichbar, aber Fehlerstatus.
         if (isGet)
