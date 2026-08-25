@@ -6,6 +6,7 @@ using HorizonNET.Data.Repositories;
 using HorizonNET.Domain.Interfaces;
 using HorizonNET.Shared.Transfer.DTOs;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
@@ -107,6 +108,21 @@ builder.Services.ConfigureApplicationCookie(options =>
 });
 
 var app = builder.Build();
+
+// Hinter dem Cloudflare Tunnel erreicht jede Anfrage die API als "http von localhost" –
+// erst die X-Forwarded-Header tragen, wie der Besucher wirklich kam (https, Domain).
+// Ohne diese Middleware baut die API falsche absolute URLs (Google-Redirect-URI,
+// OAuth-Rücksprung) und hielte die Verbindung für unverschlüsselt.
+//
+// Ganz vorn in der Pipeline, damit HTTPS-Redirect, HSTS und Cookies schon den korrigierten
+// Request sehen. Vertraut wird per Voreinstellung nur Loopback-Absendern – genau dort
+// läuft cloudflared; von fremden Adressen werden die Header ignoriert.
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor
+                     | ForwardedHeaders.XForwardedProto
+                     | ForwardedHeaders.XForwardedHost
+});
 
 // OpenAPI-JSON-Endpunkt und Scalar-UI – nur in der Entwicklung. In Produktion wäre das
 // eine vollständige, anonym lesbare Beschreibung der gesamten API (Phase 12a).
