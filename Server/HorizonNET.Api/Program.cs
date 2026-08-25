@@ -145,6 +145,42 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
                      | ForwardedHeaders.XForwardedHost
 });
 
+// Sicherheits-Header an jeder Antwort (auch statischen Dateien – deshalb VOR
+// UseStaticFiles). Die CSP ist auf das zugeschnitten, was die App wirklich lädt:
+//  • 'unsafe-inline' bei script-src ist von Blazor erzwungen – der Build injiziert die
+//    Importmap als Inline-Skript in die index.html. Der eigentliche Gewinn bleibt:
+//    Nachladen von fremden Hosts und Exfiltration per fetch/img sind blockiert
+//    (connect-src/img-src ohne externe Quellen).
+//  • data:/blob: bei img/media für Notiz-Thumbnails, Zeichnungen und Sounds.
+//  • frame-ancestors 'none' (+ X-Frame-Options): niemand bettet die App in Iframes ein.
+// Scalar (nur Dev) bringt eigene Inline-Ressourcen mit und ist ausgenommen.
+app.Use(async (context, next) =>
+{
+    var headers = context.Response.Headers;
+    headers["X-Content-Type-Options"] = "nosniff";
+    headers["Referrer-Policy"] = "no-referrer";
+    headers["X-Frame-Options"] = "DENY";
+
+    if (!context.Request.Path.StartsWithSegments("/scalar")
+        && !context.Request.Path.StartsWithSegments("/openapi"))
+    {
+        headers["Content-Security-Policy"] =
+            "default-src 'self'; " +
+            "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; " +
+            "style-src 'self' 'unsafe-inline'; " +
+            "img-src 'self' data: blob:; " +
+            "font-src 'self' data:; " +
+            "connect-src 'self'; " +
+            "media-src 'self' blob:; " +
+            "object-src 'none'; " +
+            "frame-ancestors 'none'; " +
+            "base-uri 'self'; " +
+            "form-action 'self'";
+    }
+
+    await next();
+});
+
 // OpenAPI-JSON-Endpunkt und Scalar-UI – nur in der Entwicklung. In Produktion wäre das
 // eine vollständige, anonym lesbare Beschreibung der gesamten API (Phase 12a).
 if (app.Environment.IsDevelopment())
@@ -166,14 +202,22 @@ else
 app.UseHttpsRedirection();
 
 // Same-Origin-Hosting: Diese API liefert auch den Blazor-WASM-Client aus (ein Origin für
-// App + Daten – deshalb gibt es hier kein CORS). Statische Dateien bewusst VOR der Auth:
-// Die App-Hülle ist öffentlich, geschützt sind die Daten dahinter.
-app.UseBlazorFrameworkFiles();
+// App + Daten – deshalb gibt es hier kein CORS). Die App-Hülle ist öffentlich, geschützt
+// sind die Daten dahinter. Kein UseBlazorFrameworkFiles: Das ist der Vor-Fingerprinting-Weg
+// und kollidiert mit den MapStaticAssets-Endpunkten (Endpoint gesetzt, aber im Branch nie
+// ausgeführt → 500 auf _framework-Dateien). MapStaticAssets (unten) bedient alles –
+// _framework, gehashte Modul-Namen aus der Importmap, Kompression, Cache-Header.
 app.UseStaticFiles();
 
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Fingerprint-Assets (z. B. js/shortcuts.{hash}.js aus der Importmap): UseStaticFiles
+// kennt nur die Originalnamen, erst diese Endpunkte bedienen die gehashten – inklusive
+// Brotli-Kompression und Immutable-Cache-Headern. AllowAnonymous wegen der Fallback-Policy.
+app.MapStaticAssets().AllowAnonymous();
+
 app.MapControllers();
 
 // Deep-Links und F5 auf Client-Routen (/settings, /journal/…) liefern die App-Hülle;
