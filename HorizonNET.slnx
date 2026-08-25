@@ -1,6 +1,15 @@
 <Solution>
-  <Folder Name="/Solution Items/">
-    <File Path="Client/HorizonNET-Client.slnx" />
-    <File Path="Server/HorizonNET-Server.slnx" />
+  <Folder Name="/Client/">
+    <Project Path="Client/HorizonNET.App/HorizonNET.App.csproj" />
+    <Project Path="Client/HorizonNET.Client.Tests/HorizonNET.Client.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Server/">
+    <Project Path="Server/HorizonNET.Api/HorizonNET.Api.csproj" />
+    <Project Path="Server/HorizonNET.Data/HorizonNET.Data.csproj" />
+    <Project Path="Server/HorizonNET.Domain/HorizonNET.Domain.csproj" />
+    <Project Path="Server/HorizonNET.Server.Tests/HorizonNET.Server.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Shared/">
+    <Project Path="Shared/HorizonNET.Shared.Transfer/HorizonNET.Shared.Transfer.csproj" />
   </Folder>
 </Solution>

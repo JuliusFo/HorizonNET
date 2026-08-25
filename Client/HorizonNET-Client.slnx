@@ -1,5 +1,0 @@
-<Solution>
-  <Project Path="../Shared/HorizonNET.Shared.Transfer/HorizonNET.Shared.Transfer.csproj" />
-  <Project Path="HorizonNET.App/HorizonNET.App.csproj" />
-  <Project Path="HorizonNET.Tests/HorizonNET.Tests.csproj" />
-</Solution>

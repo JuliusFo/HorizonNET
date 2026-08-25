@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
-namespace HorizonNET.Tests;
+namespace HorizonNET.Server.Tests;
 
 // Eine isolierte In-Memory-Datenbank je Test. SQLite statt des EF-InMemory-Providers,
 // damit die Tests echtes relationales Verhalten prüfen: Fremdschlüssel, Cascade-Delete

@@ -8,7 +8,7 @@ using HorizonNET.Shared.Transfer.Enums;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 
-namespace HorizonNET.Tests;
+namespace HorizonNET.Server.Tests;
 
 // Der TasksController direkt instanziiert – kein TestServer, kein HTTP. Geprüft wird
 // die Schicht, die es sonst nirgends gibt: was der Controller aus einer Anfrage macht,

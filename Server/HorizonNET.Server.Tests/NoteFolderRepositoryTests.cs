@@ -2,7 +2,7 @@ using HorizonNET.Data.Repositories;
 using HorizonNET.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
-namespace HorizonNET.Tests;
+namespace HorizonNET.Server.Tests;
 
 // Die Regeln der manuellen Notiz-Ordner: Zyklen verhindern und beim Löschen die
 // Unterordner mitnehmen, ohne die Notizen darin anzutasten.

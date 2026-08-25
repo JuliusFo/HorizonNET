@@ -1,6 +1,6 @@
 using HorizonNET.App.Services;
 
-namespace HorizonNET.Tests;
+namespace HorizonNET.Client.Tests;
 
 // Die Versatz-Regel zwischen Client- und API-Version. Verglichen wird nur die Nummer,
 // nicht der angehängte Commit – sonst meldet sich der Toast beim Entwickeln dauerhaft.

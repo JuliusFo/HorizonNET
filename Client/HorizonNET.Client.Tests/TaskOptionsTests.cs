@@ -1,7 +1,7 @@
 using HorizonNET.App.Components;
 using HorizonNET.Shared.Transfer.DTOs;
 
-namespace HorizonNET.Tests;
+namespace HorizonNET.Client.Tests;
 
 // Aufbereitung der Tasks für die Auswahllisten im Notiz- und Zeichnungs-Editor.
 // Ein Dropdown kann keine Hierarchie zeigen: Die Liste ist flach, und die Zugehörigkeit

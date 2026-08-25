@@ -1,6 +1,6 @@
 using HorizonNET.Shared.Transfer;
 
-namespace HorizonNET.Tests;
+namespace HorizonNET.Server.Tests;
 
 // Die Vererbungsregel der Erinnerung steckt in einer einzigen nullable Spalte, deren
 // Bedeutung man ihr nicht ansieht. Diese Tests halten sie fest – vor allem die beiden

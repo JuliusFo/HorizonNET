@@ -1,6 +1,6 @@
 using HorizonNET.Shared.Transfer;
 
-namespace HorizonNET.Tests;
+namespace HorizonNET.Server.Tests;
 
 // Die HTML→Klartext-Umwandlung aus Shared. Sie hat zwei Nutzer, die sich denselben Text
 // teilen sollen: die Vorschau in der Notizliste und die Suche (Notizen wie Journal).

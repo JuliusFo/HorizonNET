@@ -3,7 +3,7 @@ using HorizonNET.Domain.Entities;
 using HorizonNET.Shared.Transfer.Enums;
 using Microsoft.EntityFrameworkCore;
 
-namespace HorizonNET.Tests;
+namespace HorizonNET.Server.Tests;
 
 // Die Geschäftsregeln des TaskRepository. Bewusst gegen echtes SQLite (siehe TestDatabase),
 // weil hier Fremdschlüssel, Cascade und Soft-Delete-Filter mitspielen. Jeder Test seedet,

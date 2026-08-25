@@ -2,7 +2,7 @@ using HorizonNET.Data.Repositories;
 using HorizonNET.Domain.Entities;
 using HorizonNET.Shared.Transfer.Enums;
 
-namespace HorizonNET.Tests;
+namespace HorizonNET.Server.Tests;
 
 // Die Notizsuche der globalen Palette (Strg+K). Notizen speichern HTML; gesucht werden
 // soll aber, was der Nutzer SIEHT. Ein LIKE über die Content-Spalte konnte das nicht und

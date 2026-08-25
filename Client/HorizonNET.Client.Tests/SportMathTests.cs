@@ -2,7 +2,7 @@ using HorizonNET.App.Components;
 using HorizonNET.Shared.Transfer.DTOs;
 using HorizonNET.Shared.Transfer.Enums;
 
-namespace HorizonNET.Tests;
+namespace HorizonNET.Client.Tests;
 
 // Reine Kennzahlen-Logik der Sport-Auswertung. Kein DOM, kein DI – nur Rechnen, deshalb
 // gut als klassischer Unit-Test. Prüft die Regeln, die man der Zahl im Chart nicht ansieht.

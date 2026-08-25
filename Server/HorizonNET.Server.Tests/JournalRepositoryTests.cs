@@ -2,7 +2,7 @@ using HorizonNET.Data.Repositories;
 using HorizonNET.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
-namespace HorizonNET.Tests;
+namespace HorizonNET.Server.Tests;
 
 // Die Regeln des Journals: ein Eintrag pro Tag, mehrere Stimmungen darin, und der
 // Text liegt verschlüsselt in der Datenbank. Letzteres sieht man einer Spalte nicht

@@ -1,6 +1,6 @@
 using HorizonNET.Data.Repositories;
 
-namespace HorizonNET.Tests;
+namespace HorizonNET.Server.Tests;
 
 // Erste serverseitige Einstellung überhaupt: Alles andere liegt im localStorage des
 // Clients. Diese Tests halten das Verhalten fest, auf das sich der Google-Sync verlässt –

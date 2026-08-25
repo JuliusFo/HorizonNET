@@ -2,7 +2,7 @@ using HorizonNET.App.Components;
 using HorizonNET.Shared.Transfer.DTOs;
 using HorizonNET.Shared.Transfer.Enums;
 
-namespace HorizonNET.Tests;
+namespace HorizonNET.Client.Tests;
 
 // Einsortierung der Notizen in den abgeleiteten Ordnerbaum.
 public class NoteTreeBuilderTests

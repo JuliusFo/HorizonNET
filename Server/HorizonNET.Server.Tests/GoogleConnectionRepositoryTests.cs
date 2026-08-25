@@ -2,7 +2,7 @@ using HorizonNET.Data.Repositories;
 using HorizonNET.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
-namespace HorizonNET.Tests;
+namespace HorizonNET.Server.Tests;
 
 // Der Google-Refresh-Token ist ein langlebiger Schlüssel zum Google-Konto und liegt seit
 // Phase 12a verschlüsselt in der DB. Diese Tests halten zwei Dinge fest, die man einer

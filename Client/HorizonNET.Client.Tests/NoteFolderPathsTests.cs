@@ -1,7 +1,7 @@
 using HorizonNET.App.Components;
 using HorizonNET.Shared.Transfer.DTOs;
 
-namespace HorizonNET.Tests;
+namespace HorizonNET.Client.Tests;
 
 // Aufbereitung der Ordner für Auswahllisten: voller Pfad und – beim Verschieben –
 // das Ausblenden ungültiger Ziele.
