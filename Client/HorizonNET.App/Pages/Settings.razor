@@ -1,7 +1,7 @@
 @page "/settings"
 @inject SettingsState AppSettings
 @inject ApiService Api
-@inject IConfiguration Config
+@inject HttpClient Http
 @inject VersionState Version
 @inject JournalLockState JournalLock
 @inject ToastService Toast
@@ -295,9 +295,11 @@
     // sie beim Spiegeln braucht – anders als die übrigen Einstellungen auf dieser Seite.
     private int? reminderMinutes;
 
-    // Vollständige Navigation zur API (anderer Origin), die den OAuth-Flow startet.
+    // Vollständige Navigation (kein Blazor-Routing) zur API, die den OAuth-Flow startet.
+    // Aus der HttpClient-BaseAddress gebaut, damit es auch beim Standalone-Betrieb mit
+    // übersteuertem ApiSettings:BaseUrl auf dieselbe API zeigt wie alle Datenaufrufe.
     private string ConnectUrl =>
-        $"{(Config["ApiSettings:BaseUrl"] ?? string.Empty).TrimEnd('/')}/api/google/connect";
+        $"{Http.BaseAddress?.ToString().TrimEnd('/')}/api/google/connect";
 
     protected override async Task OnInitializedAsync()
     {

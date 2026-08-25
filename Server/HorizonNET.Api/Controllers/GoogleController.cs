@@ -7,7 +7,7 @@ namespace HorizonNET.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class GoogleController(GoogleCalendarService google, IConfiguration config) : ControllerBase
+public class GoogleController(GoogleCalendarService google) : ControllerBase
 {
     // Startet den OAuth-Flow: Weiterleitung zur Google-Zustimmungsseite.
     [HttpGet("connect")]
@@ -73,10 +73,9 @@ public class GoogleController(GoogleCalendarService google, IConfiguration confi
     // Muss exakt der in der Google Cloud Console registrierten Redirect-URI entsprechen.
     private string RedirectUri() => $"{Request.Scheme}://{Request.Host}/api/google/callback";
 
-    // Zurück zur Einstellungsseite des Clients (separater Origin), mit Status-Flag.
-    private string ClientReturnUrl(string status)
-    {
-        var clientUrl = (config["Cors:AllowedOrigin"] ?? string.Empty).TrimEnd('/');
-        return $"{clientUrl}/settings?google={status}";
-    }
+    // Zurück zur Einstellungsseite, mit Status-Flag. Seit dem Same-Origin-Hosting ist der
+    // Client-Origin dieser Origin – wie bei RedirectUri() aus dem Request gebaut, damit es
+    // je Umgebung (localhost, Domain hinter dem Tunnel) von selbst stimmt.
+    private string ClientReturnUrl(string status) =>
+        $"{Request.Scheme}://{Request.Host}/settings?google={status}";
 }

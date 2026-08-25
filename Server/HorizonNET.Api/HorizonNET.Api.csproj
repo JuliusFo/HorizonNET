@@ -18,12 +18,17 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Scalar.AspNetCore" Version="2.16.15" />
+    <!-- UseBlazorFrameworkFiles: Die API liefert den WASM-Client mit aus (Same-Origin,
+         ein Prozess für App + Daten – kein CORS, Cookies ohne Sonderbehandlung). -->
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\Shared\HorizonNET.Shared.Transfer\HorizonNET.Shared.Transfer.csproj" />
     <ProjectReference Include="..\HorizonNET.Domain\HorizonNET.Domain.csproj" />
     <ProjectReference Include="..\HorizonNET.Data\HorizonNET.Data.csproj" />
+    <!-- Bringt die gebauten Client-Dateien (wasm/js/css) als Static Web Assets mit -->
+    <ProjectReference Include="..\..\Client\HorizonNET.App\HorizonNET.App.csproj" />
   </ItemGroup>
 
 </Project>

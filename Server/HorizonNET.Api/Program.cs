@@ -18,18 +18,6 @@ builder.Configuration.AddJsonFile("appsettings.Secrets.json", optional: true, re
 // Controller und Validierung
 builder.Services.AddControllers();
 
-// CORS: Blazor-Client darf Anfragen an diese API stellen
-builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
-    policy.WithOrigins(
-            builder.Configuration["Cors:AllowedOrigin"]
-                ?? throw new InvalidOperationException("Cors:AllowedOrigin ist nicht konfiguriert."))
-          .AllowAnyHeader()
-          .AllowAnyMethod()
-          // Nötig, damit der Browser das Auth-Cookie bei Cross-Origin-Aufrufen mitschickt
-          // (Client und API laufen lokal auf verschiedenen Ports). Entfällt mit dem
-          // Same-Origin-Hosting beim Livegang.
-          .AllowCredentials()));
-
 // Eingebaute .NET 10 OpenAPI-Unterstützung
 builder.Services.AddOpenApi();
 
@@ -138,11 +126,21 @@ else
     app.UseHsts();
 }
 
-app.UseCors();
 app.UseHttpsRedirection();
+
+// Same-Origin-Hosting: Diese API liefert auch den Blazor-WASM-Client aus (ein Origin für
+// App + Daten – deshalb gibt es hier kein CORS). Statische Dateien bewusst VOR der Auth:
+// Die App-Hülle ist öffentlich, geschützt sind die Daten dahinter.
+app.UseBlazorFrameworkFiles();
+app.UseStaticFiles();
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// Deep-Links und F5 auf Client-Routen (/settings, /journal/…) liefern die App-Hülle;
+// AllowAnonymous wegen der Fallback-Policy – der Login findet ja erst IN der App statt.
+app.MapFallbackToFile("index.html").AllowAnonymous();
 
 // Version der laufenden API (Phase 9b). Bewusst anonym erreichbar, damit der Client die
 // Version auch ohne/vor einem Login prüfen kann (relevant nach Einführung der Auth).

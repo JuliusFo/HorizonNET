@@ -9,9 +9,11 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
-// Basis-URL aus appsettings.json lesen
+// Die API ist der Origin, der die App ausliefert (Same-Origin-Hosting). Per
+// ApiSettings:BaseUrl in wwwroot/appsettings.json übersteuerbar – z. B. um den Client
+// standalone (dotnet run im Client-Projekt) gegen eine anders laufende API zu fahren.
 var apiBaseUrl = builder.Configuration["ApiSettings:BaseUrl"]
-    ?? throw new InvalidOperationException("ApiSettings:BaseUrl ist nicht konfiguriert.");
+    ?? builder.HostEnvironment.BaseAddress;
 
 // Toast-Benachrichtigungen (Netzwerkfehler-Feedback, Undo)
 builder.Services.AddScoped<ToastService>();
