@@ -15,8 +15,13 @@ using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Lokale Secrets (Google-Credentials etc.) – Datei ist per .gitignore ausgeschlossen
-builder.Configuration.AddJsonFile("appsettings.Secrets.json", optional: true, reloadOnChange: true);
+// Lokale Secrets (Google-Credentials etc.) – Datei ist per .gitignore ausgeschlossen.
+// Bewusst NUR in der Entwicklung: In Produktion kommen Secrets als Umgebungsvariablen
+// des Dienstes (Google__ClientId, Google__ClientSecret, Auth__…; "__" ersetzt den
+// Doppelpunkt). Und da dieses AddJsonFile NACH dem eingebauten Env-Var-Provider hängt,
+// würde eine liegengebliebene Datei auf dem Server sonst still die Env-Vars übersteuern.
+if (builder.Environment.IsDevelopment())
+    builder.Configuration.AddJsonFile("appsettings.Secrets.json", optional: true, reloadOnChange: true);
 
 // Controller und Validierung
 builder.Services.AddControllers();
