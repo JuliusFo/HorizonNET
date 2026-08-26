@@ -12,4 +12,7 @@
   <Folder Name="/Shared/">
     <Project Path="Shared/HorizonNET.Shared.Transfer/HorizonNET.Shared.Transfer.csproj" />
   </Folder>
+  <Folder Name="/Tools/">
+    <Project Path="Tools/HorizonNET.KeyMigration/HorizonNET.KeyMigration.csproj" />
+  </Folder>
 </Solution>

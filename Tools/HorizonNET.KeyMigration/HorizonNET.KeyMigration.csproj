@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- DataProtectionProvider.Create für eigenständige Provider je Schlüsselring-Ordner -->
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.Extensions" Version="10.0.10" />
+    <!-- Direkter SQLite-Zugriff statt EF: Das Tool braucht ZWEI Protector-Sätze gleichzeitig
+         (Quelle lesen, Ziel schreiben) – die EF-Konverter im AppDbContext können nur einen. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
+    <!-- Override der transitiven SQLitePCLRaw-Pakete wie in HorizonNET.Data (GHSA-2m69-gcr7-jv3q) -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.4" />
+  </ItemGroup>
+
+</Project>
