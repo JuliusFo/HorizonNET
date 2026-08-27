@@ -2,6 +2,7 @@
 @inject IStringLocalizer<Enums> EnumL
 @inject SoundService Sound
 @inject ToastService Toast
+@inject ConfirmService Confirm
 
 @* Wiederverwendbarer Dialog zum Anlegen UND Bearbeiten von Tasks (leichtgewichtiges
    Overlay, kein JS-Interop). Visible steuert die Sichtbarkeit; Task = null bedeutet
@@ -366,11 +367,18 @@
                 ? editModel.WaitingFor.Trim()
                 : null;
 
+            // Wechselt der Status auf "Fertig"/"Verworfen" und sind Sub-Tasks offen:
+            // nachfragen, ob die mitgehen. Der Dialog hält die frische Sub-Task-Liste
+            // selbst (subTasks) – der Parameter Task kann veraltet sein.
+            var withSubTasks = await SubTaskCompletionPrompt.AskAsync(
+                Confirm, Task! with { SubTasks = subTasks }, editModel.Status);
+
             saved = await Api.UpdateTaskAsync(Task!.Id, new TaskUpdateDto(
                 editModel.Title, description,
                 editModel.DueDate, editModel.StartTime, editModel.EndTime,
                 editModel.Status, editModel.Priority, editModel.ProjectId,
-                link, waitingFor, editModel.ReminderMinutes));
+                link, waitingFor, editModel.ReminderMinutes,
+                CompleteSubTasks: withSubTasks));
         }
 
         isSaving = false;

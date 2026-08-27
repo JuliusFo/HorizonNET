@@ -3,6 +3,7 @@
 @inject ProjectState ProjectState
 @inject IStringLocalizer<Enums> EnumL
 @inject ToastService Toast
+@inject ConfirmService Confirm
 
 <PageTitle>@(workspace?.Name ?? "Arbeitsbereich") – HorizonNET</PageTitle>
 
@@ -557,6 +558,11 @@ else
 
         if (task is null || tasks is null) return;
 
+        // Zieht die Karte in "Fertig"/"Abgebrochen" und hat sie offene Sub-Tasks:
+        // nachfragen, ob die mitgehen – VOR dem optimistischen Update, damit die
+        // Antwort auch die lokale Anzeige bestimmt.
+        var withSubTasks = await SubTaskCompletionPrompt.AskAsync(Confirm, task, status);
+
         // Aktuelle Reihenfolge der Ziel-Spalte (ohne den gezogenen Task)
         var column = tasks.Where(t => t.ParentTaskId is null && t.Status == status && t.Id != task.Id)
                           .OrderBy(t => t.SortOrder)
@@ -574,8 +580,22 @@ else
             if (idx >= 0) tasks[idx] = tasks[idx] with { Status = status, SortOrder = i };
         }
 
+        // Bejahte Rückfrage: die Sub-Tasks der gezogenen Karte auch lokal abhaken –
+        // das Reorder liefert keine frischen Tasks zurück.
+        if (withSubTasks)
+        {
+            var draggedIdx = tasks.FindIndex(t => t.Id == task.Id);
+            if (draggedIdx >= 0)
+                tasks[draggedIdx] = tasks[draggedIdx] with
+                {
+                    SubTasks = tasks[draggedIdx].SubTasks?
+                        .Select(s => s.IsCompleted ? s : s with { Status = status })
+                        .ToList()
+                };
+        }
+
         // Persistieren (Server setzt SortOrder = Index und Status = Spalte)
-        await Api.ReorderTasksAsync(new TaskReorderDto(status, column.Select(t => t.Id).ToList()));
+        await Api.ReorderTasksAsync(new TaskReorderDto(status, column.Select(t => t.Id).ToList(), withSubTasks));
     }
 
     // ── Task-Dialog (Anlegen und Bearbeiten) ───────────────────────────────────

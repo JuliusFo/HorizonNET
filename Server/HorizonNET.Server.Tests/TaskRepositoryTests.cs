@@ -440,6 +440,94 @@ public class TaskRepositoryTests
         Assert.Equal([heute], treffer.Select(t => t.Id));
     }
 
+    // ── Sub-Tasks mit abschließen (Rückfrage im Client) ─────────────────────────
+    // Die Projektkarte zählt Haupt- UND Sub-Tasks. Bejaht der Nutzer die Rückfrage,
+    // nimmt der Abschluss des Haupt-Tasks seine offenen Sub-Tasks mit – über denselben
+    // ApplyStatusChange-Weg (CompletedAt, Timer). Ohne Flag bleibt alles wie bisher.
+
+    [Fact]
+    public async Task SetStatus_DoneWithCompleteSubTasks_CompletesOpenSubTasks()
+    {
+        using var db = new TestDatabase();
+        var parent = await SeedTaskAsync(db, WorkStatus.Planned);
+        var open   = await SeedSubTaskAsync(db, parent, WorkStatus.InProgress);
+
+        using (var act = db.NewContext())
+            await new TaskRepository(act).SetStatusAsync(parent, WorkStatus.Done, completeSubTasks: true);
+
+        using var assert = db.NewContext();
+        var sub = (await assert.Tasks.FindAsync(open))!;
+        Assert.Equal(WorkStatus.Done, sub.Status);
+        Assert.NotNull(sub.CompletedAt);
+    }
+
+    // Ein längst erledigter Sub-Task darf dabei nicht auf heute umdatieren – er geht
+    // gar nicht erst durch den Statuswechsel (nur OFFENE Sub-Tasks werden angefasst).
+    [Fact]
+    public async Task SetStatus_DoneWithCompleteSubTasks_KeepsCompletedSubTasksUntouched()
+    {
+        using var db = new TestDatabase();
+        var parent  = await SeedTaskAsync(db, WorkStatus.Planned);
+        var earlier = DateTime.Now.AddDays(-3);
+        var done    = await SeedSubTaskAsync(db, parent, WorkStatus.Done, completedAt: earlier);
+
+        using (var act = db.NewContext())
+            await new TaskRepository(act).SetStatusAsync(parent, WorkStatus.Done, completeSubTasks: true);
+
+        using var assert = db.NewContext();
+        Assert.Equal(earlier, (await assert.Tasks.FindAsync(done))!.CompletedAt);
+    }
+
+    [Fact]
+    public async Task SetStatus_DoneWithoutCompleteSubTasks_LeavesSubTasksOpen()
+    {
+        using var db = new TestDatabase();
+        var parent = await SeedTaskAsync(db, WorkStatus.Planned);
+        var open   = await SeedSubTaskAsync(db, parent, WorkStatus.Planned);
+
+        using (var act = db.NewContext())
+            await new TaskRepository(act).SetStatusAsync(parent, WorkStatus.Done);
+
+        using var assert = db.NewContext();
+        Assert.Equal(WorkStatus.Planned, (await assert.Tasks.FindAsync(open))!.Status);
+    }
+
+    // Der Weg über ApplyStatusChange ist kein Selbstzweck: Er stoppt auch die laufende
+    // Uhr eines Sub-Tasks in Arbeit – sonst liefe sie unter einem erledigten Task weiter.
+    [Fact]
+    public async Task SetStatus_DoneWithCompleteSubTasks_StopsRunningSubTaskTimer()
+    {
+        using var db = new TestDatabase();
+        var parent = await SeedTaskAsync(db, WorkStatus.Planned);
+        var sub    = await SeedSubTaskAsync(db, parent, WorkStatus.InProgress, withRunningTimer: true);
+
+        using (var act = db.NewContext())
+            await new TaskRepository(act).SetStatusAsync(parent, WorkStatus.Done, completeSubTasks: true);
+
+        using var assert = db.NewContext();
+        Assert.NotNull((await assert.TimeEntries.SingleAsync(e => e.TaskItemId == sub)).EndedAt);
+        Assert.Equal(WorkStatus.Done, (await assert.Tasks.FindAsync(sub))!.Status);
+    }
+
+    // Beim Kanban-Zug in die Fertig-Spalte nehmen nur NEU abgeschlossene Tasks ihre
+    // Sub-Tasks mit – wer schon in der Spalte steht, wechselt nicht und bleibt unberührt.
+    [Fact]
+    public async Task Reorder_WithCompleteSubTasks_TouchesOnlyNewlyCompletedTasks()
+    {
+        using var db = new TestDatabase();
+        var moved      = await SeedTaskAsync(db, WorkStatus.Planned);
+        var movedSub   = await SeedSubTaskAsync(db, moved, WorkStatus.Planned);
+        var already    = await SeedTaskAsync(db, WorkStatus.Done);
+        var alreadySub = await SeedSubTaskAsync(db, already, WorkStatus.Planned);
+
+        using (var act = db.NewContext())
+            await new TaskRepository(act).ReorderAsync(WorkStatus.Done, [already, moved], completeSubTasks: true);
+
+        using var assert = db.NewContext();
+        Assert.Equal(WorkStatus.Done, (await assert.Tasks.FindAsync(movedSub))!.Status);
+        Assert.Equal(WorkStatus.Planned, (await assert.Tasks.FindAsync(alreadySub))!.Status);
+    }
+
     private static async Task<int> SeedTaskAsync(
         TestDatabase db, WorkStatus status,
         bool withRunningTimer = false, DateTime? dueDate = null,
@@ -460,6 +548,24 @@ public class TaskRepositoryTests
         }
 
         return task.Id;
+    }
+
+    private static async Task<int> SeedSubTaskAsync(
+        TestDatabase db, int parentId, WorkStatus status,
+        DateTime? completedAt = null, bool withRunningTimer = false)
+    {
+        using var ctx = db.NewContext();
+        var sub = new TaskItem { Title = "Sub", Status = status, ParentTaskId = parentId, CompletedAt = completedAt };
+        ctx.Tasks.Add(sub);
+        await ctx.SaveChangesAsync();
+
+        if (withRunningTimer)
+        {
+            ctx.TimeEntries.Add(new TimeEntry { TaskItemId = sub.Id, StartedAt = DateTime.Now.AddMinutes(-5) });
+            await ctx.SaveChangesAsync();
+        }
+
+        return sub.Id;
     }
 
     private static async Task<int> SeedNamedTaskAsync(TestDatabase db, string title)

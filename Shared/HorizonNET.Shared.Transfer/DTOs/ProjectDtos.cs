@@ -28,6 +28,10 @@ public record ProjectResponseDto(
     string Status,
     string Priority,
     DateTime CreatedAt,
+    // Zähler der Projektkarte ("X% erledigt · Y offen"): NUR Haupt-Tasks, keine
+    // Sub-Tasks – dieselbe Einheit, die die Task-Liste des Projekts anzeigt. Wer die
+    // Formel ändert, muss ProjectsController.ToDto UND SyncProjectCounts
+    // (ProjectDetail) gleichziehen.
     int TaskCount,
     int DoneTaskCount,
     string? Color = null,

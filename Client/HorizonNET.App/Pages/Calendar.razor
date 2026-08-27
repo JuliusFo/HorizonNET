@@ -7,6 +7,7 @@
 @inject ContextMenuService ContextMenu
 @inject NavigationManager Nav
 @inject SoundService Sound
+@inject ConfirmService Confirm
 
 <PageTitle>Kalender – HorizonNET</PageTitle>
 
@@ -537,7 +538,10 @@ else
     {
         var target = task.IsCompleted ? WorkStatus.Planned : WorkStatus.Done;
 
-        var updated = await Api.SetTaskStatusAsync(task.Id, target);
+        // Offene Sub-Tasks mit abhaken? (Beim Zurücksetzen auf "Geplant" ohne Wirkung.)
+        var withSubTasks = await SubTaskCompletionPrompt.AskAsync(Confirm, task, target);
+
+        var updated = await Api.SetTaskStatusAsync(task.Id, target, withSubTasks);
         if (updated is null)
         {
             await Sound.ErrorAsync();

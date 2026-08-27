@@ -17,12 +17,15 @@ public interface ITaskRepository
     Task<TaskItem> CreateAsync(TaskItem task);
 
     // Vollersatz aller Felder – nur für die echten Editoren (Detailseite, Dialog).
-    Task<TaskItem?> UpdateAsync(int id, TaskItem task);
+    // completeSubTasks: siehe SetStatusAsync.
+    Task<TaskItem?> UpdateAsync(int id, TaskItem task, bool completeSubTasks = false);
 
     // Zweckgebundene Teil-Updates: ändern genau ein Anliegen und lassen den Rest in
     // Ruhe. Wer nur abhakt oder verschiebt, kann so nichts überschreiben, was er gar
     // nicht kennt (und nicht mit einem veralteten Stand zurückrollen).
-    Task<TaskItem?> SetStatusAsync(int id, WorkStatus status);
+    // completeSubTasks: bei Wechsel auf "Fertig"/"Verworfen" die offenen Sub-Tasks
+    // mit abschließen (vom Nutzer per Rückfrage bestätigt); sonst ohne Wirkung.
+    Task<TaskItem?> SetStatusAsync(int id, WorkStatus status, bool completeSubTasks = false);
 
     Task<TaskItem?> SetScheduleAsync(int id, DateTime? dueDate, DateTime? startTime, DateTime? endTime);
 
@@ -46,7 +49,9 @@ public interface ITaskRepository
     // Setzt für die übergebenen Tasks SortOrder = Listenindex und Status = status.
     // Zurück kommen die Tasks, deren Fälligkeitsdatum sich dadurch geändert hat – nur die
     // sind für den Google-Kalender überhaupt von Belang.
-    Task<IReadOnlyList<TaskItem>> ReorderAsync(WorkStatus status, IList<int> orderedTaskIds);
+    // completeSubTasks wirkt nur auf Tasks, die durch diesen Aufruf NEU auf
+    // "Fertig"/"Verworfen" wechseln – siehe SetStatusAsync.
+    Task<IReadOnlyList<TaskItem>> ReorderAsync(WorkStatus status, IList<int> orderedTaskIds, bool completeSubTasks = false);
 
     // Setzt nur SortOrder = Listenindex (Status bleibt unverändert) – für Sub-Tasks.
     Task ReorderSubTasksAsync(IList<int> orderedTaskIds);

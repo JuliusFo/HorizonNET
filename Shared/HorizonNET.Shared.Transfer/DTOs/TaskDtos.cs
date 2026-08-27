@@ -37,7 +37,12 @@ public record TaskUpdateDto(
     // Erinnerung am Google-Termin; null = Standard erben, TaskReminder.None = keine.
     // Wie Link bewusst ohne Default: Ein Vollersatz, der das Feld vergisst, würde eine
     // gesetzte Erinnerung stillschweigend auf "Standard" zurückdrehen.
-    int? ReminderMinutes
+    int? ReminderMinutes,
+    // Kein Task-Feld, sondern ein Kommando fürs Speichern: offene Sub-Tasks mit
+    // abschließen, wenn der Status auf "Fertig"/"Verworfen" wechselt (Rückfrage im
+    // Client). Default false ist hier gefahrlos – vergisst ein Aufrufer das Flag,
+    // unterbleibt nur die Kaskade, es wird nichts überschrieben.
+    bool CompleteSubTasks = false
 );
 
 // ── Teil-Updates ────────────────────────────────────────────────────────────────
@@ -45,7 +50,10 @@ public record TaskUpdateDto(
 // am Task betreffen diese DTOs deshalb nie – anders als TaskUpdateDto.
 
 // Abhaken, Statuswechsel im Dropdown. Der Server zieht Timer und Fälligkeit nach.
-public record TaskStatusDto(WorkStatus Status);
+// CompleteSubTasks: bei "Fertig"/"Verworfen" die offenen Sub-Tasks mit abschließen –
+// true, wenn der Nutzer die Rückfrage (SubTaskCompletionPrompt) bejaht hat. Bei jedem
+// anderen Zielstatus ignoriert der Server das Flag.
+public record TaskStatusDto(WorkStatus Status, bool CompleteSubTasks = false);
 
 // Termin: Kalender-Drag, "auf heute schieben". Ohne DueDate verwirft der Server die Uhrzeiten.
 public record TaskScheduleDto(DateTime? DueDate, DateTime? StartTime, DateTime? EndTime);
@@ -100,7 +108,11 @@ public record TaskResponseDto(
 // Reihenfolge; der Server setzt SortOrder = Index und Status = Status.
 public record TaskReorderDto(
     WorkStatus Status,
-    List<int> OrderedTaskIds
+    List<int> OrderedTaskIds,
+    // Offene Sub-Tasks der Tasks mit abschließen, die durch DIESEN Zug auf
+    // "Fertig"/"Verworfen" wechseln (praktisch nur die gezogene Karte – die übrigen
+    // stehen schon in der Spalte und wechseln nicht). Rückfrage im Client.
+    bool CompleteSubTasks = false
 );
 
 // Nur so viel Task, wie eine Auswahlliste braucht: Bezeichnung, Zuordnung, Verschachtelung.

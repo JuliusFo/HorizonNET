@@ -6,6 +6,7 @@
 @inject ToastService Toast
 @inject SoundService Sound
 @inject SettingsState Settings
+@inject ConfirmService Confirm
 
 <PageTitle>Projekt – HorizonNET</PageTitle>
 
@@ -589,7 +590,11 @@ else
 
     private async Task<bool> ChangeStatusAsync(TaskResponseDto task, WorkStatus newStatus)
     {
-        var updated = await Api.SetTaskStatusAsync(task.Id, newStatus);
+        // Beim Abschließen mit offenen Sub-Tasks: nachfragen, ob die mitgehen
+        // (ohne offene Sub-Tasks oder für Sub-Tasks selbst kommt sofort false).
+        var withSubTasks = await SubTaskCompletionPrompt.AskAsync(Confirm, task, newStatus);
+
+        var updated = await Api.SetTaskStatusAsync(task.Id, newStatus, withSubTasks);
         if (updated is null) return false;
 
         ReplaceTask(updated);
@@ -870,16 +875,15 @@ else
     // Hält die gecachten Projekt-Zähler (Anzahl/Fortschritt auf den Karten in Übersicht
     // und Arbeitsbereich) synchron, nachdem sich hier Tasks geändert haben – sonst zeigen
     // die Karten veraltete Werte, bis die Projekte neu geladen werden. Formel exakt wie
-    // serverseitig in ProjectsController.ToDto: alle nicht gelöschten Tasks des Projekts
-    // (Haupt- UND Sub-Tasks) bzw. die davon erledigten. Kein API-Aufruf nötig, weil die
-    // vollständige Liste hier ohnehin vorliegt.
+    // serverseitig in ProjectsController.ToDto: NUR die Haupt-Tasks des Projekts bzw. die
+    // davon erledigten – Sub-Tasks zählen nicht mit, die Karte zeigt dieselbe Einheit wie
+    // die Task-Liste. Kein API-Aufruf nötig, weil die Liste hier ohnehin vorliegt.
     private void SyncProjectCounts()
     {
         if (tasks is null) return;
 
-        var total = tasks.Count + tasks.Sum(t => t.SubTasks?.Count ?? 0);
-        var done  = tasks.Count(t => t.IsCompleted)
-                  + tasks.Sum(t => t.SubTasks?.Count(s => s.IsCompleted) ?? 0);
+        var total = tasks.Count;
+        var done  = tasks.Count(t => t.IsCompleted);
 
         var cached = ProjectState.Projects;
         var idx    = cached?.FindIndex(p => p.Id == Id) ?? -1;

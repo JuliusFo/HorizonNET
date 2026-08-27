@@ -43,9 +43,11 @@ public partial class ApiService
     // Schicken nur das jeweilige Anliegen; alle übrigen Felder bleiben serverseitig
     // unangetastet. Antwort ist der frische Task.
 
-    public async Task<TaskResponseDto?> SetTaskStatusAsync(int id, WorkStatus status)
+    // completeSubTasks: offene Sub-Tasks bei "Fertig"/"Verworfen" mit abschließen –
+    // Ergebnis der Rückfrage (SubTaskCompletionPrompt) an der Aufrufstelle.
+    public async Task<TaskResponseDto?> SetTaskStatusAsync(int id, WorkStatus status, bool completeSubTasks = false)
     {
-        var updated = await PutAsync<TaskResponseDto>($"api/tasks/{id}/status", new TaskStatusDto(status));
+        var updated = await PutAsync<TaskResponseDto>($"api/tasks/{id}/status", new TaskStatusDto(status, completeSubTasks));
         if (updated is not null) await NotifyTaskChangedAsync(); // Status kann den Timer gestartet/gestoppt haben
         return updated;
     }

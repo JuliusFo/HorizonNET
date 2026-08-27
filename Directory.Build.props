@@ -19,9 +19,13 @@
     gebaute Assembly getragen hat, springt die Version nach Phase 16 direkt auf 0.16.0 –
     die Regel "Minor = Phasennummer" ist damit wieder gültig und bleibt die einzige, die
     man sich merken muss.
+
+    Mit dem Livegang (27.08.2026, horizon.cloudfox.xyz) endet die Phasen-Kopplung:
+    ab hier normales SemVer. 1.0.1 ist der erste Stand nach dem Livegang
+    (Sub-Task-Rückfrage beim Abschließen + Projektkacheln zählen nur Haupt-Tasks).
   -->
   <PropertyGroup>
-    <Version>0.16.0</Version>
+    <Version>1.0.1</Version>
   </PropertyGroup>
 
 </Project>

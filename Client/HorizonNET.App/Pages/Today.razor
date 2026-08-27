@@ -3,6 +3,7 @@
 @inject ProjectState ProjectState
 @inject SoundService Sound
 @inject ToastService Toast
+@inject ConfirmService Confirm
 
 <PageTitle>Heute – HorizonNET</PageTitle>
 
@@ -213,7 +214,10 @@
 
     private async Task CompleteTaskAsync(TaskResponseDto task)
     {
-        var updated = await Api.SetTaskStatusAsync(task.Id, WorkStatus.Done);
+        // Offene Sub-Tasks mit abhaken? (Rückfrage nur, wenn es welche gibt.)
+        var withSubTasks = await SubTaskCompletionPrompt.AskAsync(Confirm, task, WorkStatus.Done);
+
+        var updated = await Api.SetTaskStatusAsync(task.Id, WorkStatus.Done, withSubTasks);
         if (updated is null)
         {
             await Sound.ErrorAsync();

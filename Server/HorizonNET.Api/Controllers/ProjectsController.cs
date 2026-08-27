@@ -9,8 +9,15 @@ namespace HorizonNET.Api.Controllers;
 [Route("api/[controller]")]
 public class ProjectsController(IProjectRepository repo) : ControllerBase
 {
+    // Die Zähler (Karte: "X% erledigt · Y offen") zählen NUR Haupt-Tasks – dieselbe
+    // Einheit, die die Task-Liste zeigt. Sub-Tasks stecken in p.Tasks mit drin (gleiche
+    // ProjectId), zählten früher mit und ließen die Karte mehr "offen" melden, als in
+    // der Liste zu sehen war. Formel-Spiegelung im Client: SyncProjectCounts.
     private static ProjectResponseDto ToDto(Project p) =>
-        new(p.Id, p.Name, p.Description, p.Status.ToString(), p.Priority.ToString(), p.CreatedAt, p.Tasks.Count, p.Tasks.Count(t => t.IsCompleted), p.Color, p.WorkspaceId);
+        new(p.Id, p.Name, p.Description, p.Status.ToString(), p.Priority.ToString(), p.CreatedAt,
+            p.Tasks.Count(t => t.ParentTaskId == null),
+            p.Tasks.Count(t => t.ParentTaskId == null && t.IsCompleted),
+            p.Color, p.WorkspaceId);
 
     [HttpGet]
     public async Task<IActionResult> GetAll()

@@ -122,7 +122,7 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
     // wirklich alle Felder anzeigen. Wer nur ein Anliegen hat (abhaken, verschieben,
     // umhängen), nimmt SetStatusAsync/SetScheduleAsync/SetProjectAsync: die überschreiben
     // nichts, was der Aufrufer gar nicht kennt.
-    public async Task<TaskItem?> UpdateAsync(int id, TaskItem updated)
+    public async Task<TaskItem?> UpdateAsync(int id, TaskItem updated, bool completeSubTasks = false)
     {
         var existing = await context.Tasks.FindAsync(id);
         if (existing is null) return null;
@@ -148,18 +148,20 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
             : updated.Status;
 
         await ApplyStatusChangeAsync(existing, targetStatus);
+        if (completeSubTasks) await CompleteOpenSubTasksAsync(existing.Id, targetStatus);
 
         await context.SaveChangesAsync();
         return await GetByIdAsync(id) ?? existing;
     }
 
-    public async Task<TaskItem?> SetStatusAsync(int id, WorkStatus status)
+    public async Task<TaskItem?> SetStatusAsync(int id, WorkStatus status, bool completeSubTasks = false)
     {
         var existing = await context.Tasks.FindAsync(id);
         if (existing is null) return null;
 
         await ApplyStatusChangeAsync(existing, status);
         existing.UpdatedAt = DateTime.Now;
+        if (completeSubTasks) await CompleteOpenSubTasksAsync(id, status);
 
         await context.SaveChangesAsync();
         return await GetByIdAsync(id) ?? existing;
@@ -220,6 +222,30 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         await ApplyTimerForStatusChangeAsync(task.Id, previous, newStatus);
         ApplyCompletedAt(task, previous, newStatus);
         task.Status = newStatus;
+    }
+
+    // Schließt die offenen Sub-Tasks eines Haupt-Tasks mit ab, wenn der Nutzer das in
+    // der Rückfrage bejaht hat (CompleteSubTasks-Flag der DTOs). Hintergrund: Die
+    // Projektkarte zählt Haupt- UND Sub-Tasks (ProjectsController.ToDto) – blieben die
+    // Sub-Tasks offen, zählte die Karte weiter "offen", obwohl die Liste nichts mehr
+    // zeigt. Jeder Sub-Task geht durch ApplyStatusChangeAsync, damit CompletedAt und
+    // ein eventuell laufender Timer genauso behandelt werden wie beim Haupt-Task.
+    // Bereits erledigte/verworfene Sub-Tasks bleiben unangetastet (ihr CompletedAt
+    // darf nicht auf heute umdatieren). Gespeichert wird vom Aufrufer.
+    private async Task CompleteOpenSubTasksAsync(int parentId, WorkStatus status)
+    {
+        if (status is not (WorkStatus.Done or WorkStatus.Abandoned)) return;
+
+        var openSubs = await context.Tasks
+            .Where(t => t.ParentTaskId == parentId
+                     && t.Status != WorkStatus.Done && t.Status != WorkStatus.Abandoned)
+            .ToListAsync();
+
+        foreach (var sub in openSubs)
+        {
+            await ApplyStatusChangeAsync(sub, status);
+            sub.UpdatedAt = DateTime.Now;
+        }
     }
 
     // Erledigt-Zeitstempel für den Tagesrückblick (Phase 14h). Nur beim WECHSEL setzen:
@@ -331,7 +357,7 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
     // Umsortieren INNERHALB von "Geplant Heute" ändert sich nichts am Termin, die Karten
     // stehen dort ja schon. Vorher galt die ganze Spalte pauschal als betroffen, und ein
     // Verschieben um eine Position kostete einen Google-Aufruf pro Karte.
-    public async Task<IReadOnlyList<TaskItem>> ReorderAsync(WorkStatus status, IList<int> orderedTaskIds)
+    public async Task<IReadOnlyList<TaskItem>> ReorderAsync(WorkStatus status, IList<int> orderedTaskIds, bool completeSubTasks = false)
     {
         var tasks = await context.Tasks
             .Where(t => orderedTaskIds.Contains(t.Id))
@@ -347,8 +373,14 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
             // damit den Timer (Spalte "In Arbeit" startet, jede andere stoppt) sowie
             // das Fälligkeitsdatum (Spalte "Geplant Heute" setzt es auf heute).
             var previousDueDate = t.DueDate;
+            var wasCompleted    = t.Status is WorkStatus.Done or WorkStatus.Abandoned;
             await ApplyStatusChangeAsync(t, status);
             if (t.DueDate != previousDueDate) rescheduled.Add(t);
+
+            // Nur wer durch DIESEN Zug abgeschlossen wird, nimmt seine Sub-Tasks mit –
+            // die übrigen Karten stehen schon in der Spalte und wechseln nicht.
+            if (completeSubTasks && !wasCompleted)
+                await CompleteOpenSubTasksAsync(t.Id, status);
         }
 
         await context.SaveChangesAsync();
