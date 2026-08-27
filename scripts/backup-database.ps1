@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Sichert die HorizonNET-Datenbank samt DataProtection-Schlüsselring.
 

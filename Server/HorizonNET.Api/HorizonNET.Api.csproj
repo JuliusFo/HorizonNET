@@ -21,6 +21,8 @@
     <!-- UseBlazorFrameworkFiles: Die API liefert den WASM-Client mit aus (Same-Origin,
          ein Prozess für App + Daten – kein CORS, Cookies ohne Sonderbehandlung). -->
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.10" />
+    <!-- Betrieb als Windows-Dienst auf dem vServer (UseWindowsService in Program.cs) -->
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup>

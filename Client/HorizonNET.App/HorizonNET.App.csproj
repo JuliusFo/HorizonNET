@@ -4,7 +4,12 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+    <!-- Kein OverrideHtmlAssetPlaceholders: Die Platzhalter-Transformation der index.html
+         läuft nur beim Publish DIESES Projekts – beim Same-Origin-Publish über die API
+         bliebe der rohe Platzhalter stehen und die App bootet nicht. Stattdessen stehen
+         Klarnamen in der index.html; MapStaticAssets bedient sie in Dev wie in Produktion
+         (die gehashten Framework-Interna lädt blazor.webassembly.js über sein eigenes
+         Boot-Manifest, dafür braucht es keine Importmap). -->
   </PropertyGroup>
 
   <ItemGroup>

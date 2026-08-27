@@ -15,6 +15,12 @@ using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Betrieb als Windows-Dienst auf dem vServer: meldet Start/Stopp an den Dienstmanager
+// und setzt das Arbeitsverzeichnis auf den App-Ordner (Dienste starten sonst in
+// System32 – der relative DB-Pfad ginge daneben). Außerhalb eines Dienstes ein No-op,
+// lokales dotnet run bleibt unverändert.
+builder.Host.UseWindowsService();
+
 // Lokale Secrets (Google-Credentials etc.) – Datei ist per .gitignore ausgeschlossen.
 // Bewusst NUR in der Entwicklung: In Produktion kommen Secrets als Umgebungsvariablen
 // des Dienstes (Google__ClientId, Google__ClientSecret, Auth__…; "__" ersetzt den
@@ -152,10 +158,9 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 
 // Sicherheits-Header an jeder Antwort (auch statischen Dateien – deshalb VOR
 // UseStaticFiles). Die CSP ist auf das zugeschnitten, was die App wirklich lädt:
-//  • 'unsafe-inline' bei script-src ist von Blazor erzwungen – der Build injiziert die
-//    Importmap als Inline-Skript in die index.html. Der eigentliche Gewinn bleibt:
-//    Nachladen von fremden Hosts und Exfiltration per fetch/img sind blockiert
-//    (connect-src/img-src ohne externe Quellen).
+//  • script-src ohne 'unsafe-inline': Seit die index.html ohne Inline-Importmap
+//    auskommt (Klarnamen statt Platzhalter-Transformation), gibt es keine
+//    Inline-Skripte mehr – eingeschleustes Inline-JS wird damit blockiert.
 //  • data:/blob: bei img/media für Notiz-Thumbnails, Zeichnungen und Sounds.
 //  • frame-ancestors 'none' (+ X-Frame-Options): niemand bettet die App in Iframes ein.
 // Scalar (nur Dev) bringt eigene Inline-Ressourcen mit und ist ausgenommen.
@@ -171,7 +176,7 @@ app.Use(async (context, next) =>
     {
         headers["Content-Security-Policy"] =
             "default-src 'self'; " +
-            "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; " +
+            "script-src 'self' 'wasm-unsafe-eval'; " +
             "style-src 'self' 'unsafe-inline'; " +
             "img-src 'self' data: blob:; " +
             "font-src 'self' data:; " +
