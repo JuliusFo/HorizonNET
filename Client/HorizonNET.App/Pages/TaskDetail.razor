@@ -3,6 +3,7 @@
 @inject NavigationManager Nav
 @inject IStringLocalizer<Enums> EnumL
 @inject ToastService Toast
+@inject IJSRuntime JS
 
 <PageTitle>@(task?.Title ?? "Task") – HorizonNET</PageTitle>
 
@@ -35,6 +36,8 @@ else
                     <h1 class="h3 mb-0">@task.Title</h1>
                 </div>
                 <div class="d-flex gap-2 flex-shrink-0">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CopyTitleAsync"
+                            title="Titel in die Zwischenablage kopieren">Titel kopieren</button>
                     <button type="button" class="btn btn-primary btn-sm" @onclick="OpenEdit">Bearbeiten</button>
                     <button type="button" class="btn btn-outline-danger btn-sm" @onclick="DeleteAsync">Löschen</button>
                 </div>
@@ -286,6 +289,22 @@ else
         WorkStatus.Paused       => "text-bg-warning",
         _                       => "text-bg-light",
     };
+
+    // Titel in die Zwischenablage – z. B. für Commit-Messages oder Chats.
+    // Clipboard-API braucht HTTPS/localhost; bei Verweigerung gibt es einen Fehler-Toast.
+    private async Task CopyTitleAsync()
+    {
+        if (task is null) return;
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", task.Title);
+            Toast.ShowSuccess("Titel kopiert");
+        }
+        catch (JSException)
+        {
+            Toast.ShowError("Kopieren nicht möglich.");
+        }
+    }
 
     // ── Bearbeiten-Dialog ──────────────────────────────────────────────────────
 
