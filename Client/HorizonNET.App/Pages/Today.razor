@@ -167,6 +167,8 @@
                         <PriorityIndicator Value="@task.Priority" />
                         <button class="btn btn-sm btn-outline-primary text-nowrap" @onclick="() => MoveToTodayAsync(task)"
                                 title="Fälligkeit auf heute setzen">→ Heute</button>
+                        <button class="btn btn-sm btn-outline-secondary text-nowrap" @onclick="() => ClearDueDateAsync(task)"
+                                title="Fälligkeitsdatum entfernen">✕ Datum</button>
                     </li>
                 }
             </ul>
@@ -239,6 +241,41 @@
         if (updated is null || allTasks is null) return;
 
         var idx = allTasks.FindIndex(t => t.Id == task.Id);
+        if (idx >= 0) allTasks[idx] = updated;
+    }
+
+    // Entfernt Fälligkeit und Uhrzeiten eines überfälligen Tasks – er verschwindet aus
+    // "Überfällig" und ist wieder ungeplant. Rückgängig über den Toast.
+    private async Task ClearDueDateAsync(TaskResponseDto task)
+    {
+        // Werte vor dem Aufruf sichern, für das Rückgängig.
+        var due   = task.DueDate;
+        var start = task.StartTime;
+        var end   = task.EndTime;
+
+        var updated = await Api.SetTaskScheduleAsync(task.Id, null, null, null);
+        if (updated is null)
+        {
+            Toast.ShowError("Fälligkeit konnte nicht entfernt werden.");
+            return;
+        }
+
+        ReplaceTask(updated);
+
+        Toast.ShowUndo($"{task.Title}: Fälligkeit entfernt", async () =>
+        {
+            var restored = await Api.SetTaskScheduleAsync(task.Id, due, start, end);
+            if (restored is null) return;
+
+            ReplaceTask(restored);
+            await InvokeAsync(StateHasChanged);
+        });
+    }
+
+    private void ReplaceTask(TaskResponseDto updated)
+    {
+        if (allTasks is null) return;
+        var idx = allTasks.FindIndex(t => t.Id == updated.Id);
         if (idx >= 0) allTasks[idx] = updated;
     }
 
