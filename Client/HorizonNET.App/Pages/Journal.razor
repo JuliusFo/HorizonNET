@@ -100,9 +100,12 @@ else
 
                 <JournalTemplateBar HasContent="@(!IsBlank)" OnInsert="InsertTemplate" />
 
-                @* Value wird EINWEG gebunden und nur beim Tageswechsel gesetzt. Mit @bind-Value
-                   schriebe Radzen den Inhalt bei jedem Tastendruck in den DOM zurück – das gäbe
-                   eine spürbare Eingabeverzögerung (gleiche Lehre wie im NoteEditor).
+                @* Value wird EINWEG gebunden und bei jeder Eingabe nachgeführt (ohne Re-Render).
+                   Radzen schreibt den Editor-DOM neu, sobald der Value-Parameter beim Rendern vom
+                   internen Editor-Stand abweicht – bliebe editorValue veraltet, löschte das
+                   Statuszeilen-Render nach dem Auto-Save den getippten Text. @bind-Value wäre
+                   trotzdem falsch: Es erzwänge ein Re-Render pro Tastendruck – spürbare
+                   Eingabeverzögerung (gleiche Lehre wie im NoteEditor).
 
                    Eigene Werkzeugleiste: Sobald Kind-Elemente angegeben sind, ersetzen sie die
                    Standardleiste. Die brachte rund 35 Symbole in zwei Reihen über ein leeres
@@ -184,7 +187,7 @@ else
     private JournalEntryResponseDto? entry; // null = für diesen Tag existiert noch nichts
 
     private string title = string.Empty;
-    private string editorValue = string.Empty; // stabil an den Editor gebunden (nur bei Wechsel gesetzt)
+    private string editorValue = string.Empty; // an den Editor gebunden; läuft bei Eingaben mit
     private string content = string.Empty;     // laufender Bearbeitungsstand (zum Speichern)
 
     private bool loading = true;
@@ -476,13 +479,16 @@ else
     private void OnContentInput(string html)
     {
         content = html;
+        // Den gebundenen Parameter mitziehen: Nach einem Fokusverlust hält Radzen den
+        // getippten Text für seinen Value – ein veralteter (leerer) Parameter gälte beim
+        // nächsten Render als Änderung von außen und überschriebe den Editor-DOM.
+        editorValue = html;
         skipNextRender = true;
         ScheduleSave();
     }
 
-    // Vorlage einsetzen. Das ist der einzige Fall, in dem editorValue bewusst gesetzt
-    // wird: Der Editor SOLL seinen Inhalt neu schreiben. Beim Tippen wäre genau das
-    // der Grund für die Eingabeverzögerung, die wir vermeiden.
+    // Vorlage einsetzen. Hier SOLL der Editor seinen Inhalt neu schreiben – die
+    // Vorlage kam nicht über Tastatureingaben, der Editor kennt sie noch nicht.
     private void InsertTemplate(string html)
     {
         // An bestehenden Text anfügen statt ihn zu ersetzen – Geschriebenes darf ein

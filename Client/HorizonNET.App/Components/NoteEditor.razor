@@ -66,9 +66,9 @@ else
         }
         else
         {
-            @* Value wird EINWEG gebunden und nur beim Notiz-Wechsel gesetzt. Würde man
-               @bind-Value nutzen, schriebe Radzen den Inhalt bei jedem Tastendruck zurück
-               in den DOM → spürbare Eingabeverzögerung. Änderungen holen wir über Input/Change. *@
+            @* Value wird EINWEG gebunden und in OnContentInput nachgeführt (ohne Re-Render).
+               @bind-Value erzwänge ein Re-Render pro Tastendruck → spürbare Eingabe-
+               verzögerung. Änderungen holen wir über Input/Change. *@
             <RadzenHtmlEditor Value="@editorValue" Input="OnContentInput" Change="OnContentInput"
                               class="note-editor-html" />
         }
@@ -87,7 +87,7 @@ else
 
     private NoteResponseDto? loaded;   // Snapshot der geladenen Notiz (Save-Ziel)
     private string title = string.Empty;
-    private string editorValue = string.Empty; // stabil an den Editor gebunden (nur bei Wechsel gesetzt)
+    private string editorValue = string.Empty; // an den Editor gebunden; läuft bei Eingaben mit
     private string content = string.Empty;     // laufender Bearbeitungsstand (zum Speichern)
     private SaveState state = SaveState.Saved;
     private DateTime? savedAt;                 // Zeitpunkt des letzten Speicherns in dieser Sitzung
@@ -290,10 +290,14 @@ else
     }
 
     // Neuer HTML-Inhalt aus dem Editor (Input = beim Tippen, Change = bei Blur/Befehl).
-    // editorValue bleibt bewusst unverändert, damit Radzen den DOM nicht neu schreibt.
+    // editorValue läuft mit: Nach einem Fokusverlust hält Radzen den getippten Text für
+    // seinen Value – ein veralteter Parameter gälte beim nächsten Render (etwa der
+    // Statuszeile nach dem Auto-Save) als Änderung von außen und überschriebe den
+    // Editor-DOM. Genau so verschwand im Journal getippter Text nach dem Speichern.
     private void OnContentInput(string html)
     {
         content = html;
+        editorValue = html;
         skipNextRender = true;
         ScheduleSave();
     }

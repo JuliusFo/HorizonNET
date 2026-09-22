@@ -23,9 +23,11 @@
     Mit dem Livegang (27.08.2026, horizon.cloudfox.xyz) endet die Phasen-Kopplung:
     ab hier normales SemVer. 1.0.1 ist der erste Stand nach dem Livegang
     (Sub-Task-Rückfrage beim Abschließen + Projektkacheln zählen nur Haupt-Tasks).
+    1.0.2: Kanban-Karte ohne sporadisches Projektname-Label (Farbe zeigt das Projekt).
+    1.0.3: Journal/Notizen verlieren getippten Text nicht mehr beim Auto-Save-Render.
   -->
   <PropertyGroup>
-    <Version>1.0.1</Version>
+    <Version>1.0.3</Version>
   </PropertyGroup>
 
 </Project>

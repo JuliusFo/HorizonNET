@@ -38,7 +38,7 @@
             <ul class="list-group">
                 @foreach (var d in dailyTasks)
                 {
-                    <li class="list-group-item d-flex align-items-center gap-2">
+                    <li @key="d.Id" class="list-group-item d-flex align-items-center gap-2">
                         <input type="checkbox" class="form-check-input mt-0" checked="@d.CompletedToday"
                                @onchange="() => ToggleDailyAsync(d)" />
                         <span class="flex-grow-1 @(d.CompletedToday ? "text-decoration-line-through text-muted" : "")">@d.Title</span>
@@ -87,7 +87,7 @@
             <ul class="list-group">
                 @foreach (var task in inboxTasks)
                 {
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <li @key="task.Id" class="list-group-item d-flex justify-content-between align-items-center">
                         <a href="tasks/@task.Id" class="text-decoration-none text-body">@task.Title</a>
                         <div class="d-flex align-items-center gap-2">
                             <PriorityIndicator Value="@task.Priority" />
@@ -123,7 +123,7 @@
             <ul class="list-group">
                 @foreach (var task in DueToday)
                 {
-                    <li class="list-group-item d-flex align-items-center gap-2">
+                    <li @key="task.Id" class="list-group-item d-flex align-items-center gap-2">
                         <input type="checkbox" class="form-check-input mt-0"
                                @onchange="() => CompleteTaskAsync(task)" title="Als erledigt markieren" />
                         <a href="tasks/@task.Id" class="text-decoration-none text-body flex-grow-1">@task.Title</a>
@@ -155,7 +155,7 @@
             <ul class="list-group">
                 @foreach (var task in Overdue)
                 {
-                    <li class="list-group-item d-flex align-items-center gap-2">
+                    <li @key="task.Id" class="list-group-item d-flex align-items-center gap-2">
                         <input type="checkbox" class="form-check-input mt-0"
                                @onchange="() => CompleteTaskAsync(task)" title="Als erledigt markieren" />
                         <a href="tasks/@task.Id" class="text-decoration-none text-body flex-grow-1">@task.Title</a>

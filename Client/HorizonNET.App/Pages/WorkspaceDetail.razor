@@ -196,10 +196,12 @@ else
                                         <button type="button" class="btn btn-sm btn-outline-primary btn-icon"
                                                 @onclick="() => OpenTask(task)" title="Bearbeiten">✎</button>
                                     </div>
-                                    @if (task.ProjectName is not null)
-                                    {
-                                        <div class="small text-muted text-truncate mt-1">@task.ProjectName</div>
-                                    }
+                                    @* Bewusst KEIN Projektname auf der Karte: Das Projekt zeigt die
+                                       Kartenfarbe (+ Filter über die Projektkarten). Ein Name stünde
+                                       hier auch nur sporadisch – der Board-Ladepfad liefert ihn nicht
+                                       (GetByProjectIdAsync lädt das Projekt nicht mit), die Antwort
+                                       einer Bearbeitung schon; das Label tauchte dadurch erst nach dem
+                                       ersten Bearbeiten einer Karte auf. *@
                                     @if (task.DueDate is not null)
                                     {
                                         <div class="small text-muted mt-1">📅 @task.DueDate.Value.ToString("dd.MM.yyyy")</div>
