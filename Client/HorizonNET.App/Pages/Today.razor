@@ -38,17 +38,24 @@
             <ul class="list-group">
                 @foreach (var d in dailyTasks)
                 {
-                    <li @key="d.Id" class="list-group-item d-flex align-items-center gap-2">
-                        <input type="checkbox" class="form-check-input mt-0" checked="@d.CompletedToday"
-                               @onchange="() => ToggleDailyAsync(d)" />
-                        <span class="flex-grow-1 @(d.CompletedToday ? "text-decoration-line-through text-muted" : "")">@d.Title</span>
-                        @if (d.WeekdayMask != Weekdays.Daily)
+                    <li @key="d.Id" class="list-group-item task-row">
+                        <div class="task-main">
+                            <input type="checkbox" class="form-check-input mt-0 flex-shrink-0" checked="@d.CompletedToday"
+                                   @onchange="() => ToggleDailyAsync(d)" />
+                            <span class="@(d.CompletedToday ? "text-decoration-line-through text-muted" : "")">@d.Title</span>
+                        </div>
+                        @if (d.WeekdayMask != Weekdays.Daily || d.CurrentStreak > 0)
                         {
-                            <span class="small text-muted text-nowrap" title="Wochentags-Muster">@Weekdays.Format(d.WeekdayMask)</span>
-                        }
-                        @if (d.CurrentStreak > 0)
-                        {
-                            <span class="small text-nowrap" title="@d.CurrentStreak Tage in Folge">🔥 @d.CurrentStreak</span>
+                            <div class="task-meta">
+                                @if (d.WeekdayMask != Weekdays.Daily)
+                                {
+                                    <span class="small text-muted text-nowrap" title="Wochentags-Muster">@Weekdays.Format(d.WeekdayMask)</span>
+                                }
+                                @if (d.CurrentStreak > 0)
+                                {
+                                    <span class="small text-nowrap" title="@d.CurrentStreak Tage in Folge">🔥 @d.CurrentStreak</span>
+                                }
+                            </div>
                         }
                     </li>
                 }
@@ -64,9 +71,11 @@
         <span class="fw-semibold">Inbox</span>
     </div>
     <div class="card-body">
-        <EditForm Model="newInboxTask" OnValidSubmit="CreateInboxTaskAsync" class="d-flex gap-2 mb-3">
+        @* flex-wrap + Mindestbreite des Eingabefelds: Auf dem Phone rutschen Button und
+           Vorlagen-Auswahl in eine zweite Zeile, statt das Feld auf Briefmarkengröße zu drücken. *@
+        <EditForm Model="newInboxTask" OnValidSubmit="CreateInboxTaskAsync" class="d-flex flex-wrap gap-2 mb-3">
             <DataAnnotationsValidator />
-            <InputText class="form-control form-control-sm" @bind-Value="newInboxTask.Title"
+            <InputText class="form-control form-control-sm" style="flex: 1 1 12rem;" @bind-Value="newInboxTask.Title"
                        placeholder="Neue Aufgabe…" />
             <button type="submit" class="btn btn-sm btn-primary text-nowrap" disabled="@isSaving">Hinzufügen</button>
             @* Vorlage legt den Task sofort an – inklusive Projekt, falls die Vorlage eines hat. *@
@@ -87,9 +96,11 @@
             <ul class="list-group">
                 @foreach (var task in inboxTasks)
                 {
-                    <li @key="task.Id" class="list-group-item d-flex justify-content-between align-items-center">
-                        <a href="tasks/@task.Id" class="text-decoration-none text-body">@task.Title</a>
-                        <div class="d-flex align-items-center gap-2">
+                    <li @key="task.Id" class="list-group-item task-row">
+                        <div class="task-main">
+                            <a href="tasks/@task.Id" class="text-decoration-none text-body">@task.Title</a>
+                        </div>
+                        <div class="task-meta">
                             <PriorityIndicator Value="@task.Priority" />
                             <ProjectSelect Change="v => AssignTaskToProjectAsync(task, v)"
                                            Placeholder="Projekt zuweisen…" AllowClear="false" />
@@ -123,19 +134,23 @@
             <ul class="list-group">
                 @foreach (var task in DueToday)
                 {
-                    <li @key="task.Id" class="list-group-item d-flex align-items-center gap-2">
-                        <input type="checkbox" class="form-check-input mt-0"
-                               @onchange="() => CompleteTaskAsync(task)" title="Als erledigt markieren" />
-                        <a href="tasks/@task.Id" class="text-decoration-none text-body flex-grow-1">@task.Title</a>
-                        @if (task.StartTime is not null && task.EndTime is not null)
-                        {
-                            <span class="small text-muted text-nowrap">@task.StartTime.Value.ToString("HH:mm")–@task.EndTime.Value.ToString("HH:mm")</span>
-                        }
-                        @if (task.ProjectName is not null)
-                        {
-                            <span class="badge bg-light text-dark">@task.ProjectName</span>
-                        }
-                        <PriorityIndicator Value="@task.Priority" />
+                    <li @key="task.Id" class="list-group-item task-row">
+                        <div class="task-main">
+                            <input type="checkbox" class="form-check-input mt-0 flex-shrink-0"
+                                   @onchange="() => CompleteTaskAsync(task)" title="Als erledigt markieren" />
+                            <a href="tasks/@task.Id" class="text-decoration-none text-body">@task.Title</a>
+                        </div>
+                        <div class="task-meta">
+                            @if (task.StartTime is not null && task.EndTime is not null)
+                            {
+                                <span class="small text-muted text-nowrap">@task.StartTime.Value.ToString("HH:mm")–@task.EndTime.Value.ToString("HH:mm")</span>
+                            }
+                            @if (task.ProjectName is not null)
+                            {
+                                <span class="badge bg-light text-dark">@task.ProjectName</span>
+                            }
+                            <PriorityIndicator Value="@task.Priority" />
+                        </div>
                     </li>
                 }
             </ul>
@@ -155,20 +170,24 @@
             <ul class="list-group">
                 @foreach (var task in Overdue)
                 {
-                    <li @key="task.Id" class="list-group-item d-flex align-items-center gap-2">
-                        <input type="checkbox" class="form-check-input mt-0"
-                               @onchange="() => CompleteTaskAsync(task)" title="Als erledigt markieren" />
-                        <a href="tasks/@task.Id" class="text-decoration-none text-body flex-grow-1">@task.Title</a>
-                        <span class="small text-danger text-nowrap">📅 @task.DueDate!.Value.ToString("dd.MM.yyyy")</span>
-                        @if (task.ProjectName is not null)
-                        {
-                            <span class="badge bg-light text-dark">@task.ProjectName</span>
-                        }
-                        <PriorityIndicator Value="@task.Priority" />
-                        <button class="btn btn-sm btn-outline-primary text-nowrap" @onclick="() => MoveToTodayAsync(task)"
-                                title="Fälligkeit auf heute setzen">→ Heute</button>
-                        <button class="btn btn-sm btn-outline-secondary text-nowrap" @onclick="() => ClearDueDateAsync(task)"
-                                title="Fälligkeitsdatum entfernen">✕ Datum</button>
+                    <li @key="task.Id" class="list-group-item task-row">
+                        <div class="task-main">
+                            <input type="checkbox" class="form-check-input mt-0 flex-shrink-0"
+                                   @onchange="() => CompleteTaskAsync(task)" title="Als erledigt markieren" />
+                            <a href="tasks/@task.Id" class="text-decoration-none text-body">@task.Title</a>
+                        </div>
+                        <div class="task-meta">
+                            <span class="small text-danger text-nowrap">📅 @task.DueDate!.Value.ToString("dd.MM.yyyy")</span>
+                            @if (task.ProjectName is not null)
+                            {
+                                <span class="badge bg-light text-dark">@task.ProjectName</span>
+                            }
+                            <PriorityIndicator Value="@task.Priority" />
+                            <button class="btn btn-sm btn-outline-primary text-nowrap" @onclick="() => MoveToTodayAsync(task)"
+                                    title="Fälligkeit auf heute setzen">→ Heute</button>
+                            <button class="btn btn-sm btn-outline-secondary text-nowrap" @onclick="() => ClearDueDateAsync(task)"
+                                    title="Fälligkeitsdatum entfernen">✕ Datum</button>
+                        </div>
                     </li>
                 }
             </ul>

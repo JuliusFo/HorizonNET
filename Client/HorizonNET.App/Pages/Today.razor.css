@@ -1,0 +1,31 @@
+/* Listenzeilen der Heute-Seite: Auf schmalen Bildschirmen (Phone) brechen Meta-Infos
+   und Buttons in eine zweite Zeile um, statt den Titel zusammenzuquetschen.
+   Aufbau: .task-row = Zeile, .task-main = Checkbox + Titel, .task-meta = alles rechts. */
+.task-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.task-main {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    /* Mindestbreite: Ist weniger Platz da, wandert .task-meta in die nächste Zeile. */
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+    .task-main a,
+    .task-main span {
+        overflow-wrap: anywhere;
+    }
+
+.task-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+}
