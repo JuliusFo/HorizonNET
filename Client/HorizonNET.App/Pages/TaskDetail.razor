@@ -43,8 +43,17 @@ else
                 </div>
             </div>
 
-            <div class="mb-3">
-                <span class="badge @StatusBadgeClass(task.Status)">@EnumL[$"WorkStatus_{task.Status}"]</span>
+            <div class="mb-3 d-flex align-items-center gap-2">
+                @* Termine tragen ihre eigene Status-Wortwahl (steht an / war / abgesagt). *@
+                @if (task.IsAppointment)
+                {
+                    <span class="badge bg-secondary">@EnumL["TaskKind_Appointment"]</span>
+                    <span class="badge @StatusBadgeClass(task.Status)">@EnumL[$"AppointmentStatus_{task.Status}"]</span>
+                }
+                else
+                {
+                    <span class="badge @StatusBadgeClass(task.Status)">@EnumL[$"WorkStatus_{task.Status}"]</span>
+                }
             </div>
 
             <label class="form-label text-muted small mb-1">Beschreibung</label>

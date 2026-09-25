@@ -39,6 +39,9 @@
   <data name="Done_Group" xml:space="preserve">
     <value>Erledigt ({0})</value>
   </data>
+  <data name="Appointments_Group" xml:space="preserve">
+    <value>Termine ({0})</value>
+  </data>
   <data name="NewTask_Button" xml:space="preserve">
     <value>+ Neuer Task</value>
   </data>

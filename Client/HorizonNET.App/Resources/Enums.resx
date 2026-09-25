@@ -75,4 +75,23 @@
     <value>Hoch</value>
   </data>
 
+  <!-- TaskKind -->
+  <data name="TaskKind_Task" xml:space="preserve">
+    <value>Aufgabe</value>
+  </data>
+  <data name="TaskKind_Appointment" xml:space="preserve">
+    <value>Termin</value>
+  </data>
+
+  <!-- WorkStatus aus Sicht eines Termins: nur drei Zustände, eigene Wortwahl -->
+  <data name="AppointmentStatus_Planned" xml:space="preserve">
+    <value>Steht an</value>
+  </data>
+  <data name="AppointmentStatus_Done" xml:space="preserve">
+    <value>War</value>
+  </data>
+  <data name="AppointmentStatus_Abandoned" xml:space="preserve">
+    <value>Abgesagt</value>
+  </data>
+
 </root>

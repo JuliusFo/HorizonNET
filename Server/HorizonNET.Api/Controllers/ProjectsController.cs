@@ -1,6 +1,7 @@
 using HorizonNET.Domain.Entities;
 using HorizonNET.Domain.Interfaces;
 using HorizonNET.Shared.Transfer.DTOs;
+using HorizonNET.Shared.Transfer.Enums;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HorizonNET.Api.Controllers;
@@ -12,11 +13,15 @@ public class ProjectsController(IProjectRepository repo) : ControllerBase
     // Die Zähler (Karte: "X% erledigt · Y offen") zählen NUR Haupt-Tasks – dieselbe
     // Einheit, die die Task-Liste zeigt. Sub-Tasks stecken in p.Tasks mit drin (gleiche
     // ProjectId), zählten früher mit und ließen die Karte mehr "offen" melden, als in
-    // der Liste zu sehen war. Formel-Spiegelung im Client: SyncProjectCounts.
+    // der Liste zu sehen war. Termine zählen ebenfalls nicht: Ein Volleyball-Abend ist
+    // keine offene Arbeit, und materialisierte Serien (~16/Monat) blähten sonst jeden
+    // Fortschrittsbalken auf. Formel-Spiegelung im Client: SyncProjectCounts.
+    private static bool Counts(TaskItem t) => t.ParentTaskId == null && t.Kind == TaskKind.Task;
+
     private static ProjectResponseDto ToDto(Project p) =>
         new(p.Id, p.Name, p.Description, p.Status.ToString(), p.Priority.ToString(), p.CreatedAt,
-            p.Tasks.Count(t => t.ParentTaskId == null),
-            p.Tasks.Count(t => t.ParentTaskId == null && t.IsCompleted),
+            p.Tasks.Count(Counts),
+            p.Tasks.Count(t => Counts(t) && t.IsCompleted),
             p.Color, p.WorkspaceId);
 
     [HttpGet]

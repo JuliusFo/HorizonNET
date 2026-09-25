@@ -58,6 +58,10 @@ public partial class ApiService
     public Task<TaskResponseDto?> SetTaskProjectAsync(int id, int? projectId) =>
         PutAsync<TaskResponseDto>($"api/tasks/{id}/project", new TaskProjectDto(projectId));
 
+    // Aufgabe ↔ Termin; Sub-Tasks ziehen serverseitig mit.
+    public Task<TaskResponseDto?> SetTaskKindAsync(int id, TaskKind kind) =>
+        PutAsync<TaskResponseDto>($"api/tasks/{id}/kind", new TaskKindDto(kind));
+
     public async Task<bool> DeleteTaskAsync(int id)
     {
         var deleted = await DeleteAsync($"api/tasks/{id}");

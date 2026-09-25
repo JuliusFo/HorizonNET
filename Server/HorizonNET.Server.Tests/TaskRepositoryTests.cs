@@ -528,15 +528,66 @@ public class TaskRepositoryTests
         Assert.Equal(WorkStatus.Planned, (await assert.Tasks.FindAsync(alreadySub))!.Status);
     }
 
+    // ── Aufgabe vs. Termin (TaskKind) ────────────────────────────────────────────
+    // Sub-Tasks tragen das Kind ihres Eltern-Tasks: beim Anlegen geerbt, beim Umschalten
+    // mitgezogen. Der Vollersatz UpdateAsync lässt das Feld in Ruhe.
+
+    [Fact]
+    public async Task Create_SubTask_InheritsParentKind()
+    {
+        using var db = new TestDatabase();
+        var parent = await SeedTaskAsync(db, WorkStatus.Planned, kind: TaskKind.Appointment);
+
+        int subId;
+        using (var act = db.NewContext())
+        {
+            // Der Aufrufer schickt "Task" – der Server muss es zum Termin machen.
+            var sub = await new TaskRepository(act).CreateAsync(
+                new TaskItem { Title = "Checkliste", ParentTaskId = parent, Kind = TaskKind.Task });
+            subId = sub.Id;
+        }
+
+        using var assert = db.NewContext();
+        Assert.Equal(TaskKind.Appointment, (await assert.Tasks.FindAsync(subId))!.Kind);
+    }
+
+    [Fact]
+    public async Task SetKind_CascadesToSubTasks()
+    {
+        using var db = new TestDatabase();
+        var parent = await SeedTaskAsync(db, WorkStatus.Planned);
+        var sub    = await SeedSubTaskAsync(db, parent, WorkStatus.Planned);
+
+        using (var act = db.NewContext())
+            await new TaskRepository(act).SetKindAsync(parent, TaskKind.Appointment);
+
+        using var assert = db.NewContext();
+        Assert.Equal(TaskKind.Appointment, (await assert.Tasks.FindAsync(parent))!.Kind);
+        Assert.Equal(TaskKind.Appointment, (await assert.Tasks.FindAsync(sub))!.Kind);
+    }
+
+    [Fact]
+    public async Task Update_DoesNotTouchKind()
+    {
+        using var db = new TestDatabase();
+        var id = await SeedTaskAsync(db, WorkStatus.Planned, kind: TaskKind.Appointment);
+
+        using (var act = db.NewContext())
+            await new TaskRepository(act).UpdateAsync(id, Edit(WorkStatus.Planned)); // Edit() trägt Kind=Task
+
+        using var assert = db.NewContext();
+        Assert.Equal(TaskKind.Appointment, (await assert.Tasks.FindAsync(id))!.Kind);
+    }
+
     private static async Task<int> SeedTaskAsync(
         TestDatabase db, WorkStatus status,
         bool withRunningTimer = false, DateTime? dueDate = null,
-        string? waitingFor = null, string? link = null)
+        string? waitingFor = null, string? link = null, TaskKind kind = TaskKind.Task)
     {
         using var ctx = db.NewContext();
         var task = new TaskItem
         {
-            Title = "Task", Status = status, DueDate = dueDate, WaitingFor = waitingFor, Link = link
+            Title = "Task", Status = status, DueDate = dueDate, WaitingFor = waitingFor, Link = link, Kind = kind
         };
         ctx.Tasks.Add(task);
         await ctx.SaveChangesAsync();

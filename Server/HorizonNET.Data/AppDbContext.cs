@@ -77,7 +77,55 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IDataProtectio
                 .HasForeignKey(t => t.ParentTaskId)
                 .OnDelete(DeleteBehavior.NoAction);
 
+            // Materialisierte Serien-Termine: Wird Serie oder Slot endgültig gelöscht,
+            // bleibt der Termin als normaler Task stehen und verliert nur den Bezug.
+            e.HasOne(t => t.Series)
+                .WithMany(s => s.Tasks)
+                .HasForeignKey(t => t.SeriesId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(t => t.SeriesSlot)
+                .WithMany()
+                .HasForeignKey(t => t.SeriesSlotId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Je Serie, Slot und nominellem Datum höchstens EIN Termin – auch ein soft-
+            // gelöschter zählt, sonst kehrt ein abgesagter beim nächsten Generator-Lauf
+            // zurück. Zeilen ohne Serie (NULL) stehen in SQLite nie im Konflikt.
+            e.HasIndex(t => new { t.SeriesId, t.SeriesSlotId, t.SeriesDate }).IsUnique();
+
             e.HasQueryFilter(t => t.DeletedAt == null);
+        });
+
+        modelBuilder.Entity<TaskSeries>(e =>
+        {
+            e.HasKey(s => s.Id);
+            e.Property(s => s.Title).IsRequired().HasMaxLength(300);
+            e.Property(s => s.Description).HasMaxLength(2000);
+            e.Property(s => s.Priority).HasConversion<string>();
+
+            // Projektzuordnung optional; beim Löschen des Projekts bleibt die Serie erhalten.
+            e.HasOne(s => s.Project)
+                .WithMany()
+                .HasForeignKey(s => s.ProjectId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasQueryFilter(s => s.DeletedAt == null);
+        });
+
+        modelBuilder.Entity<TaskSeriesSlot>(e =>
+        {
+            e.HasKey(s => s.Id);
+
+            // Slots gehören zur Serie und werden mit ihr endgültig gelöscht.
+            e.HasOne(s => s.Series)
+                .WithMany(x => x.Slots)
+                .HasForeignKey(s => s.SeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Passender Filter zum Soft-Delete der Serie (vermeidet die EF-Filter-Warnung,
+            // siehe DailyTaskCompletion).
+            e.HasQueryFilter(s => s.Series!.DeletedAt == null);
         });
 
         modelBuilder.Entity<GoogleConnection>(e =>
@@ -367,6 +415,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IDataProtectio
     public DbSet<MoodEntry> MoodEntries => Set<MoodEntry>();
 
     public DbSet<JournalTemplate> JournalTemplates => Set<JournalTemplate>();
+
+    public DbSet<TaskSeries> TaskSeries => Set<TaskSeries>();
+
+    public DbSet<TaskSeriesSlot> TaskSeriesSlots => Set<TaskSeriesSlot>();
 
     #endregion
 }

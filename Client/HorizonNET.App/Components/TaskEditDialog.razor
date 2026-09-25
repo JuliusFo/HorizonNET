@@ -14,7 +14,7 @@
     <div class="task-dialog">
         <div class="task-dialog-content" @onclick:stopPropagation="true">
             <div class="task-dialog-header">
-                <h5 class="mb-0">@(IsNew ? "Neuer Task" : "Task bearbeiten")</h5>
+                <h5 class="mb-0">@DialogTitle</h5>
                 <div class="d-flex align-items-center gap-2">
                     @if (!IsNew)
                     {
@@ -30,6 +30,23 @@
                    unten (außerhalb des Formulars) bei Enter nichts absendet. *@
                 <EditForm id="taskEditForm" Model="editModel" OnValidSubmit="SaveAsync">
                     <DataAnnotationsValidator />
+
+                    @* Aufgabe oder Termin – nur bei Haupt-Tasks: Sub-Tasks erben das Kind
+                       ihres Eltern-Tasks (Server-Regel). Ein Termin gehört nicht aufs Board
+                       und kennt nur drei Zustände (steht an / war / abgesagt). *@
+                    @if (Task?.ParentTaskId is null)
+                    {
+                        <div class="btn-group btn-group-sm mb-3" role="group" aria-label="Aufgabe oder Termin">
+                            @foreach (var k in Enum.GetValues<TaskKind>())
+                            {
+                                <input type="radio" class="btn-check" name="taskKind" id="@($"taskKind-{k}")"
+                                       autocomplete="off" checked="@(editModel.Kind == k)"
+                                       @onchange="() => SetKind(k)" />
+                                <label class="btn btn-outline-secondary" for="@($"taskKind-{k}")">@EnumL[$"TaskKind_{k}"]</label>
+                            }
+                        </div>
+                    }
+
                     <div class="mb-3">
                         <label class="form-label">Titel</label>
                         <InputText @ref="titleInput" class="form-control" @bind-Value="editModel.Title" />
@@ -94,9 +111,9 @@
                         <div class="col-md-6">
                             <label class="form-label">Status</label>
                             <InputSelect class="form-select" @bind-Value="editModel.Status">
-                                @foreach (var s in Enum.GetValues<WorkStatus>())
+                                @foreach (var s in AllowedStatuses)
                                 {
-                                    <option value="@s">@EnumL[$"WorkStatus_{s}"]</option>
+                                    <option value="@s">@StatusLabel(s)</option>
                                 }
                             </InputSelect>
                         </div>
@@ -111,10 +128,11 @@
                         </div>
                     </div>
 
-                    @* Projekt – nur bei bestehenden Haupt-Tasks: Sub-Tasks tragen immer das
-                       Projekt ihres Haupt-Tasks, und beim Anlegen kommt es aus dem Kontext
-                       (DefaultProjectId). Leeren verschiebt den Task zurück in die Inbox. *@
-                    @if (!IsNew && Task!.ParentTaskId is null)
+                    @* Projekt – bei Haupt-Tasks: Sub-Tasks tragen immer das Projekt ihres
+                       Haupt-Tasks. Beim Anlegen kommt es meist aus dem Kontext (DefaultProjectId,
+                       z. B. Projektkarte); fehlt der Kontext (Kalender), wählt man hier.
+                       Leeren verschiebt den Task zurück in die Inbox. *@
+                    @if (IsNew ? DefaultProjectId is null : Task!.ParentTaskId is null)
                     {
                         <div class="mt-3">
                             @* d-block: die Radzen-Auswahl ist inline-block, sonst rutscht das Label daneben. *@
@@ -229,6 +247,16 @@
     // Projekt, dem ein neu angelegter Task zugeordnet wird (nur im Anlege-Modus).
     [Parameter] public int? DefaultProjectId { get; set; }
 
+    // Vorbelegung Aufgabe/Termin im Anlege-Modus, je nach Anlage-Ort: Board, Projekt,
+    // Übersicht → Aufgabe (Default); der Kalender übergibt Termin.
+    [Parameter] public TaskKind DefaultKind { get; set; } = TaskKind.Task;
+
+    // Vorbelegung des Termins im Anlege-Modus – der Kalender übergibt den angeklickten
+    // Slot (Tages-Slot: nur Datum; Zeit-Slot: Datum + Uhrzeiten).
+    [Parameter] public DateTime? DefaultDueDate { get; set; }
+    [Parameter] public DateTime? DefaultStartTime { get; set; }
+    [Parameter] public DateTime? DefaultEndTime { get; set; }
+
     // Liefert den angelegten ODER aktualisierten Task (schließt den Dialog). Ein Aufrufer,
     // der beide Modi nutzt, unterscheidet per Id-Suche in seiner Liste – wie bei Projekten.
     [Parameter] public EventCallback<TaskResponseDto> OnSaved { get; set; }
@@ -258,6 +286,36 @@
 
     private bool IsNew => Task is null;
 
+    private bool IsAppointment => editModel.Kind == TaskKind.Appointment;
+
+    private string DialogTitle => (IsNew, IsAppointment) switch
+    {
+        (true,  true)  => "Neuer Termin",
+        (true,  false) => "Neuer Task",
+        (false, true)  => "Termin bearbeiten",
+        (false, false) => "Task bearbeiten",
+    };
+
+    // Termine kennen nur drei Zustände: steht an / war / abgesagt. Kanban-Zwischenstufen
+    // (Prio, Heute, In Arbeit, Pausiert) ergeben für einen Volleyball-Abend keinen Sinn.
+    private static readonly WorkStatus[] AppointmentStatuses =
+        [WorkStatus.Planned, WorkStatus.Done, WorkStatus.Abandoned];
+
+    private IEnumerable<WorkStatus> AllowedStatuses =>
+        IsAppointment ? AppointmentStatuses : Enum.GetValues<WorkStatus>();
+
+    private string StatusLabel(WorkStatus s) =>
+        IsAppointment ? EnumL[$"AppointmentStatus_{s}"] : EnumL[$"WorkStatus_{s}"];
+
+    // Umschalten Aufgabe ↔ Termin. Ein Status, den Termine nicht kennen, fällt dabei auf
+    // "steht an" zurück – sonst zeigte das Dropdown einen Wert, der nicht in der Liste ist.
+    private void SetKind(TaskKind kind)
+    {
+        editModel.Kind = kind;
+        if (kind == TaskKind.Appointment && !AppointmentStatuses.Contains(editModel.Status))
+            editModel.Status = WorkStatus.Planned;
+    }
+
     protected override void OnParametersSet()
     {
         if (!Visible) { loaded = false; loadedTaskId = null; return; }
@@ -273,7 +331,11 @@
         if (IsNew)
         {
             subTasks       = new();
-            editModel      = new TaskEditModel();  // Vorbelegung: Geplant, Priorität Mittel
+            // Vorbelegung: Geplant, Priorität Mittel; Kind und Termin aus dem Kontext.
+            // DueDate zuerst – sein Setter löscht die Uhrzeiten, wenn kein Datum da ist.
+            editModel      = new TaskEditModel { Kind = DefaultKind, DueDate = DefaultDueDate?.Date };
+            editModel.StartTime = DefaultStartTime;
+            editModel.EndTime   = DefaultEndTime;
             showLink       = false;
             showWaitingFor = false;
             focusPending   = true;                 // direkt lostippen können
@@ -293,7 +355,8 @@
             Link        = Task.Link,
             WaitingFor  = Task.WaitingFor,
             ProjectId   = Task.ProjectId,
-            ReminderMinutes = Task.ReminderMinutes
+            ReminderMinutes = Task.ReminderMinutes,
+            Kind        = Task.Kind
         };
 
         showLink       = Task.Link is not null;
@@ -345,7 +408,8 @@
             saved = await Api.CreateTaskAsync(new TaskCreateDto(
                 editModel.Title.Trim(), description,
                 editModel.DueDate, editModel.StartTime, editModel.EndTime,
-                editModel.Priority, DefaultProjectId, ParentTaskId: null, Status: editModel.Status));
+                editModel.Priority, DefaultProjectId ?? editModel.ProjectId, ParentTaskId: null,
+                Status: editModel.Status, Kind: editModel.Kind));
         }
         else
         {
@@ -379,6 +443,11 @@
                 editModel.Status, editModel.Priority, editModel.ProjectId,
                 link, waitingFor, editModel.ReminderMinutes,
                 CompleteSubTasks: withSubTasks));
+
+            // Aufgabe ↔ Termin läuft über ein eigenes Teil-Update: Der Vollersatz kennt das
+            // Feld bewusst nicht (sonst könnte ein Editor einen Termin still zur Aufgabe machen).
+            if (saved is not null && editModel.Kind != Task.Kind)
+                saved = await Api.SetTaskKindAsync(Task.Id, editModel.Kind);
         }
 
         isSaving = false;
@@ -487,6 +556,7 @@
 
         public Priority Priority { get; set; } = Priority.Medium;
         public WorkStatus Status { get; set; } = WorkStatus.Planned;
+        public TaskKind Kind { get; set; } = TaskKind.Task;
         public int? ProjectId { get; set; }
 
         [System.ComponentModel.DataAnnotations.MaxLength(2048)]

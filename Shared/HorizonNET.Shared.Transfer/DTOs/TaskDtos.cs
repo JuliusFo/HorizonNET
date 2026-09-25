@@ -13,7 +13,10 @@ public record TaskCreateDto(
     int? ParentTaskId = null,
     WorkStatus Status = WorkStatus.Planned,
     // Erinnerung am Google-Termin; null = Standard erben. Siehe TaskReminder.
-    int? ReminderMinutes = null
+    int? ReminderMinutes = null,
+    // Aufgabe oder Termin. Bei Sub-Tasks ohne Wirkung: die erben das Kind des Eltern-Tasks
+    // (Server-Regel im TaskRepository).
+    TaskKind Kind = TaskKind.Task
 );
 
 // Vollersatz aller Felder – nur für die echten Editoren (Detailseite, Bearbeiten-Dialog),
@@ -61,6 +64,11 @@ public record TaskScheduleDto(DateTime? DueDate, DateTime? StartTime, DateTime? 
 // Task einem anderen Projekt zuordnen (bzw. mit null in die Inbox).
 public record TaskProjectDto(int? ProjectId);
 
+// Aufgabe ↔ Termin umschalten. Eigenes Teil-Update statt Feld im Vollersatz TaskUpdateDto:
+// Ein Editor, der das Feld nicht kennt, könnte einen Termin sonst still zur Aufgabe machen.
+// Sub-Tasks ziehen serverseitig mit (sie erben das Kind des Eltern-Tasks).
+public record TaskKindDto(TaskKind Kind);
+
 public record TaskResponseDto(
     int Id,
     string Title,
@@ -92,10 +100,14 @@ public record TaskResponseDto(
     // Startzeitpunkt des laufenden Intervalls; null = Timer läuft nicht.
     DateTime? RunningSince = null,
     // Erinnerung am Google-Termin; null = Standard erben. Siehe TaskReminder.
-    int? ReminderMinutes = null
+    int? ReminderMinutes = null,
+    // Aufgabe (Board) oder Termin (nur Kalender). Siehe TaskKind.
+    TaskKind Kind = TaskKind.Task
 )
 {
     public bool IsCompleted => Status == WorkStatus.Done || Status == WorkStatus.Abandoned;
+
+    public bool IsAppointment => Kind == TaskKind.Appointment;
 
     public bool IsTimerRunning => RunningSince is not null;
 

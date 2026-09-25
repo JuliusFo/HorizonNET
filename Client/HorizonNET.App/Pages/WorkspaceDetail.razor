@@ -441,12 +441,15 @@ else
             await ProjectState.EnsureLoadedAsync();
             RebuildProjects();
 
-            // Tasks aller Projekte des Arbeitsbereichs einsammeln (Client-Aggregation)
+            // Tasks aller Projekte des Arbeitsbereichs einsammeln (Client-Aggregation).
+            // Termine bleiben draußen: Das Board zeigt Arbeit, Termine leben im Kalender.
+            // Einmal beim Laden gefiltert – so bleiben Spalten, Drag & Drop und Reorder
+            // ohne weitere Sonderfälle.
             var all = new List<TaskResponseDto>();
             foreach (var p in projects)
             {
                 var projectTasks = await Api.GetTasksByProjectAsync(p.Id);
-                if (projectTasks is not null) all.AddRange(projectTasks);
+                if (projectTasks is not null) all.AddRange(projectTasks.Where(t => !t.IsAppointment));
             }
             tasks = all;
 
@@ -636,6 +639,18 @@ else
         if (tasks is null) { CloseTaskDialog(); return; }
 
         var idx = tasks.FindIndex(t => t.Id == saved.Id);
+
+        // Im Dialog zum Termin gemacht (oder gleich als Termin angelegt): gehört nicht
+        // aufs Board – Karte entfernen bzw. gar nicht erst anlegen, Hinweis per Toast.
+        if (saved.IsAppointment)
+        {
+            if (idx >= 0) tasks.RemoveAt(idx);
+            Toast.ShowInfo($"„{saved.Title}\" ist ein Termin – zu finden im Kalender");
+            CloseTaskDialog();
+            if (isNew) { await ProjectState.RefreshAsync(); RebuildProjects(); }
+            return;
+        }
+
         if (idx >= 0) tasks[idx] = saved;
         else tasks.Add(saved);   // neu angelegt → als Karte aufs Board
 

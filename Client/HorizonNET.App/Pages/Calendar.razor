@@ -11,7 +11,12 @@
 
 <PageTitle>Kalender – HorizonNET</PageTitle>
 
-<h1 class="mb-3">Kalender</h1>
+<div class="d-flex align-items-center justify-content-between gap-2 mb-3">
+    <h1 class="mb-0">Kalender</h1>
+    @* Terminserien (Volleyball Mo/Mi/Fr …) werden hier gepflegt – ihre Termine
+       entstehen automatisch und erscheinen als ganz normale Einträge im Kalender. *@
+    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => showSeriesDialog = true">Serien</button>
+</div>
 
 @if (tasks is null)
 {
@@ -57,7 +62,9 @@ else
 
             @{
                 // Erledigte/abgebrochene Tasks gehören nicht in die Planungs-Seitenleiste.
-                var unscheduled = tasks.Where(t => t.DueDate is null && !t.IsCompleted).ToList();
+                // Termine ohne Datum auch nicht: Die Leiste ist zum Einplanen von Arbeit da –
+                // ein Termin ohne Datum ist ein Datenfehler, kein Planungskandidat.
+                var unscheduled = tasks.Where(t => t.DueDate is null && !t.IsCompleted && !t.IsAppointment).ToList();
 
                 // Nach Arbeitsbereich gruppieren; Tasks ohne (Projekt bzw. Arbeitsbereich)
                 // landen in einer Sammelgruppe ganz unten.
@@ -185,12 +192,23 @@ else
 @* Visible ist Pflicht – der Dialog rendert nur, wenn es gesetzt ist. Ohne die Bindung
    blieb ein Klick auf einen Termin wirkungslos (dieselbe Bedingung wie auf den vier
    anderen Seiten, die den Dialog einbinden). *@
-<TaskEditDialog Visible="selectedTask is not null"
+@* Zwei Modi: Bearbeiten (selectedTask) und Anlegen aus einem Slot-Klick (createSlot).
+   Anlegen bedeutet hier Termin (DefaultKind) mit dem angeklickten Datum/Zeitfenster;
+   ohne Projektkontext bietet der Dialog die Projektwahl selbst an. *@
+<TaskEditDialog Visible="selectedTask is not null || createSlot is not null"
                 Task="selectedTask"
+                DefaultKind="TaskKind.Appointment"
+                DefaultDueDate="createSlot?.Due"
+                DefaultStartTime="createSlot?.Start"
+                DefaultEndTime="createSlot?.End"
                 OnSaved="HandleTaskSaved"
                 OnDeleted="HandleTaskDeleted"
                 OnTaskUpdated="HandleTaskUpdated"
-                OnClose="@(() => selectedTask = null)" />
+                OnClose="@(() => { selectedTask = null; createSlot = null; })" />
+
+<TaskSeriesDialog Visible="showSeriesDialog"
+                  OnClose="() => showSeriesDialog = false"
+                  OnChanged="ReloadTasksAsync" />
 
 @code {
     private RadzenScheduler<CalendarAppointment>? scheduler;
@@ -203,6 +221,11 @@ else
     private Dictionary<int, int?> projectWorkspaces = new();   // ProjektId → ArbeitsbereichId
     private TaskResponseDto? selectedTask;   // für den Edit-Dialog
     private TaskResponseDto? armedTask;      // in der Seitenleiste „aufgenommener" Task
+
+    // Angeklickter leerer Slot → Anlege-Dialog für einen neuen Termin (null = geschlossen).
+    private (DateTime Due, DateTime? Start, DateTime? End)? createSlot;
+
+    private bool showSeriesDialog;
 
     // Aktive Filter-Schlüssel (leer = alles anzeigen): "p:{id}", "none", "google".
     private readonly HashSet<string> activeFilters = new();
@@ -377,15 +400,21 @@ else
 
     private async Task OnSlotSelect(SchedulerSlotSelectEventArgs args)
     {
-        var task = armedTask;
-        if (task is null) return;
-
         // Zeit-Slot (< 1 Tag) → mit Uhrzeit; Tages-Slot (Monatsansicht) → ganztägig.
         var isTimed = (args.End - args.Start) < TimeSpan.FromDays(1);
 
         DateTime? due   = args.Start.Date;
         DateTime? start = isTimed ? args.Start : null;
         DateTime? end   = isTimed ? args.End : null;
+
+        // Kein aufgenommener Task → neuen Termin an dieser Stelle anlegen. Das ist der
+        // Kalender-Weg, Termine zu erfassen (Aufgaben entstehen im Board/Projekt).
+        var task = armedTask;
+        if (task is null)
+        {
+            createSlot = (due.Value, start, end);
+            return;
+        }
 
         var updated = await Api.SetTaskScheduleAsync(task.Id, due, start, end);
         if (updated is null) return;
@@ -478,20 +507,31 @@ else
     // ── Kontextmenü am Termin ─────────────────────────────────────────────────
     // Google-Termine bekommen keins: Sie sind read-only, jeder Eintrag wäre wirkungslos.
 
-    private enum ApptAction { Done, Open, Details, Unschedule, Delete }
+    private enum ApptAction { Done, Abandon, Open, Details, Unschedule, Delete }
 
     private void ShowApptMenu(MouseEventArgs args, TaskResponseDto task)
     {
-        var items = new List<ContextMenuItem>
-        {
-            // Der erste Eintrag ist der Ein-Klick-Griff und schaltet in beide Richtungen –
-            // die Beschriftung folgt dem Zustand, wie der Haken in den Task-Listen.
-            new() { Text = task.IsCompleted ? "Wieder öffnen" : "Erledigt", Value = ApptAction.Done },
-            new() { Text = "Öffnen",           Value = ApptAction.Open },
-            new() { Text = "Zur Detailseite",  Value = ApptAction.Details },
-            new() { Text = "Termin entfernen", Value = ApptAction.Unschedule },
-            new() { Text = "Löschen",          Value = ApptAction.Delete }
-        };
+        var items = task.IsAppointment
+            // Termin: nur "war / abgesagt", keine Kanban-Logik. "Termin entfernen" fehlt
+            // bewusst – ein Termin ohne Datum wäre ein Datenfehler, kein Planungskandidat.
+            ? new List<ContextMenuItem>
+            {
+                new() { Text = task.Status == WorkStatus.Done ? "Steht wieder an" : "War", Value = ApptAction.Done },
+                new() { Text = task.Status == WorkStatus.Abandoned ? "Steht wieder an" : "Abgesagt", Value = ApptAction.Abandon },
+                new() { Text = "Öffnen",          Value = ApptAction.Open },
+                new() { Text = "Zur Detailseite", Value = ApptAction.Details },
+                new() { Text = "Löschen",         Value = ApptAction.Delete }
+            }
+            : new List<ContextMenuItem>
+            {
+                // Der erste Eintrag ist der Ein-Klick-Griff und schaltet in beide Richtungen –
+                // die Beschriftung folgt dem Zustand, wie der Haken in den Task-Listen.
+                new() { Text = task.IsCompleted ? "Wieder öffnen" : "Erledigt", Value = ApptAction.Done },
+                new() { Text = "Öffnen",           Value = ApptAction.Open },
+                new() { Text = "Zur Detailseite",  Value = ApptAction.Details },
+                new() { Text = "Termin entfernen", Value = ApptAction.Unschedule },
+                new() { Text = "Löschen",          Value = ApptAction.Delete }
+            };
 
         // Radzens Rückruf ist synchron; die Aktionen sind es nicht. Deshalb hier anstoßen
         // und im Handler selbst über InvokeAsync zurück in den Renderkontext.
@@ -509,7 +549,14 @@ else
         switch (action)
         {
             case ApptAction.Done:
-                await ToggleDoneAsync(task);
+                if (task.IsAppointment)
+                    await SetAppointmentStatusAsync(task, task.Status == WorkStatus.Done ? WorkStatus.Planned : WorkStatus.Done);
+                else
+                    await ToggleDoneAsync(task);
+                break;
+
+            case ApptAction.Abandon:
+                await SetAppointmentStatusAsync(task, task.Status == WorkStatus.Abandoned ? WorkStatus.Planned : WorkStatus.Abandoned);
                 break;
 
             case ApptAction.Open:
@@ -530,6 +577,22 @@ else
         }
 
         await InvokeAsync(StateHasChanged);
+    }
+
+    // Termin-Status aus dem Kontextmenü: steht an / war / abgesagt. Bewusst ohne
+    // Sub-Task-Rückfrage – die Checkliste eines Termins ist kein Arbeitsfortschritt.
+    private async Task SetAppointmentStatusAsync(TaskResponseDto task, WorkStatus target)
+    {
+        var updated = await Api.SetTaskStatusAsync(task.Id, target);
+        if (updated is null)
+        {
+            await Sound.ErrorAsync();
+            Toast.ShowError("Status konnte nicht geändert werden.");
+            return;
+        }
+
+        ReplaceTask(updated);
+        await RefreshAsync();
     }
 
     // Abhaken direkt aus dem Kalender – dieselbe Regel wie der Haken in den Task-Listen:
@@ -590,8 +653,15 @@ else
 
     private async Task HandleTaskSaved(TaskResponseDto updated)
     {
-        ReplaceTask(updated);
+        // Aus dem Slot-Klick neu angelegt → in die Liste aufnehmen, sonst ersetzen.
+        // (Den "angelegt"-Toast zeigt der Dialog selbst.)
+        if (tasks is not null && tasks.All(t => t.Id != updated.Id))
+            tasks.Add(updated);
+        else
+            ReplaceTask(updated);
+
         selectedTask = null;
+        createSlot   = null;
         await RefreshAsync();
     }
 
@@ -628,6 +698,14 @@ else
     {
         BuildAppointments();
         if (scheduler is not null) await scheduler.Reload();
+    }
+
+    // Nach Änderungen an Terminserien: Der Server hat Termine angelegt, verschoben oder
+    // entfernt – die Liste frisch holen, statt das lokal nachzubilden.
+    private async Task ReloadTasksAsync()
+    {
+        tasks = await Api.GetTasksAsync() ?? tasks;
+        await RefreshAsync();
     }
 
     private class CalendarAppointment

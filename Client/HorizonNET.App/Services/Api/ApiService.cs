@@ -87,6 +87,7 @@ public partial class ApiService(HttpClient http)
         TrashItemTypes.Note      => RestoreNoteAsync(id),
         TrashItemTypes.DailyTask => RestoreDailyTaskAsync(id),
         TrashItemTypes.NoteFolder => RestoreNoteFolderAsync(id),
+        TrashItemTypes.TaskSeries => RestoreTaskSeriesAsync(id),
         _ => Task.FromResult(false)
     };
 

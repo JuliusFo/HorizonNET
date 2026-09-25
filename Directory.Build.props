@@ -25,9 +25,14 @@
     (Sub-Task-Rückfrage beim Abschließen + Projektkacheln zählen nur Haupt-Tasks).
     1.0.2: Kanban-Karte ohne sporadisches Projektname-Label (Farbe zeigt das Projekt).
     1.0.3: Journal/Notizen verlieren getippten Text nicht mehr beim Auto-Save-Render.
+    1.1.0: Heute-Seite (Häkchen-Bug, Fälligkeit leeren, mobile Ansicht) + „Titel kopieren"
+    auf der Task-Detailseite.
+    1.2.0: Termine vs. Aufgaben – TaskKind (Aufgabe/Termin), Terminserien mit Slots,
+    Generator (Hosted Service), Serien-Verwaltung im Kalender. Zwei Migrationen
+    (AddTaskKind, AddTaskSeries), werden beim Start automatisch angewendet.
   -->
   <PropertyGroup>
-    <Version>1.0.3</Version>
+    <Version>1.2.0</Version>
   </PropertyGroup>
 
 </Project>

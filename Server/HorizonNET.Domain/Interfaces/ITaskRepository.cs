@@ -31,6 +31,10 @@ public interface ITaskRepository
 
     Task<TaskItem?> SetProjectAsync(int id, int? projectId);
 
+    // Aufgabe ↔ Termin umschalten. Zieht die Sub-Tasks mit, weil die das Kind ihres
+    // Eltern-Tasks tragen (Checkliste eines Termins gehört nicht aufs Board).
+    Task<TaskItem?> SetKindAsync(int id, TaskKind kind);
+
     // Setzt nur die Google-Event-Verknüpfung (serverseitiger Sync). Bewusst getrennt
     // vom DTO-getriebenen UpdateAsync, damit dieser Wert dort nicht überschrieben wird.
     Task SetGoogleEventIdAsync(int taskId, string? googleEventId);

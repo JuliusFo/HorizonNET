@@ -51,6 +51,27 @@ else
                 @TaskBlock(task)
             }
 
+            @* Termine zugeklappt zwischen offenen und erledigten Aufgaben: kein Kanban-Stoff,
+               aber zum Projekt gehörig. Gepflegt werden sie im Kalender. *@
+            @if (AppointmentCount > 0)
+            {
+                <li class="list-group-item done-group">
+                    <button type="button" class="done-group-toggle"
+                            @onclick="() => appointmentsCollapsed = !appointmentsCollapsed">
+                        <span class="done-group-caret">@(appointmentsCollapsed ? "▸" : "▾")</span>
+                        <span>@string.Format(L["Appointments_Group"], AppointmentCount)</span>
+                    </button>
+                </li>
+
+                @if (!appointmentsCollapsed)
+                {
+                    @foreach (var task in Appointments(tasks))
+                    {
+                        @TaskBlock(task)
+                    }
+                }
+            }
+
             @* Erledigte Tasks stehen zugeklappt am Listenende – gleiche Konvention wie
                die Spalten "Fertig"/"Abgebrochen" im Kanban-Board. *@
             @if (DoneCount > 0)
@@ -250,18 +271,34 @@ else
     private static IEnumerable<TaskResponseDto> OrderedTasks(IEnumerable<TaskResponseDto> source) =>
         source.OrderBy(t => t.IsCompleted).ThenBy(t => t.ListSortOrder);
 
-    // Die beiden Gruppen der Liste: offen oben, erledigt in der Klapp-Gruppe darunter.
+    // Die Gruppen der Liste: offene Aufgaben oben, Termine und erledigte Aufgaben in je
+    // einer Klapp-Gruppe darunter. Termine sind keine Arbeit – sie stehen hier nur, damit
+    // man sie im Projekt wiederfindet; ihr Zuhause ist der Kalender.
     private static IEnumerable<TaskResponseDto> OpenTasks(IEnumerable<TaskResponseDto> source) =>
-        source.Where(t => !t.IsCompleted).OrderBy(t => t.ListSortOrder);
+        source.Where(t => !t.IsCompleted && !t.IsAppointment).OrderBy(t => t.ListSortOrder);
 
     private static IEnumerable<TaskResponseDto> CompletedTasks(IEnumerable<TaskResponseDto> source) =>
-        source.Where(t => t.IsCompleted).OrderBy(t => t.ListSortOrder);
+        source.Where(t => t.IsCompleted && !t.IsAppointment).OrderBy(t => t.ListSortOrder);
+
+    // Termine: anstehende zuerst (nach Datum), vergangene/abgesagte dahinter.
+    private static IEnumerable<TaskResponseDto> Appointments(IEnumerable<TaskResponseDto> source) =>
+        source.Where(t => t.IsAppointment)
+              .OrderBy(t => t.IsCompleted)
+              .ThenBy(t => t.DueDate ?? DateTime.MaxValue)
+              .ThenBy(t => t.ListSortOrder);
 
     // Erledigte Tasks starten zugeklappt; der Zustand gilt bis zum Neuladen und
     // übersteht – wie im Kanban-Board – einen Projektwechsel.
     private bool doneCollapsed = true;
 
-    private int DoneCount => tasks?.Count(t => t.IsCompleted) ?? 0;
+    private int DoneCount => tasks?.Count(t => t.IsCompleted && !t.IsAppointment) ?? 0;
+
+    private int AppointmentCount => tasks?.Count(t => t.IsAppointment) ?? 0;
+
+    private static readonly WorkStatus[] AppointmentStatuses =
+        [WorkStatus.Planned, WorkStatus.Done, WorkStatus.Abandoned];
+
+    private bool appointmentsCollapsed = true;
 
     // Sub-Tasks: rein manuell über SortOrder – dieselbe Reihenfolge wie in der SubTaskList
     // (Detailseite/Edit-Dialog), nur zusätzlich in "offen" und "erledigt" geteilt.
@@ -508,12 +545,13 @@ else
                        @onchange="async e => await ToggleDoneAsync(task, (bool)e.Value!)"
                        title="@(task.IsCompleted ? L["Task_Undone_Title"] : L["Task_Done_Title"])" />
 
+                @* Termine kennen nur "steht an / war / abgesagt" – wie im TaskEditDialog. *@
                 <select class="form-select form-select-sm w-auto"
                         value="@task.Status"
                         @onchange="async e => await ChangeStatusAsync(task, Enum.Parse<WorkStatus>(e.Value!.ToString()!))">
-                    @foreach (var s in Enum.GetValues<WorkStatus>())
+                    @foreach (var s in (task.IsAppointment ? AppointmentStatuses : Enum.GetValues<WorkStatus>()))
                     {
-                        <option value="@s">@EnumL[$"WorkStatus_{s}"]</option>
+                        <option value="@s">@EnumL[task.IsAppointment ? $"AppointmentStatus_{s}" : $"WorkStatus_{s}"]</option>
                     }
                 </select>
                 <div>
@@ -882,8 +920,9 @@ else
     {
         if (tasks is null) return;
 
-        var total = tasks.Count;
-        var done  = tasks.Count(t => t.IsCompleted);
+        // Spiegelt ProjectsController.ToDto: nur Aufgaben, keine Termine.
+        var total = tasks.Count(t => !t.IsAppointment);
+        var done  = tasks.Count(t => !t.IsAppointment && t.IsCompleted);
 
         var cached = ProjectState.Projects;
         var idx    = cached?.FindIndex(p => p.Id == Id) ?? -1;

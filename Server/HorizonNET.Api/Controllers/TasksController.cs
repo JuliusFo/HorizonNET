@@ -31,7 +31,8 @@ public class TasksController(
                 .Where(e => e.EndedAt != null)
                 .Sum(e => (e.EndedAt!.Value - e.StartedAt).TotalSeconds),
             RunningSince: t.TimeEntries.FirstOrDefault(e => e.EndedAt == null)?.StartedAt,
-            ReminderMinutes: t.ReminderMinutes);
+            ReminderMinutes: t.ReminderMinutes,
+            Kind: t.Kind);
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
@@ -86,7 +87,9 @@ public class TasksController(
             ProjectId = dto.ProjectId,
             ParentTaskId = dto.ParentTaskId,
             Status = dto.Status,
-            ReminderMinutes = dto.ReminderMinutes
+            ReminderMinutes = dto.ReminderMinutes,
+            // Bei Sub-Tasks überschreibt das Repository den Wert mit dem Kind des Eltern-Tasks.
+            Kind = dto.Kind
         };
         var created = await repo.CreateAsync(task);
         await google.SyncTaskAsync(created); // geplanten Task in Google spiegeln (best-effort)
@@ -189,6 +192,16 @@ public class TasksController(
         var updated = await repo.SetProjectAsync(id, dto.ProjectId);
         if (updated is null) return NotFound();
         await google.SyncTaskAsync(updated); // best-effort
+        return Ok(ToDto(updated));
+    }
+
+    // Aufgabe ↔ Termin. Kein Google-Sync nötig: gespiegelt wird nach Termin-Daten
+    // (Fälligkeit/Uhrzeit), und die ändern sich hier nicht.
+    [HttpPut("{id:int}/kind")]
+    public async Task<IActionResult> SetKind(int id, [FromBody] TaskKindDto dto)
+    {
+        var updated = await repo.SetKindAsync(id, dto.Kind);
+        if (updated is null) return NotFound();
         return Ok(ToDto(updated));
     }
 

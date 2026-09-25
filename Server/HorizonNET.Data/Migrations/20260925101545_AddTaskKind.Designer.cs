@@ -3,6 +3,7 @@ using System;
 using HorizonNET.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace HorizonNET.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260925101545_AddTaskKind")]
+    partial class AddTaskKind
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
@@ -504,15 +507,6 @@ namespace HorizonNET.Data.Migrations
                     b.Property<int?>("ReminderMinutes")
                         .HasColumnType("INTEGER");
 
-                    b.Property<DateOnly?>("SeriesDate")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("SeriesId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("SeriesSlotId")
-                        .HasColumnType("INTEGER");
-
                     b.Property<int>("SortOrder")
                         .HasColumnType("INTEGER");
 
@@ -540,84 +534,7 @@ namespace HorizonNET.Data.Migrations
 
                     b.HasIndex("ProjectId");
 
-                    b.HasIndex("SeriesSlotId");
-
-                    b.HasIndex("SeriesId", "SeriesSlotId", "SeriesDate")
-                        .IsUnique();
-
                     b.ToTable("Tasks");
-                });
-
-            modelBuilder.Entity("HorizonNET.Domain.Entities.TaskSeries", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("Kind")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Priority")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("ProjectId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("ReminderMinutes")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProjectId");
-
-                    b.ToTable("TaskSeries");
-                });
-
-            modelBuilder.Entity("HorizonNET.Domain.Entities.TaskSeriesSlot", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("DayOfWeek")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<TimeOnly>("EndTime")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("SeriesId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<TimeOnly>("StartTime")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SeriesId");
-
-                    b.ToTable("TaskSeriesSlots");
                 });
 
             modelBuilder.Entity("HorizonNET.Domain.Entities.TaskTemplate", b =>
@@ -1026,44 +943,9 @@ namespace HorizonNET.Data.Migrations
                         .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Cascade);
 
-                    b.HasOne("HorizonNET.Domain.Entities.TaskSeries", "Series")
-                        .WithMany("Tasks")
-                        .HasForeignKey("SeriesId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("HorizonNET.Domain.Entities.TaskSeriesSlot", "SeriesSlot")
-                        .WithMany()
-                        .HasForeignKey("SeriesSlotId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.Navigation("ParentTask");
 
                     b.Navigation("Project");
-
-                    b.Navigation("Series");
-
-                    b.Navigation("SeriesSlot");
-                });
-
-            modelBuilder.Entity("HorizonNET.Domain.Entities.TaskSeries", b =>
-                {
-                    b.HasOne("HorizonNET.Domain.Entities.Project", "Project")
-                        .WithMany()
-                        .HasForeignKey("ProjectId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Project");
-                });
-
-            modelBuilder.Entity("HorizonNET.Domain.Entities.TaskSeriesSlot", b =>
-                {
-                    b.HasOne("HorizonNET.Domain.Entities.TaskSeries", "Series")
-                        .WithMany("Slots")
-                        .HasForeignKey("SeriesId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Series");
                 });
 
             modelBuilder.Entity("HorizonNET.Domain.Entities.TaskTemplate", b =>
@@ -1168,13 +1050,6 @@ namespace HorizonNET.Data.Migrations
                     b.Navigation("SubTasks");
 
                     b.Navigation("TimeEntries");
-                });
-
-            modelBuilder.Entity("HorizonNET.Domain.Entities.TaskSeries", b =>
-                {
-                    b.Navigation("Slots");
-
-                    b.Navigation("Tasks");
                 });
 
             modelBuilder.Entity("HorizonNET.Domain.Entities.Workspace", b =>

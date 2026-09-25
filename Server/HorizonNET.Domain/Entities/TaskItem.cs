@@ -31,6 +31,11 @@ public class TaskItem
 
     public WorkStatus Status { get; set; } = WorkStatus.Planned;
 
+    // Aufgabe (Board) oder Termin (nur Kalender) – siehe TaskKind. Wird beim Anlegen
+    // gesetzt und danach nur über SetKindAsync geändert; der Vollersatz UpdateAsync
+    // lässt das Feld bewusst in Ruhe (wie GoogleEventId und die SortOrder-Felder).
+    public TaskKind Kind { get; set; } = TaskKind.Task;
+
     // Manuelle Reihenfolge innerhalb einer Kanban-Spalte (Status) – bei Sub-Tasks
     // die Reihenfolge innerhalb des Eltern-Tasks (SubTaskList).
     // Sortiert wird stets erst nach Status, dann nach SortOrder.
@@ -53,6 +58,21 @@ public class TaskItem
     public int? ParentTaskId { get; set; }
 
     public TaskItem? ParentTask { get; set; }
+
+    // Aus einer Terminserie materialisiert? Dann Serie, Slot und das NOMINELLE Datum des
+    // Vorkommens. SeriesDate ist bewusst getrennt von DueDate: Verschiebt der Nutzer den
+    // Einzeltermin auf einen anderen Tag, bleibt SeriesDate stehen – sonst legte der
+    // Generator für den ursprünglichen Tag einen zweiten Termin an. Eindeutig je
+    // (SeriesId, SeriesSlotId, SeriesDate), auch über soft-gelöschte Zeilen hinweg.
+    public int? SeriesId { get; set; }
+
+    public TaskSeries? Series { get; set; }
+
+    public int? SeriesSlotId { get; set; }
+
+    public TaskSeriesSlot? SeriesSlot { get; set; }
+
+    public DateOnly? SeriesDate { get; set; }
 
     // Verknüpfung zum gespiegelten Google-Kalender-Eintrag (Einweg-Sync).
     // Wird ausschließlich serverseitig vom Sync gesetzt, nie über das Client-DTO.

@@ -83,6 +83,18 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         task.CreatedAt = now;
         task.UpdatedAt = now;
 
+        // Sub-Tasks erben das Kind (Aufgabe/Termin) ihres Eltern-Tasks – die Checkliste
+        // eines Termins gehört nicht aufs Board. Hier im Repository, damit es für jeden
+        // Anlage-Weg gilt und kein Client daran denken muss.
+        if (task.ParentTaskId is int parentId)
+        {
+            var parentKind = await context.Tasks
+                .Where(t => t.Id == parentId)
+                .Select(t => (TaskKind?)t.Kind)
+                .FirstOrDefaultAsync();
+            if (parentKind is TaskKind kind) task.Kind = kind;
+        }
+
         // Auch ein direkt als "Geplant Heute" angelegter Task ist heute fällig – sonst
         // gälte die Invariante je nach Einstiegspunkt unterschiedlich. Kein Client nutzt
         // das aktuell (alle legen mit "Geplant" an), die API erlaubt es aber.
@@ -188,6 +200,27 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         existing.ProjectId = projectId;
         existing.UpdatedAt = DateTime.Now;
         await MoveSubTasksToProjectAsync(existing, previousProjectId, projectId);
+
+        await context.SaveChangesAsync();
+        return await GetByIdAsync(id) ?? existing;
+    }
+
+    // Aufgabe ↔ Termin. Sub-Tasks ziehen mit, weil sie das Kind ihres Eltern-Tasks tragen
+    // (siehe CreateAsync) – sonst stünde die Checkliste eines Termins weiter im Board.
+    // Ein Sub-Task selbst lässt sich nicht einzeln umschalten (kein eigenes Kind).
+    public async Task<TaskItem?> SetKindAsync(int id, TaskKind kind)
+    {
+        var existing = await context.Tasks.FindAsync(id);
+        if (existing is null) return null;
+
+        existing.Kind = kind;
+        existing.UpdatedAt = DateTime.Now;
+
+        var subTasks = await context.Tasks
+            .Where(t => t.ParentTaskId == id)
+            .ToListAsync();
+        foreach (var sub in subTasks)
+            sub.Kind = kind;
 
         await context.SaveChangesAsync();
         return await GetByIdAsync(id) ?? existing;
@@ -491,15 +524,18 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
             .Where(t => t.DeletedAt != null)
             .Include(t => t.Project)
             .Include(t => t.ParentTask)
+            .Include(t => t.Series)
             .OrderByDescending(t => t.DeletedAt)
             .ToListAsync();
 
         // Nur eigenständig gelöschte "Wurzeln": Tasks, die im selben Vorgang (gleicher
-        // Zeitstempel) mit ihrem Projekt oder Eltern-Task gelöscht wurden, kämen beim
-        // Wiederherstellen von dort automatisch mit zurück – hier also ausblenden.
+        // Zeitstempel) mit ihrem Projekt, Eltern-Task oder ihrer Terminserie gelöscht
+        // wurden, kämen beim Wiederherstellen von dort automatisch mit zurück – hier also
+        // ausblenden.
         static bool CameWithParent(TaskItem t) =>
             (t.Project is { DeletedAt: not null } p && p.DeletedAt == t.DeletedAt)
-            || (t.ParentTask is { DeletedAt: not null } pt && pt.DeletedAt == t.DeletedAt);
+            || (t.ParentTask is { DeletedAt: not null } pt && pt.DeletedAt == t.DeletedAt)
+            || (t.Series is { DeletedAt: not null } s && s.DeletedAt == t.DeletedAt);
 
         return deleted.Where(t => !CameWithParent(t)).ToList();
     }

@@ -16,7 +16,8 @@ public class TrashController(
     ITaskRepository tasks,
     INoteRepository notes,
     INoteFolderRepository noteFolders,
-    IDailyTaskRepository dailyTasks) : ControllerBase
+    IDailyTaskRepository dailyTasks,
+    ITaskSeriesRepository taskSeries) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> GetAll()
@@ -41,6 +42,11 @@ public class TrashController(
         items.AddRange((await noteFolders.GetDeletedAsync()).Select(f => new TrashItemDto(
             TrashItemTypes.NoteFolder, f.Id, f.Name, null, f.DeletedAt!.Value)));
 
+        // Serie als EIN Eintrag; die mit ihr gelöschten Termine hängen daran (TaskRepository
+        // blendet sie als "mit der Serie gelöscht" aus) und kommen per Restore mit zurück.
+        items.AddRange((await taskSeries.GetDeletedAsync()).Select(s => new TrashItemDto(
+            TrashItemTypes.TaskSeries, s.Id, s.Title, s.Project?.Name, s.DeletedAt!.Value)));
+
         // Zuletzt gelöscht zuerst, typübergreifend.
         return Ok(items.OrderByDescending(i => i.DeletedAt));
     }
@@ -61,6 +67,9 @@ public class TrashController(
         // Task-Wurzelliste nur noch eigenständig gelöschte Tasks enthält.
         foreach (var p in await projects.GetDeletedAsync())
             await projects.PurgeAsync(p.Id);
+        // Serien vor den Tasks: nimmt ihre mitgelöschten Termine gleich mit.
+        foreach (var s in await taskSeries.GetDeletedAsync())
+            await taskSeries.PurgeAsync(s.Id);
         foreach (var t in await tasks.GetDeletedAsync())
             await tasks.PurgeAsync(t.Id);
         foreach (var n in await notes.GetDeletedAsync())
@@ -84,6 +93,7 @@ public class TrashController(
         TrashItemTypes.Note      => await notes.PurgeAsync(id),
         TrashItemTypes.DailyTask => await dailyTasks.PurgeAsync(id),
         TrashItemTypes.NoteFolder => await noteFolders.PurgeAsync(id),
+        TrashItemTypes.TaskSeries => await taskSeries.PurgeAsync(id),
         _ => null
     };
 }

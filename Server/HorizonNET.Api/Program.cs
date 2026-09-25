@@ -71,6 +71,7 @@ builder.Services.AddScoped<IAppSettingRepository, AppSettingRepository>();
 builder.Services.AddScoped<INoteRepository, NoteRepository>();
 builder.Services.AddScoped<INoteFolderRepository, NoteFolderRepository>();
 builder.Services.AddScoped<IDailyTaskRepository, DailyTaskRepository>();
+builder.Services.AddScoped<ITaskSeriesRepository, TaskSeriesRepository>();
 builder.Services.AddScoped<ITaskTemplateRepository, TaskTemplateRepository>();
 builder.Services.AddScoped<ITimeEntryRepository, TimeEntryRepository>();
 builder.Services.AddScoped<IExerciseRepository, ExerciseRepository>();
@@ -81,6 +82,11 @@ builder.Services.AddScoped<IJournalTemplateRepository, JournalTemplateRepository
 
 // Google-Kalender-Anbindung (OAuth + späterer Calendar-Zugriff)
 builder.Services.AddScoped<GoogleCalendarService>();
+
+// Terminserien materialisieren: scoped Generator (DbContext + Google) und der Hosted
+// Service, der ihn beim Start und täglich anstößt.
+builder.Services.AddScoped<TaskSeriesGenerator>();
+builder.Services.AddHostedService<TaskSeriesGeneratorHost>();
 
 // Authentifizierung: ein lokales Benutzerkonto (ASP.NET Core Identity) mit Cookie-Sitzung.
 // Das volle AddIdentity statt AddIdentityCore, weil es Cookie-Schemata und

@@ -220,9 +220,12 @@
             .OrderBy(t => t.StartTime ?? DateTime.MaxValue)
             .ThenBy(t => t.Title);
 
+    // Termine sind nie "überfällig": Ein vergangener Volleyball-Abend, den niemand als
+    // "war" markiert hat, ist Historie, keine liegengebliebene Arbeit. (Heute fällige
+    // Termine stehen dagegen bewusst in "Heute" – da gehören sie hin.)
     private IEnumerable<TaskResponseDto> Overdue =>
         (allTasks ?? [])
-            .Where(t => t.DueDate is not null && t.DueDate.Value.Date < DateTime.Today && !t.IsCompleted)
+            .Where(t => t.DueDate is not null && t.DueDate.Value.Date < DateTime.Today && !t.IsCompleted && !t.IsAppointment)
             .OrderBy(t => t.DueDate);
 
     protected override async Task OnInitializedAsync()

@@ -1,0 +1,349 @@
+@inject ApiService Api
+@inject ToastService Toast
+@inject IStringLocalizer<Enums> EnumL
+
+@* Verwaltung der Terminserien: Liste links oben, darunter das Formular für die gewählte
+   bzw. eine neue Serie (Kopf-Felder + Slot-Liste). Sichtbarkeit steuert der Aufrufer
+   (Kalender) über Visible; nach jeder Änderung meldet OnChanged, damit der Kalender die
+   materialisierten Termine frisch holt. *@
+@if (Visible)
+{
+    <div class="task-dialog-backdrop" @onclick="CloseAsync"></div>
+    <div class="task-dialog">
+        <div class="task-dialog-content" @onclick:stopPropagation="true">
+            <div class="task-dialog-header">
+                <h5 class="mb-0">Terminserien</h5>
+                <button type="button" class="btn-close" @onclick="CloseAsync" aria-label="Schließen"></button>
+            </div>
+
+            <div class="task-dialog-body">
+                @if (items is null)
+                {
+                    <p class="text-muted small">Wird geladen…</p>
+                }
+                else
+                {
+                    @if (items.Count > 0)
+                    {
+                        <ul class="list-group mb-3">
+                            @foreach (var s in items)
+                            {
+                                <li @key="s.Id" class="list-group-item py-2 px-2 series-item @(editingId == s.Id ? "is-editing" : "")">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="flex-grow-1 min-w-0">
+                                            <div class="@(s.IsActive ? "" : "text-muted text-decoration-line-through")">
+                                                @s.Title
+                                                @if (s.ProjectName is not null)
+                                                {
+                                                    <span class="badge bg-light text-dark ms-1">@s.ProjectName</span>
+                                                }
+                                            </div>
+                                            <div class="small text-muted">@SlotSummary(s)</div>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary border-0"
+                                                @onclick="() => StartEdit(s)" title="Bearbeiten">✎</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary border-0"
+                                                @onclick="() => ToggleActiveAsync(s)"
+                                                title="@(s.IsActive ? "Pausieren (keine neuen Termine)" : "Aktivieren")">@(s.IsActive ? "⏸" : "▶")</button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger border-0"
+                                                @onclick="() => DeleteAsync(s)" title="Löschen (zukünftige Termine gehen mit)">🗑</button>
+                                    </div>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    else if (editingId is null)
+                    {
+                        <p class="text-muted small">Noch keine Terminserien. Zum Beispiel: Volleyball, Mo/Mi/Fr mit je eigener Uhrzeit.</p>
+                    }
+
+                    @if (editingId is null)
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="StartNew">+ Neue Serie</button>
+                    }
+                    else
+                    {
+                        <div class="card p-3">
+                            <div class="fw-semibold mb-2">@(editingId == 0 ? "Neue Serie" : "Serie bearbeiten")</div>
+
+                            <div class="mb-2">
+                                <label class="form-label">Titel</label>
+                                <input class="form-control form-control-sm" @bind="form.Title" @bind:event="oninput" />
+                            </div>
+
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label d-block">Projekt</label>
+                                    <ProjectSelect @bind-Value="form.ProjectId" Placeholder="— kein Projekt —" Class="project-select-block" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Erinnerung</label>
+                                    <select class="form-select form-select-sm"
+                                            value="@(form.ReminderMinutes?.ToString() ?? "")"
+                                            @onchange="OnReminderChanged">
+                                        <option value="">Standard</option>
+                                        <option value="@TaskReminder.None">Keine</option>
+                                        <option value="0">Zum Termin</option>
+                                        <option value="10">10 Minuten vorher</option>
+                                        <option value="15">15 Minuten vorher</option>
+                                        <option value="30">30 Minuten vorher</option>
+                                        <option value="60">1 Stunde vorher</option>
+                                        <option value="1440">1 Tag vorher</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label">Priorität</label>
+                                    <select class="form-select form-select-sm" @bind="form.Priority">
+                                        @foreach (var p in Enum.GetValues<Priority>())
+                                        {
+                                            <option value="@p">@PriorityDisplay.Symbol(p) @EnumL[$"Priority_{p}"]</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-md-6 d-flex align-items-end">
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" id="seriesActive" @bind="form.IsActive" />
+                                        <label class="form-check-label" for="seriesActive">Aktiv (legt neue Termine an)</label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            @* Slots: Wochentag + von/bis, beliebig viele – auch mehrere am selben Tag. *@
+                            <label class="form-label mb-1">Zeitfenster</label>
+                            @if (form.Slots.Count == 0)
+                            {
+                                <p class="text-muted small mb-2">Noch kein Zeitfenster. Ohne Zeitfenster entstehen keine Termine.</p>
+                            }
+                            @foreach (var slot in form.Slots)
+                            {
+                                <div @key="slot" class="d-flex align-items-center gap-2 mb-2 series-slot-row">
+                                    <select class="form-select form-select-sm" @bind="slot.DayOfWeek">
+                                        @foreach (var (day, sh) in Weekdays.Order)
+                                        {
+                                            <option value="@day">@sh</option>
+                                        }
+                                    </select>
+                                    <InputDate Type="InputDateType.Time" class="form-control form-control-sm" @bind-Value="slot.StartTime" />
+                                    <span class="text-muted">–</span>
+                                    <InputDate Type="InputDateType.Time" class="form-control form-control-sm" @bind-Value="slot.EndTime" />
+                                    <button type="button" class="btn btn-sm btn-outline-danger border-0"
+                                            @onclick="() => form.Slots.Remove(slot)" title="Zeitfenster entfernen">✕</button>
+                                </div>
+                            }
+                            <div>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="AddSlot">+ Zeitfenster</button>
+                            </div>
+
+                            @if (error is not null)
+                            {
+                                <div class="text-danger small mt-2">@error</div>
+                            }
+
+                            <div class="d-flex justify-content-end gap-2 mt-3">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CancelEdit">Abbrechen</button>
+                                <button type="button" class="btn btn-sm btn-primary" @onclick="SaveAsync"
+                                        disabled="@(isSaving || string.IsNullOrWhiteSpace(form.Title))">
+                                    @(isSaving ? "Speichert…" : (editingId == 0 ? "Anlegen" : "Speichern"))
+                                </button>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="task-dialog-footer">
+                <span class="small text-muted">Termine entstehen automatisch für die nächsten 8 Wochen.</span>
+                <button type="button" class="btn btn-outline-secondary" @onclick="CloseAsync">Schließen</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+
+    // Dialog schließen (X / Backdrop / Schließen).
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    // Nach jeder Änderung – der Kalender lädt dann die materialisierten Termine neu.
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private List<TaskSeriesResponseDto>? items;
+    private bool loaded;
+
+    // null = keine Bearbeitung, 0 = neue Serie, sonst Id der bearbeiteten Serie.
+    private int? editingId;
+    private SeriesForm form = new();
+    private bool isSaving;
+    private string? error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Visible && !loaded)
+        {
+            items = await Api.GetTaskSeriesAsync() ?? new();
+            editingId = null;
+            loaded = true;
+        }
+        else if (!Visible)
+        {
+            loaded = false;
+        }
+    }
+
+    // "Mo 19:00–21:00 · Mi 18:30–20:00" – die Slots so, wie der Server sie liefert (Mo … So).
+    private static string SlotSummary(TaskSeriesResponseDto s) =>
+        s.Slots.Count == 0
+            ? "keine Zeitfenster"
+            : string.Join(" · ", s.Slots.Select(x =>
+                $"{Weekdays.Order.First(o => o.Day == x.DayOfWeek).Short} {x.StartTime:HH\\:mm}–{x.EndTime:HH\\:mm}"));
+
+    private void StartNew()
+    {
+        editingId = 0;
+        error = null;
+        form = new SeriesForm();
+        AddSlot();   // eine Zeile vorgeben, sonst wirkt das Formular leer
+    }
+
+    private void StartEdit(TaskSeriesResponseDto s)
+    {
+        editingId = s.Id;
+        error = null;
+        form = new SeriesForm
+        {
+            Title = s.Title,
+            ProjectId = s.ProjectId,
+            ReminderMinutes = s.ReminderMinutes,
+            Priority = Enum.Parse<Priority>(s.Priority),
+            IsActive = s.IsActive,
+            Kind = s.Kind,
+            Slots = s.Slots.Select(x => new SlotForm { Id = x.Id, DayOfWeek = x.DayOfWeek, StartTime = x.StartTime, EndTime = x.EndTime }).ToList()
+        };
+    }
+
+    private void CancelEdit()
+    {
+        editingId = null;
+        error = null;
+    }
+
+    // Neue Zeile übernimmt Wochentag/Zeiten der letzten – beim "Mo/Mi/Fr, je 19 Uhr"
+    // spart das Tipparbeit; sonst Montag 19–21 Uhr als brauchbarer Start.
+    private void AddSlot()
+    {
+        var last = form.Slots.LastOrDefault();
+        form.Slots.Add(new SlotForm
+        {
+            DayOfWeek = last?.DayOfWeek ?? DayOfWeek.Monday,
+            StartTime = last?.StartTime ?? new TimeOnly(19, 0),
+            EndTime   = last?.EndTime   ?? new TimeOnly(21, 0)
+        });
+    }
+
+    private void OnReminderChanged(ChangeEventArgs e)
+    {
+        var raw = e.Value?.ToString();
+        form.ReminderMinutes = string.IsNullOrEmpty(raw) ? null : int.Parse(raw);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(form.Title)) return;
+
+        if (form.Slots.Any(s => s.EndTime <= s.StartTime))
+        {
+            error = "Ende muss nach dem Beginn liegen.";
+            return;
+        }
+
+        isSaving = true;
+        error = null;
+
+        var slots = form.Slots
+            .Select(s => new TaskSeriesSlotDto(s.DayOfWeek, s.StartTime, s.EndTime, s.Id))
+            .ToList();
+
+        TaskSeriesResponseDto? saved;
+        if (editingId == 0)
+        {
+            saved = await Api.CreateTaskSeriesAsync(new TaskSeriesCreateDto(
+                form.Title.Trim(), null, form.ProjectId, slots, form.Kind, form.Priority, form.ReminderMinutes));
+        }
+        else
+        {
+            saved = await Api.UpdateTaskSeriesAsync(editingId!.Value, new TaskSeriesUpdateDto(
+                form.Title.Trim(), null, form.ProjectId, form.IsActive, form.Kind, form.Priority, form.ReminderMinutes, slots));
+        }
+
+        isSaving = false;
+
+        if (saved is null)
+        {
+            error = editingId == 0 ? "Anlegen fehlgeschlagen." : "Speichern fehlgeschlagen.";
+            return;
+        }
+
+        items ??= new();
+        var i = items.FindIndex(x => x.Id == saved.Id);
+        if (i >= 0) items[i] = saved; else items.Add(saved);
+        items = items.OrderBy(x => x.Title, StringComparer.CurrentCultureIgnoreCase).ToList();
+
+        editingId = null;
+        Toast.ShowSuccess(i >= 0 ? "Serie gespeichert" : $"„{saved.Title}\" angelegt – Termine stehen im Kalender");
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task ToggleActiveAsync(TaskSeriesResponseDto s)
+    {
+        var updated = await Api.UpdateTaskSeriesAsync(s.Id, new TaskSeriesUpdateDto(
+            s.Title, s.Description, s.ProjectId, !s.IsActive, s.Kind, Enum.Parse<Priority>(s.Priority),
+            s.ReminderMinutes, s.Slots));
+        if (updated is null || items is null) return;
+
+        var i = items.FindIndex(x => x.Id == s.Id);
+        if (i >= 0) items[i] = updated;
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task DeleteAsync(TaskSeriesResponseDto s)
+    {
+        if (!await Api.DeleteTaskSeriesAsync(s.Id)) return;
+
+        items?.RemoveAll(x => x.Id == s.Id);
+        if (editingId == s.Id) editingId = null;
+        await OnChanged.InvokeAsync();
+
+        Toast.ShowUndo($"{s.Title} gelöscht (samt zukünftiger Termine)", async () =>
+        {
+            if (!await Api.RestoreTaskSeriesAsync(s.Id)) return;
+            items = await Api.GetTaskSeriesAsync() ?? items;
+            await InvokeAsync(StateHasChanged);
+            await OnChanged.InvokeAsync();
+        });
+    }
+
+    private async Task CloseAsync() => await OnClose.InvokeAsync();
+
+    private class SeriesForm
+    {
+        public string Title { get; set; } = string.Empty;
+        public int? ProjectId { get; set; }
+        public int? ReminderMinutes { get; set; }
+        public Priority Priority { get; set; } = Priority.Medium;
+        public bool IsActive { get; set; } = true;
+        public TaskKind Kind { get; set; } = TaskKind.Appointment;
+        public List<SlotForm> Slots { get; set; } = new();
+    }
+
+    private class SlotForm
+    {
+        public int? Id { get; set; }
+        public DayOfWeek DayOfWeek { get; set; } = DayOfWeek.Monday;
+        public TimeOnly StartTime { get; set; } = new(19, 0);
+        public TimeOnly EndTime { get; set; } = new(21, 0);
+    }
+}
