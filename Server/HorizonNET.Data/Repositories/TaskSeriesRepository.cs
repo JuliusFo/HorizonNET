@@ -75,10 +75,13 @@ public class TaskSeriesRepository(AppDbContext context) : ITaskSeriesRepository
             // Uhrzeit nur, wenn der Termin noch auf seinem nominellen Tag liegt – ein
             // bewusst verlegter Einzeltermin behält seine Zeit.
             var slot = task.SeriesSlotId is int sid ? existing.Slots.FirstOrDefault(s => s.Id == sid) : null;
-            if (slot is not null && task.DueDate?.Date == task.SeriesDate?.ToDateTime(TimeOnly.MinValue))
+            if (slot is not null
+                && task.DueDate is DateTime due
+                && task.SeriesDate is DateOnly nominal
+                && DateOnly.FromDateTime(due) == nominal)
             {
-                task.StartTime = task.DueDate.Value.Date.Add(slot.StartTime.ToTimeSpan());
-                task.EndTime   = task.DueDate.Value.Date.Add(slot.EndTime.ToTimeSpan());
+                task.StartTime = due.Date.Add(slot.StartTime.ToTimeSpan());
+                task.EndTime   = due.Date.Add(slot.EndTime.ToTimeSpan());
             }
 
             task.UpdatedAt = now;
