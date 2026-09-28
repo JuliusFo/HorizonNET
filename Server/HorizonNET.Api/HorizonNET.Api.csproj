@@ -26,6 +26,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Lokale Entwicklungs-Secrets (Google-Credentials, Auth:InitialPassword) gehören nicht
+         ins Deployment-Paket: In Produktion kommen Secrets als Umgebungsvariablen, und
+         Program.cs liest die Datei ohnehin nur in der Development-Umgebung. Ohne diese
+         Regel kopiert dotnet publish sie als Content mit nach app\ – so geschehen bis 1.2.0,
+         wo sie aus dem ZIP von Hand entfernt werden musste. Gleiches gilt für die
+         Development-Einstellungen. -->
+    <Content Update="appsettings.Secrets.json" CopyToPublishDirectory="Never" />
+    <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\Shared\HorizonNET.Shared.Transfer\HorizonNET.Shared.Transfer.csproj" />
     <ProjectReference Include="..\HorizonNET.Domain\HorizonNET.Domain.csproj" />
     <ProjectReference Include="..\HorizonNET.Data\HorizonNET.Data.csproj" />
