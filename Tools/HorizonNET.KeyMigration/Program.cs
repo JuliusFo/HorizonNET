@@ -14,6 +14,8 @@ var columns = new[]
     // Nachsichtig wie EncryptedConverter.Lenient: Der Refresh-Token-Altbestand kann noch
     // Klartext sein; beim Umschlüsseln wird er dabei gleich mitverschlüsselt.
     new EncryptedColumn("GoogleConnections", "RefreshToken", "HorizonNET.GoogleConnection.RefreshToken", Strict: false),
+    // Nachsichtig wie im Modell: Nicht entschlüsselbar heißt nur "neu verbinden".
+    new EncryptedColumn("CalDavConnections", "AppPassword",  "HorizonNET.CalDav.Password",               Strict: false),
     new EncryptedColumn("JournalEntries",    "Content",      "HorizonNET.Journal.Content",               Strict: true),
     new EncryptedColumn("JournalEntries",    "Title",        "HorizonNET.Journal.Title",                 Strict: true),
     new EncryptedColumn("MoodEntries",       "Note",         "HorizonNET.Journal.MoodNote",              Strict: true),

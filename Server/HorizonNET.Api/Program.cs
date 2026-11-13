@@ -1,5 +1,6 @@
 using System.Reflection;
 using HorizonNET.Api.Services;
+using HorizonNET.Api.Services.Calendar;
 using Microsoft.AspNetCore.DataProtection;
 using HorizonNET.Data;
 using HorizonNET.Data.Repositories;
@@ -80,14 +81,21 @@ builder.Services.AddScoped<IBodyWeightRepository, BodyWeightRepository>();
 builder.Services.AddScoped<IJournalRepository, JournalRepository>();
 builder.Services.AddScoped<IJournalTemplateRepository, JournalTemplateRepository>();
 builder.Services.AddScoped<IAzureDevOpsConnectionRepository, AzureDevOpsConnectionRepository>();
+builder.Services.AddScoped<ICalDavConnectionRepository, CalDavConnectionRepository>();
 
-// Google-Kalender-Anbindung (OAuth + späterer Calendar-Zugriff)
+// Kalender-Sync: Google (OAuth) oder Nextcloud (CalDAV), immer höchstens einer verbunden.
+// Controller und Seriengenerator sprechen nur mit der Fassade CalendarSyncService.
 builder.Services.AddScoped<GoogleCalendarService>();
+// Umleitungen folgt der CalDAV-Client selbst – der eingebaute Redirect verwirft den
+// Authorization-Header und damit die Anmeldung.
+builder.Services.AddHttpClient<CalDavCalendarService>(c => c.Timeout = TimeSpan.FromSeconds(30))
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
+builder.Services.AddScoped<CalendarSyncService>();
 
 // Azure-DevOps-Import (PAT, REST-API). Typed HttpClient: Handler-Pooling über die Factory.
 builder.Services.AddHttpClient<AzureDevOpsService>(c => c.Timeout = TimeSpan.FromSeconds(30));
 
-// Terminserien materialisieren: scoped Generator (DbContext + Google) und der Hosted
+// Terminserien materialisieren: scoped Generator (DbContext + Kalender-Sync) und der Hosted
 // Service, der ihn beim Start und täglich anstößt.
 builder.Services.AddScoped<TaskSeriesGenerator>();
 builder.Services.AddHostedService<TaskSeriesGeneratorHost>();

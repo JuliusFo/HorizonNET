@@ -8,17 +8,17 @@ using Google.Apis.Auth.OAuth2.Responses;
 using Google.Apis.Calendar.v3;
 using Google.Apis.Calendar.v3.Data;
 using Google.Apis.Services;
+using HorizonNET.Api.Services.Calendar;
 using HorizonNET.Domain.Entities;
 using HorizonNET.Domain.Interfaces;
-using HorizonNET.Shared.Transfer;
 using HorizonNET.Shared.Transfer.DTOs;
 
 namespace HorizonNET.Api.Services;
 
-// Kapselt den OAuth-2.0-Flow und (ab Phase 3) den Zugriff auf Google Calendar.
-// Persistiert wird nur der langlebige Refresh-Token; Access-Tokens beschafft die
-// Google-Bibliothek bei Bedarf automatisch neu.
-public class GoogleCalendarService
+// Kapselt den OAuth-2.0-Flow und den Zugriff auf Google Calendar (Kalender-Anbieter
+// "google", siehe ICalendarProvider). Persistiert wird nur der langlebige Refresh-Token;
+// Access-Tokens beschafft die Google-Bibliothek bei Bedarf automatisch neu.
+public class GoogleCalendarService : ICalendarProvider
 {
     // Single-User-App: fester Schlüssel für die eine Verbindung.
     private const string UserKey = "user";
@@ -30,37 +30,44 @@ public class GoogleCalendarService
         "https://www.googleapis.com/auth/userinfo.email" // nur zum Anzeigen der verbundenen Adresse
     ];
 
-    // Vorlaufzeit der Erinnerung am gespiegelten Termin, in Minuten. Fehlt der Wert,
-    // gilt "keine Erinnerung" – siehe ReminderMinutesAsync.
-    public const string ReminderSettingKey = "google.reminderMinutes";
-
     private readonly IGoogleConnectionRepository repo;
     private readonly ITaskRepository taskRepo;
-    private readonly IAppSettingRepository settings;
-    private readonly string clientId;
-    private readonly string clientSecret;
+    private readonly IConfiguration config;
 
     public GoogleCalendarService(
         IConfiguration config,
         IGoogleConnectionRepository repo,
-        ITaskRepository taskRepo,
-        IAppSettingRepository settings)
+        ITaskRepository taskRepo)
     {
+        this.config = config;
         this.repo = repo;
         this.taskRepo = taskRepo;
-        this.settings = settings;
-        clientId = config["Google:ClientId"]
-            ?? throw new InvalidOperationException("Google:ClientId ist nicht konfiguriert.");
-        clientSecret = config["Google:ClientSecret"]
-            ?? throw new InvalidOperationException("Google:ClientSecret ist nicht konfiguriert.");
     }
 
-    private GoogleAuthorizationCodeFlow CreateFlow() =>
-        new(new GoogleAuthorizationCodeFlow.Initializer
+    public string Key => CalendarProviders.Google;
+
+    // Ob Google-Credentials hinterlegt sind. Ohne sie bietet die Einstellungsseite
+    // Google gar nicht erst an – wer nur Nextcloud nutzt, braucht keine.
+    public bool IsConfigured =>
+        !string.IsNullOrWhiteSpace(config["Google:ClientId"]) &&
+        !string.IsNullOrWhiteSpace(config["Google:ClientSecret"]);
+
+    // Erst hier (und nicht im Konstruktor) auf die Konfiguration bestehen: Der Service
+    // wird über CalendarSyncService bei jedem Task-Request erzeugt, auch wenn gar nicht
+    // Google, sondern Nextcloud verbunden ist.
+    private GoogleAuthorizationCodeFlow CreateFlow()
+    {
+        var clientId = config["Google:ClientId"];
+        var clientSecret = config["Google:ClientSecret"];
+        if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
+            throw new InvalidOperationException("Google:ClientId/ClientSecret ist nicht konfiguriert.");
+
+        return new(new GoogleAuthorizationCodeFlow.Initializer
         {
             ClientSecrets = new ClientSecrets { ClientId = clientId, ClientSecret = clientSecret },
             Scopes = Scopes
         });
+    }
 
     // Baut die URL zur Google-Zustimmungsseite. access_type=offline + prompt=consent
     // stellen sicher, dass Google (auch bei erneuter Verbindung) einen Refresh-Token liefert.
@@ -110,13 +117,12 @@ public class GoogleCalendarService
         });
     }
 
-    public async Task<GoogleStatusDto> GetStatusAsync()
-    {
-        var conn = await repo.GetAsync();
-        return new GoogleStatusDto(conn is not null, conn?.Email);
-    }
+    public async Task<bool> IsConnectedAsync() => await repo.GetAsync() is not null;
 
-    public Task<bool> DisconnectAsync() => repo.DeleteAsync();
+    // E-Mail des verbundenen Kontos; null, wenn nicht verbunden oder unbekannt.
+    public async Task<string?> GetAccountAsync() => (await repo.GetAsync())?.Email;
+
+    public Task DisconnectAsync() => repo.DeleteAsync();
 
     // Liefert eine autorisierte Credential für API-Aufrufe; refresht den Access-Token
     // bei Bedarf automatisch aus dem Refresh-Token. Null, wenn nicht verbunden.
@@ -153,7 +159,8 @@ public class GoogleCalendarService
 
     // Liest die Termine des primären Kalenders im angegebenen (UTC-)Zeitraum.
     // Leere Liste, wenn nicht verbunden.
-    public async Task<IReadOnlyList<GoogleEventDto>> GetEventsAsync(DateTime fromUtc, DateTime toUtc)
+    public async Task<IReadOnlyList<CalendarEventDto>> GetEventsAsync(
+        DateTime fromUtc, DateTime toUtc, IReadOnlySet<string> ownIds)
     {
         var credential = await GetCredentialAsync();
         if (credential is null) return [];
@@ -174,8 +181,6 @@ public class GoogleCalendarService
 
             // Termine ausblenden, die die App selbst aus Tasks gespiegelt hat – sonst
             // erschiene jeder geplante Task doppelt (lokaler Task + sein Google-Event).
-            var ownIds = await taskRepo.GetGoogleEventIdsAsync();
-
             return (response.Items ?? [])
                 .Where(e => e.Id is null || !ownIds.Contains(e.Id))
                 .Select(ToEventDto)
@@ -199,7 +204,7 @@ public class GoogleCalendarService
         }
     }
 
-    private static GoogleEventDto? ToEventDto(Event e)
+    private static CalendarEventDto? ToEventDto(Event e)
     {
         if (e.Start is null) return null;
 
@@ -207,7 +212,7 @@ public class GoogleCalendarService
         if (e.Start.DateTimeDateTimeOffset is { } startDto)
         {
             var endDto = e.End?.DateTimeDateTimeOffset ?? startDto;
-            return new GoogleEventDto(
+            return new CalendarEventDto(
                 e.Id, e.Summary ?? "(ohne Titel)",
                 startDto.LocalDateTime, endDto.LocalDateTime, AllDay: false);
         }
@@ -216,7 +221,7 @@ public class GoogleCalendarService
         {
             // Bei ganztägigen Terminen ist End.Date exklusiv (Folgetag).
             var endDate = DateTime.TryParse(e.End?.Date, out var ed) ? ed : startDate.AddDays(1);
-            return new GoogleEventDto(
+            return new CalendarEventDto(
                 e.Id, e.Summary ?? "(ohne Titel)", startDate, endDate, AllDay: true);
         }
 
@@ -235,7 +240,7 @@ public class GoogleCalendarService
     // Spiegelt einen Task in den Google-Kalender. Macht nichts, wenn nicht verbunden.
     // Best-effort: Fehler werden geschluckt, damit ein Google-Problem das lokale Speichern
     // niemals blockiert.
-    public async Task SyncTaskAsync(TaskItem task)
+    public async Task SyncTaskAsync(TaskItem task, int? defaultReminderMinutes)
     {
         try
         {
@@ -247,33 +252,33 @@ public class GoogleCalendarService
             // Ungeplant (kein Fälligkeitsdatum): ein evtl. vorhandenes Event entfernen.
             if (task.DueDate is null)
             {
-                if (!string.IsNullOrEmpty(task.GoogleEventId))
+                if (!string.IsNullOrEmpty(task.CalendarEventId))
                 {
-                    await TryDeleteAsync(service, task.GoogleEventId);
-                    await taskRepo.SetGoogleEventIdAsync(task.Id, null);
+                    await TryDeleteAsync(service, task.CalendarEventId);
+                    await taskRepo.SetCalendarEventIdAsync(task.Id, null);
                 }
                 return;
             }
 
-            var body = BuildEvent(task, await ReminderMinutesAsync());
+            var body = BuildEvent(TaskEventData.From(task, defaultReminderMinutes));
 
-            if (string.IsNullOrEmpty(task.GoogleEventId))
+            if (string.IsNullOrEmpty(task.CalendarEventId))
             {
                 var created = await service.Events.Insert(body, "primary").ExecuteAsync();
-                await taskRepo.SetGoogleEventIdAsync(task.Id, created.Id);
+                await taskRepo.SetCalendarEventIdAsync(task.Id, created.Id);
             }
             else
             {
                 try
                 {
-                    await service.Events.Update(body, "primary", task.GoogleEventId).ExecuteAsync();
+                    await service.Events.Update(body, "primary", task.CalendarEventId).ExecuteAsync();
                 }
                 catch (GoogleApiException ex) when (
                     ex.HttpStatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone)
                 {
                     // Event wurde extern gelöscht → neu anlegen und Verknüpfung aktualisieren.
                     var recreated = await service.Events.Insert(body, "primary").ExecuteAsync();
-                    await taskRepo.SetGoogleEventIdAsync(task.Id, recreated.Id);
+                    await taskRepo.SetCalendarEventIdAsync(task.Id, recreated.Id);
                 }
             }
         }
@@ -295,7 +300,7 @@ public class GoogleCalendarService
     }
 
     // Löscht das zu einem (bereits lokal entfernten) Task gehörende Google-Event.
-    public async Task DeleteTaskEventAsync(string googleEventId)
+    public async Task DeleteEventAsync(string googleEventId)
     {
         try
         {
@@ -332,59 +337,27 @@ public class GoogleCalendarService
         }
     }
 
-    // ── Erinnerungen ─────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Eingestellte Vorlaufzeit in Minuten; null = keine Erinnerung.
-    /// </summary>
-    public async Task<int?> GetReminderMinutesAsync() => await ReminderMinutesAsync();
-
-    public async Task SetReminderMinutesAsync(int? minutes) =>
-        await settings.SetAsync(ReminderSettingKey, minutes?.ToString() ?? string.Empty);
-
-    // Ohne gespeicherten Wert bewusst KEINE Erinnerung: Vorher wurde am Termin gar kein
-    // Reminders-Feld gesetzt, wodurch Google die Standard-Erinnerung des Kalenders anwandte –
-    // genau die Benachrichtigung, die auf dem Handy auch bei längst erledigten Tasks ankam.
-    private async Task<int?> ReminderMinutesAsync()
+    // Baut den Google-Event-Body. Mit Uhrzeit → Termin mit Uhrzeit, sonst ganztägig
+    // (End-Datum exklusiv) – die Regeln dazu stehen in TaskEventData.
+    private static Event BuildEvent(TaskEventData data)
     {
-        var gespeichert = await settings.GetAsync(ReminderSettingKey);
-        return int.TryParse(gespeichert, out var minuten) && minuten >= 0 ? minuten : null;
-    }
-
-    // Baut den Google-Event-Body aus einem Task. Mit Start-/Endzeit → Termin mit Uhrzeit,
-    // sonst ganztägig (End-Datum exklusiv) – spiegelt die Anzeige im Kalender.
-    //
-    // Erledigte Tasks bleiben als Termin stehen (die Historie ist der Sinn eines Kalenders),
-    // werden aber entschärft: keine Erinnerung, "✓" im Titel und "frei" statt "beschäftigt".
-    private static Event BuildEvent(TaskItem task, int? defaultReminderMinutes)
-    {
-        // Der Wert am Task schlägt den Standard; erledigt schlägt beide.
-        var erinnerung = task.IsCompleted
-            ? null
-            : TaskReminder.Effective(task.ReminderMinutes, defaultReminderMinutes);
-
-        var date = task.DueDate!.Value.Date;
         var ev = new Event
         {
-            Summary = task.IsCompleted ? $"✓ {task.Title}" : task.Title,
-            Description = task.Description,
-            Transparency = task.IsCompleted ? "transparent" : "opaque",
-            Reminders = BuildReminders(erinnerung)
+            Summary = data.Title,
+            Description = data.Description,
+            Transparency = data.Busy ? "opaque" : "transparent",
+            Reminders = BuildReminders(data.ReminderMinutes)
         };
 
-        if (task.StartTime is not null && task.EndTime is not null)
+        if (data.AllDay)
         {
-            var start = date + task.StartTime.Value.TimeOfDay;
-            var end = date + task.EndTime.Value.TimeOfDay;
-            if (end <= start) end = start.AddHours(1);
-
-            ev.Start = new EventDateTime { DateTimeDateTimeOffset = new DateTimeOffset(start) };
-            ev.End = new EventDateTime { DateTimeDateTimeOffset = new DateTimeOffset(end) };
+            ev.Start = new EventDateTime { Date = data.Start.ToString("yyyy-MM-dd") };
+            ev.End = new EventDateTime { Date = data.End.ToString("yyyy-MM-dd") };
         }
         else
         {
-            ev.Start = new EventDateTime { Date = date.ToString("yyyy-MM-dd") };
-            ev.End = new EventDateTime { Date = date.AddDays(1).ToString("yyyy-MM-dd") };
+            ev.Start = new EventDateTime { DateTimeDateTimeOffset = new DateTimeOffset(data.Start) };
+            ev.End = new EventDateTime { DateTimeDateTimeOffset = new DateTimeOffset(data.End) };
         }
 
         return ev;

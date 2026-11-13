@@ -1,3 +1,4 @@
+using HorizonNET.Api.Services.Calendar;
 using HorizonNET.Api.Services;
 using HorizonNET.Domain.Interfaces;
 using HorizonNET.Shared.Transfer.DTOs;
@@ -15,7 +16,7 @@ namespace HorizonNET.Api.Controllers;
 public class AzureDevOpsController(
     AzureDevOpsService azure,
     IProjectRepository projects,
-    GoogleCalendarService google) : ControllerBase
+    CalendarSyncService calendar) : ControllerBase
 {
     [HttpGet("status")]
     public async Task<IActionResult> Status() => Ok(await azure.GetStatusAsync());
@@ -81,10 +82,10 @@ public class AzureDevOpsController(
         try
         {
             var (created, skipped) = await azure.ImportAsync(dto.ProjectId, dto.WorkItemIds);
-            // Wie beim normalen Anlegen: best-effort in Google spiegeln (ohne Fälligkeit
+            // Wie beim normalen Anlegen: best-effort in den Kalender spiegeln (ohne Fälligkeit
             // passiert dort nichts – bleibt aber derselbe Weg wie in TasksController.Create).
             foreach (var task in created)
-                await google.SyncTaskAsync(task);
+                await calendar.SyncTaskAsync(task);
             return Ok(new AzureDevOpsImportResultDto(created.Count, skipped, null));
         }
         catch (AzureDevOpsException ex)

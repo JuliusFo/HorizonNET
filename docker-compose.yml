@@ -22,7 +22,7 @@ services:
       Auth__SecureCookie: "${HORIZON_SECURE_COOKIE:-true}"
       # Netz des Reverse Proxys, dessen X-Forwarded-Header vertraut wird
       ForwardedHeaders__KnownNetworks: "${HORIZON_TRUSTED_PROXIES:-}"
-      # Google-Kalender (optional)
+      # Google-Kalender (optional; Nextcloud wird in der App eingerichtet)
       Google__ClientId: "${GOOGLE_CLIENT_ID:-}"
       Google__ClientSecret: "${GOOGLE_CLIENT_SECRET:-}"
       TZ: "${TZ:-Europe/Berlin}"

@@ -1,5 +1,6 @@
 using HorizonNET.Api.Controllers;
 using HorizonNET.Api.Services;
+using HorizonNET.Api.Services.Calendar;
 using HorizonNET.Data;
 using HorizonNET.Data.Repositories;
 using HorizonNET.Domain.Entities;
@@ -7,6 +8,8 @@ using HorizonNET.Shared.Transfer.DTOs;
 using HorizonNET.Shared.Transfer.Enums;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace HorizonNET.Server.Tests;
 
@@ -107,23 +110,21 @@ public class TasksControllerTests
     }
 
     private static TasksController NewController(AppDbContext ctx) =>
-        new(new TaskRepository(ctx), new TimeEntryRepository(ctx), NewGoogleService(ctx));
+        new(new TaskRepository(ctx), new TimeEntryRepository(ctx), NewCalendarService(ctx));
 
-    // Der GoogleCalendarService ist eine konkrete Klasse und damit ein Pflichtparameter
-    // des Controllers. Ohne gespeicherte Verbindung steigt jeder Aufruf sofort wieder aus
-    // (GetCredentialAsync liefert null) – es geht also nie etwas ins Netz. Die Zugangsdaten
-    // sind trotzdem nötig, weil der Konstruktor sonst wirft.
-    private static GoogleCalendarService NewGoogleService(AppDbContext ctx)
+    // Die Kalender-Fassade ist eine konkrete Klasse und damit ein Pflichtparameter des
+    // Controllers. Ohne gespeicherte Verbindung (weder Google noch Nextcloud) steigt jeder
+    // Aufruf sofort wieder aus – es geht also nie etwas ins Netz.
+    internal static CalendarSyncService NewCalendarService(AppDbContext ctx)
     {
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Google:ClientId"] = "test-client-id",
-                ["Google:ClientSecret"] = "test-client-secret"
-            })
-            .Build();
+        var config = new ConfigurationBuilder().Build();
+        var tasks = new TaskRepository(ctx);
+        var google = new GoogleCalendarService(config, new GoogleConnectionRepository(ctx), tasks);
+        var caldav = new CalDavCalendarService(new HttpClient(), new CalDavConnectionRepository(ctx), tasks,
+            NullLogger<CalDavCalendarService>.Instance);
+        var scopes = new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
 
-        return new GoogleCalendarService(
-            config, new GoogleConnectionRepository(ctx), new TaskRepository(ctx), new AppSettingRepository(ctx));
+        return new CalendarSyncService(google, caldav, tasks, new AppSettingRepository(ctx), scopes,
+            NullLogger<CalendarSyncService>.Instance);
     }
 }

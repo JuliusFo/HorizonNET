@@ -65,7 +65,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IDataProtectio
             e.Property(t => t.Priority).HasConversion<string>();
             e.Property(t => t.Link).HasMaxLength(2048);
             e.Property(t => t.WaitingFor).HasMaxLength(200);
-            e.Property(t => t.GoogleEventId).HasMaxLength(1024);
+            e.Property(t => t.CalendarEventId).HasMaxLength(1024);
             e.HasIndex(t => t.AzureDevOpsWorkItemId);
 
             e.HasOne(t => t.Project)
@@ -156,6 +156,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IDataProtectio
             e.Property(c => c.PersonalAccessToken).IsRequired()
                 .HasConversion(EncryptedConverter.Lenient(
                     dataProtection.CreateProtector("HorizonNET.AzureDevOps.Pat")));
+        });
+
+        modelBuilder.Entity<CalDavConnection>(e =>
+        {
+            e.HasKey(c => c.Id);
+            e.Property(c => c.ServerUrl).IsRequired().HasMaxLength(500);
+            e.Property(c => c.Username).IsRequired().HasMaxLength(320);
+            e.Property(c => c.CalendarUrl).IsRequired().HasMaxLength(1000);
+            e.Property(c => c.CalendarName).HasMaxLength(320);
+
+            // Das App-Passwort ist ein Schlüssel zum Nextcloud-Konto – verschlüsselt wie
+            // Google-Token und PAT. Nachsichtig: Nicht entschlüsselbar heißt nur "neu verbinden".
+            e.Property(c => c.AppPassword).IsRequired()
+                .HasConversion(EncryptedConverter.Lenient(
+                    dataProtection.CreateProtector("HorizonNET.CalDav.Password")));
         });
 
         modelBuilder.Entity<AppSetting>(e =>
@@ -407,6 +422,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IDataProtectio
     public DbSet<GoogleConnection> GoogleConnections => Set<GoogleConnection>();
 
     public DbSet<AzureDevOpsConnection> AzureDevOpsConnections => Set<AzureDevOpsConnection>();
+
+    public DbSet<CalDavConnection> CalDavConnections => Set<CalDavConnection>();
 
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 

@@ -155,11 +155,11 @@
 </div>
 
 <div class="card mb-3 settings-card">
-    <div class="card-header fw-semibold">Google-Kalender</div>
+    <div class="card-header fw-semibold">Kalender-Synchronisation</div>
     <div class="card-body">
         <p class="text-muted">
-            Verbinde dein Google-Konto, um Termine aus deinem Google-Kalender anzuzeigen
-            und geplante Tasks dorthin zu schreiben.
+            Verbinde deinen Google- <strong>oder</strong> Nextcloud-Kalender, um dessen Termine hier
+            anzuzeigen und geplante Tasks dorthin zu schreiben. Es ist immer nur ein Kalender verbunden.
         </p>
 
         @if (GoogleResult == "connected")
@@ -182,44 +182,162 @@
         {
             <p class="text-muted mb-0">Status wird geladen…</p>
         }
-        else if (status.Connected)
-        {
-            <div class="mb-3">
-                <span class="badge bg-success">Verbunden</span>
-                @if (!string.IsNullOrEmpty(status.Email))
-                {
-                    <span class="ms-2">@status.Email</span>
-                }
-            </div>
-            <label for="googleReminder" class="form-label">Erinnerung am gespiegelten Termin</label>
-            <select id="googleReminder" class="form-select" style="max-width: 16rem;"
-                    value="@(reminderMinutes?.ToString() ?? "")"
-                    @onchange="OnReminderChanged">
-                <option value="">Keine Erinnerung</option>
-                <option value="0">Zum Termin</option>
-                <option value="10">10 Minuten vorher</option>
-                <option value="15">15 Minuten vorher</option>
-                <option value="30">30 Minuten vorher</option>
-                <option value="60">1 Stunde vorher</option>
-                <option value="1440">1 Tag vorher</option>
-            </select>
-            <div class="form-text mb-3">
-                Gilt für Tasks, die in deinen Google-Kalender geschrieben werden.
-                <strong>Erledigte Tasks erinnern nie</strong> – ihr Termin bleibt sichtbar, wird mit „✓"
-                gekennzeichnet und zählt als „frei". Änderungen wirken beim nächsten Speichern
-                eines Tasks; bestehende Google-Termine bleiben bis dahin, wie sie sind.
-            </div>
-
-            <button type="button" class="btn btn-outline-danger" @onclick="DisconnectAsync" disabled="@busy">
-                Verbindung trennen
-            </button>
-        }
         else
         {
-            <div class="mb-3">
-                <span class="badge bg-secondary">Nicht verbunden</span>
-            </div>
-            <a class="btn btn-primary" href="@ConnectUrl">Mit Google verbinden</a>
+            @if (status.Connected)
+            {
+                <div class="mb-3">
+                    <span class="badge bg-success">Verbunden mit @ProviderLabel(status.Provider)</span>
+                    @if (!string.IsNullOrEmpty(status.Account))
+                    {
+                        <span class="ms-2">@status.Account</span>
+                    }
+                    @if (!string.IsNullOrEmpty(status.CalendarName))
+                    {
+                        <span class="text-muted ms-1">· Kalender „@status.CalendarName“</span>
+                    }
+                </div>
+                <label for="calendarReminder" class="form-label">Erinnerung am gespiegelten Termin</label>
+                <select id="calendarReminder" class="form-select" style="max-width: 16rem;"
+                        value="@(reminderMinutes?.ToString() ?? "")"
+                        @onchange="OnReminderChanged">
+                    <option value="">Keine Erinnerung</option>
+                    <option value="0">Zum Termin</option>
+                    <option value="10">10 Minuten vorher</option>
+                    <option value="15">15 Minuten vorher</option>
+                    <option value="30">30 Minuten vorher</option>
+                    <option value="60">1 Stunde vorher</option>
+                    <option value="1440">1 Tag vorher</option>
+                </select>
+                <div class="form-text mb-3">
+                    Gilt für Tasks, die in deinen Kalender geschrieben werden.
+                    <strong>Erledigte Tasks erinnern nie</strong> – ihr Termin bleibt sichtbar, wird mit „✓"
+                    gekennzeichnet und zählt als „frei". Änderungen wirken beim nächsten Speichern
+                    eines Tasks; bestehende Termine bleiben bis dahin, wie sie sind.
+                </div>
+
+                <div class="d-flex flex-wrap gap-2">
+                    <button type="button" class="btn btn-outline-danger" @onclick="DisconnectAsync" disabled="@busy">
+                        Verbindung trennen
+                    </button>
+                    @if (!switching && OtherProviderAvailable)
+                    {
+                        <button type="button" class="btn btn-outline-secondary" @onclick="StartSwitch" disabled="@busy">
+                            Zu @ProviderLabel(OtherProvider) wechseln…
+                        </button>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="mb-3">
+                    <span class="badge bg-secondary">Nicht verbunden</span>
+                </div>
+            }
+
+            @if (!status.Connected || switching)
+            {
+                <div class="@(status.Connected ? "border-top pt-3 mt-3" : "")">
+                    @if (status.Connected)
+                    {
+                        <div class="alert alert-info py-2">
+                            Beim Verbinden wird die Verbindung zu @ProviderLabel(status.Provider) getrennt und
+                            alle geplanten Tasks ab heute in den neuen Kalender geschrieben. Die bisherigen
+                            Termine bleiben in @ProviderLabel(status.Provider) stehen.
+                        </div>
+                    }
+                    else if (status.GoogleAvailable)
+                    {
+                        <div class="mb-3">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="calendarProvider" id="providerGoogle"
+                                       checked="@(selectedProvider == CalendarProviders.Google)"
+                                       @onchange="() => selectedProvider = CalendarProviders.Google" />
+                                <label class="form-check-label" for="providerGoogle">Google</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="calendarProvider" id="providerNextcloud"
+                                       checked="@(selectedProvider == CalendarProviders.Nextcloud)"
+                                       @onchange="() => selectedProvider = CalendarProviders.Nextcloud" />
+                                <label class="form-check-label" for="providerNextcloud">Nextcloud (CalDAV)</label>
+                            </div>
+                        </div>
+                    }
+
+                    @if (selectedProvider == CalendarProviders.Google && status.GoogleAvailable)
+                    {
+                        <div class="d-flex flex-wrap gap-2">
+                            <a class="btn btn-primary" href="@ConnectUrl">Mit Google verbinden</a>
+                            @if (switching)
+                            {
+                                <button type="button" class="btn btn-link" @onclick="CancelSwitch">Abbrechen</button>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <form @onsubmit="DiscoverCalDavAsync" @onsubmit:preventDefault="true">
+                            <div class="mb-3">
+                                <label for="caldavServer" class="form-label">Server-URL</label>
+                                <input id="caldavServer" class="form-control" style="max-width: 28rem;"
+                                       placeholder="https://cloud.example.org"
+                                       autocomplete="off" @bind="caldavServer" />
+                            </div>
+                            <div class="mb-3">
+                                <label for="caldavUser" class="form-label">Benutzername</label>
+                                <input id="caldavUser" class="form-control" style="max-width: 28rem;"
+                                       autocomplete="off" @bind="caldavUser" />
+                            </div>
+                            <div class="mb-3">
+                                <label for="caldavPassword" class="form-label">App-Passwort</label>
+                                <input id="caldavPassword" type="password" class="form-control" style="max-width: 28rem;"
+                                       autocomplete="off" @bind="caldavPassword" />
+                                <div class="form-text">
+                                    In Nextcloud unter <em>Einstellungen → Sicherheit → Geräte &amp; Sitzungen</em>
+                                    ein neues App-Passwort erstellen – nicht dein normales Login-Passwort.
+                                </div>
+                            </div>
+
+                            @if (caldavError is not null)
+                            {
+                                <div class="alert alert-danger py-2">@caldavError</div>
+                            }
+
+                            @if (caldavCalendars is { Count: > 0 })
+                            {
+                                <div class="mb-3">
+                                    <label for="caldavCalendar" class="form-label">Kalender</label>
+                                    <select id="caldavCalendar" class="form-select" style="max-width: 28rem;"
+                                            @bind="caldavCalendarUrl">
+                                        @foreach (var cal in caldavCalendars)
+                                        {
+                                            <option value="@cal.Url">@cal.Name</option>
+                                        }
+                                    </select>
+                                </div>
+                            }
+
+                            <div class="d-flex flex-wrap gap-2">
+                                <button type="submit" class="btn @(caldavCalendars is { Count: > 0 } ? "btn-outline-secondary" : "btn-primary")"
+                                        disabled="@(caldavBusy || !CalDavCredentialsComplete)">
+                                    @(caldavBusy && caldavCalendars is null ? "Suche…" : "Kalender suchen")
+                                </button>
+                                @if (caldavCalendars is { Count: > 0 })
+                                {
+                                    <button type="button" class="btn btn-primary" @onclick="ConnectCalDavAsync"
+                                            disabled="@(caldavBusy || string.IsNullOrEmpty(caldavCalendarUrl) || !CalDavCredentialsComplete)">
+                                        @(caldavBusy ? "Verbinde…" : "Verbinden")
+                                    </button>
+                                }
+                                @if (switching)
+                                {
+                                    <button type="button" class="btn btn-link" @onclick="CancelSwitch">Abbrechen</button>
+                                }
+                            </div>
+                        </form>
+                    }
+                </div>
+            }
         }
     </div>
 </div>
@@ -316,7 +434,7 @@
     [Parameter, SupplyParameterFromQuery(Name = "google")]
     public string? GoogleResult { get; set; }
 
-    private GoogleStatusDto? status;
+    private CalendarStatusDto? status;
     private bool busy;
     private string newPin = string.Empty;
 
@@ -353,7 +471,7 @@
         Toast.ShowSuccess("Passwort geändert.");
     }
 
-    // Vorlaufzeit der Google-Erinnerung; null = keine. Liegt serverseitig, weil die API
+    // Vorlaufzeit der Kalender-Erinnerung; null = keine. Liegt serverseitig, weil die API
     // sie beim Spiegeln braucht – anders als die übrigen Einstellungen auf dieser Seite.
     private int? reminderMinutes;
 
@@ -368,11 +486,9 @@
         await AppSettings.EnsureLoadedAsync();
         await JournalLock.EnsureLoadedAsync();
         await Version.EnsureApiLoadedAsync();
-        status = await Api.GetGoogleStatusAsync();
+        await LoadCalendarStatusAsync();
         azureStatus = await Api.GetAzureDevOpsStatusAsync() ?? new AzureDevOpsStatusDto(false, null, null);
 
-        // Nur bei bestehender Verbindung – ohne sie ist die Auswahl gar nicht sichtbar.
-        if (status?.Connected == true) reminderMinutes = await Api.GetGoogleReminderAsync();
     }
 
     private async Task OnReminderChanged(ChangeEventArgs e)
@@ -380,7 +496,7 @@
         var rohwert = e.Value?.ToString();
         var minuten = string.IsNullOrEmpty(rohwert) ? (int?)null : int.Parse(rohwert);
 
-        if (!await Api.SetGoogleReminderAsync(minuten))
+        if (!await Api.SetCalendarReminderAsync(minuten))
         {
             Toast.ShowError("Erinnerung konnte nicht gespeichert werden.");
             return;
@@ -482,11 +598,133 @@
         azureBusy = false;
     }
 
+    // ── Kalender-Synchronisation ─────────────────────────────────────────────────
+
+    // Vor dem Verbinden gewählter Anbieter; beim Wechsel der jeweils andere.
+    private string selectedProvider = CalendarProviders.Google;
+    private bool switching;
+
+    private string caldavServer = string.Empty;
+    private string caldavUser = string.Empty;
+    private string caldavPassword = string.Empty;
+    private List<CalDavCalendarDto>? caldavCalendars;
+    private string? caldavCalendarUrl;
+    private string? caldavError;
+    private bool caldavBusy;
+
+    private static string ProviderLabel(string? provider) => provider switch
+    {
+        CalendarProviders.Google => "Google",
+        CalendarProviders.Nextcloud => "Nextcloud",
+        _ => "Kalender"
+    };
+
+    private string OtherProvider =>
+        status?.Provider == CalendarProviders.Google ? CalendarProviders.Nextcloud : CalendarProviders.Google;
+
+    // Zu Google wechseln geht nur, wenn der Server Google-Credentials hat.
+    private bool OtherProviderAvailable => OtherProvider != CalendarProviders.Google || status?.GoogleAvailable == true;
+
+    private bool CalDavCredentialsComplete =>
+        !string.IsNullOrWhiteSpace(caldavServer)
+        && !string.IsNullOrWhiteSpace(caldavUser)
+        && !string.IsNullOrWhiteSpace(caldavPassword);
+
+    private async Task LoadCalendarStatusAsync()
+    {
+        status = await Api.GetCalendarStatusAsync();
+        switching = false;
+
+        if (status?.Connected == true)
+        {
+            reminderMinutes = await Api.GetCalendarReminderAsync();
+        }
+        else if (status is not null && !status.GoogleAvailable)
+        {
+            // Ohne Google-Credentials auf dem Server bleibt nur Nextcloud.
+            selectedProvider = CalendarProviders.Nextcloud;
+        }
+    }
+
+    private void StartSwitch()
+    {
+        selectedProvider = OtherProvider;
+        switching = true;
+    }
+
+    private void CancelSwitch()
+    {
+        switching = false;
+        ResetCalDavForm();
+    }
+
+    private void ResetCalDavForm()
+    {
+        caldavPassword = string.Empty;
+        caldavCalendars = null;
+        caldavCalendarUrl = null;
+        caldavError = null;
+    }
+
+    private async Task DiscoverCalDavAsync()
+    {
+        if (!CalDavCredentialsComplete) return;
+
+        caldavBusy = true;
+        caldavError = null;
+        caldavCalendars = null;
+        var result = await Api.DiscoverCalDavCalendarsAsync(
+            new CalDavCredentialsDto(caldavServer, caldavUser, caldavPassword));
+        caldavBusy = false;
+
+        if (result is null) return; // Netzwerkfehler – Toast kommt vom ApiErrorHandler
+        if (!result.Success)
+        {
+            caldavError = result.Error;
+            return;
+        }
+
+        caldavCalendars = result.Calendars;
+        // Nextclouds Standardkalender heißt "personal" – sonst der erste in der Liste.
+        caldavCalendarUrl = result.Calendars
+            .FirstOrDefault(c => c.Url.TrimEnd('/').EndsWith("/personal", StringComparison.OrdinalIgnoreCase))?.Url
+            ?? result.Calendars.FirstOrDefault()?.Url;
+    }
+
+    private async Task ConnectCalDavAsync()
+    {
+        if (string.IsNullOrEmpty(caldavCalendarUrl)) return;
+
+        caldavBusy = true;
+        caldavError = null;
+        var result = await Api.ConnectCalDavAsync(
+            new CalDavConnectDto(caldavServer, caldavUser, caldavPassword, caldavCalendarUrl));
+        caldavBusy = false;
+
+        if (result is null) return;
+        if (!result.Success)
+        {
+            caldavError = result.Error;
+            return;
+        }
+
+        // Passwort nicht länger als nötig im Speicher der Seite halten.
+        ResetCalDavForm();
+        await LoadCalendarStatusAsync();
+        Toast.ShowSuccess("Nextcloud-Kalender verbunden. Geplante Tasks werden im Hintergrund übertragen.");
+    }
+
     private async Task DisconnectAsync()
     {
+        var ok = await Confirm.ShowAsync(
+            $"{ProviderLabel(status?.Provider)} trennen?",
+            "Tasks werden nicht mehr in den Kalender geschrieben. Bereits übertragene Termine bleiben dort stehen.",
+            "Trennen");
+        if (!ok) return;
+
         busy = true;
-        await Api.DisconnectGoogleAsync();
-        status = await Api.GetGoogleStatusAsync();
+        await Api.DisconnectCalendarAsync();
+        await LoadCalendarStatusAsync();
         busy = false;
     }
 }

@@ -91,7 +91,7 @@
                                     <option value="1440">1 Tag vorher</option>
                                 </select>
                                 <div class="form-text">
-                                    Gilt für den Google-Termin. „Standard" übernimmt den Wert
+                                    Gilt für den Termin im verbundenen Kalender. „Standard" übernimmt den Wert
                                     aus den Einstellungen; erledigte Tasks erinnern nie.
                                 </div>
                             </div>
@@ -550,7 +550,7 @@
         public DateTime? StartTime { get; set; }
         public DateTime? EndTime { get; set; }
 
-        // Erinnerung am Google-Termin: null = Standard aus den Einstellungen erben,
+        // Erinnerung am Kalender-Termin: null = Standard aus den Einstellungen erben,
         // TaskReminder.None = an diesem Task keine. Siehe TaskReminder.
         public int? ReminderMinutes { get; set; }
 
