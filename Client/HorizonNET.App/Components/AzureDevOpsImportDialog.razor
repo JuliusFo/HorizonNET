@@ -1,0 +1,337 @@
+@inject ApiService Api
+@inject ToastService Toast
+
+@* Import von Work Items aus Azure DevOps in das aktuelle Projekt (Overlay im Stil von
+   ProjectEditDialog). Ein Horizon-Projekt gehört zu genau einem Azure-DevOps-Projekt:
+   Ist noch keins verknüpft, wählt man es hier zuerst aus. *@
+@if (Visible && Project is not null)
+{
+    <div class="ado-dialog-backdrop" @onclick="CloseAsync"></div>
+    <div class="ado-dialog">
+        <div class="ado-dialog-content" @onclick:stopPropagation="true">
+            <div class="ado-dialog-header">
+                <div class="min-w-0">
+                    <h5 class="mb-0">Aus Azure DevOps importieren</h5>
+                    @if (Project.AzureDevOpsProject is { } linked && !relinking)
+                    {
+                        <div class="small text-muted text-truncate">
+                            @linked → @Project.Name
+                            <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline"
+                                    @onclick="StartRelinkAsync">ändern</button>
+                        </div>
+                    }
+                </div>
+                <button type="button" class="btn-close" @onclick="CloseAsync" aria-label="Schließen"></button>
+            </div>
+
+            <div class="ado-dialog-body">
+                @if (Project.AzureDevOpsProject is null || relinking)
+                {
+                    @* ── Schritt 1: Projekt verknüpfen ── *@
+                    <p class="text-muted">
+                        Mit welchem Azure-DevOps-Projekt gehört <strong>@Project.Name</strong> zusammen?
+                        Der Import zeigt danach nur Work Items aus diesem Projekt.
+                    </p>
+                    @if (azureProjects is null)
+                    {
+                        <p class="text-muted mb-0">Projekte werden geladen…</p>
+                    }
+                    else if (azureProjects.Count == 0)
+                    {
+                        <div class="alert alert-warning py-2 mb-0">
+                            Keine Azure-DevOps-Projekte gefunden. Ist der Token gültig und hat er den Scope
+                            „Project and Team (Read)“? (<a href="settings">Einstellungen</a>)
+                        </div>
+                    }
+                    else
+                    {
+                        <select class="form-select" @bind="linkChoice">
+                            <option value="">– Projekt wählen –</option>
+                            @foreach (var name in azureProjects)
+                            {
+                                <option value="@name">@name</option>
+                            }
+                        </select>
+                    }
+                }
+                else if (items is null)
+                {
+                    <p class="text-muted mb-0">Work Items werden geladen…</p>
+                }
+                else
+                {
+                    @* ── Schritt 2: Work Items auswählen ── *@
+                    @if (loadError is not null)
+                    {
+                        <div class="alert alert-danger py-2">@loadError</div>
+                    }
+
+                    <div class="d-flex flex-wrap align-items-center gap-1 mb-2">
+                        <span class="small text-muted me-1">Status:</span>
+                        @foreach (var state in States)
+                        {
+                            <button type="button"
+                                    class="btn btn-sm rounded-pill @(selectedStates.Contains(state) ? "btn-primary" : "btn-outline-secondary")"
+                                    @onclick="() => ToggleState(state)">
+                                @state <span class="opacity-75">(@items.Count(i => i.State == state))</span>
+                            </button>
+                        }
+                        <div class="form-check form-switch ms-auto mb-0">
+                            <input class="form-check-input" type="checkbox" id="adoClosed"
+                                   checked="@includeClosed" @onchange="OnIncludeClosedChanged" />
+                            <label class="form-check-label small" for="adoClosed">Abgeschlossene</label>
+                        </div>
+                    </div>
+
+                    @if (!VisibleItems.Any())
+                    {
+                        <p class="text-muted mb-0">
+                            @(items.Count == 0 ? "Dir sind in diesem Projekt keine offenen Work Items zugewiesen." : "Kein Work Item passt zum Filter.")
+                        </p>
+                    }
+                    else
+                    {
+                        <div class="form-check mb-1">
+                            <input class="form-check-input" type="checkbox" id="adoAll"
+                                   checked="@AllSelected" disabled="@(!Selectable.Any())"
+                                   @onchange="ToggleAll" />
+                            <label class="form-check-label small text-muted" for="adoAll">Alle auswählen</label>
+                        </div>
+                        <ul class="list-group ado-list">
+                            @foreach (var item in VisibleItems)
+                            {
+                                var id = $"ado-{item.Id}";
+                                <li class="list-group-item d-flex align-items-start gap-2 @(item.AlreadyImported ? "text-muted" : "")">
+                                    <input class="form-check-input mt-1 flex-shrink-0" type="checkbox" id="@id"
+                                           checked="@selected.Contains(item.Id)" disabled="@item.AlreadyImported"
+                                           @onchange="() => ToggleItem(item.Id)" />
+                                    <label class="flex-grow-1 min-w-0" for="@id">
+                                        <span class="d-block text-break">
+                                            <span class="text-muted">#@item.Id</span> @item.Title
+                                        </span>
+                                        <span class="small text-muted">
+                                            @item.Type · @item.State
+                                            @if (item.AlreadyImported)
+                                            {
+                                                <span class="badge bg-secondary ms-1">bereits importiert</span>
+                                            }
+                                        </span>
+                                    </label>
+                                    <a href="@item.Url" target="_blank" rel="noopener noreferrer"
+                                       class="btn btn-sm btn-outline-secondary btn-icon flex-shrink-0"
+                                       title="In Azure DevOps öffnen">↗</a>
+                                </li>
+                            }
+                        </ul>
+                    }
+                }
+            </div>
+
+            <div class="ado-dialog-footer">
+                @if (Project.AzureDevOpsProject is null || relinking)
+                {
+                    <button type="button" class="btn btn-primary"
+                            disabled="@(busy || string.IsNullOrEmpty(linkChoice))" @onclick="LinkAsync">
+                        Verknüpfen
+                    </button>
+                    @if (relinking)
+                    {
+                        <button type="button" class="btn btn-outline-secondary" @onclick="() => relinking = false">Zurück</button>
+                    }
+                }
+                else
+                {
+                    <button type="button" class="btn btn-primary"
+                            disabled="@(busy || SelectedVisibleCount == 0)" @onclick="ImportAsync">
+                        @(busy ? "Importiert…" : $"{SelectedVisibleCount} importieren")
+                    </button>
+                }
+                <button type="button" class="btn btn-outline-secondary" @onclick="CloseAsync">Schließen</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+
+    // Zielprojekt (Horizon). Trägt die AzDO-Verknüpfung.
+    [Parameter] public ProjectResponseDto? Project { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    // Nach erfolgreichem Import – der Aufrufer lädt seine Task-Liste neu.
+    [Parameter] public EventCallback OnImported { get; set; }
+
+    // Verknüpfung wurde gesetzt/geändert – liefert das aktualisierte Projekt.
+    [Parameter] public EventCallback<ProjectResponseDto> OnProjectLinked { get; set; }
+
+    // Standardfilter "neu oder aktiv". Andere Prozessvorlagen nennen das anders
+    // (Scrum: New/Approved/Committed, Basic: To Do/Doing) – kommt keiner dieser Namen
+    // vor, sind alle Zustände ausgewählt.
+    private static readonly string[] DefaultStates = ["New", "Active"];
+
+    private List<AzureDevOpsWorkItemDto>? items;
+    private string? loadError;
+    private readonly HashSet<string> selectedStates = new();
+    private readonly HashSet<string> knownStates = new();
+    private readonly HashSet<int> selected = new();
+    private bool includeClosed;
+    private bool busy;
+    private bool loaded;
+
+    private List<string>? azureProjects;
+    private string linkChoice = string.Empty;
+    private bool relinking;
+
+    private IEnumerable<string> States =>
+        (items ?? []).Select(i => i.State).Distinct().OrderBy(StateOrder).ThenBy(s => s);
+
+    private static int StateOrder(string state) => state switch
+    {
+        "New" or "To Do" or "Proposed" => 0,
+        "Active" or "Doing" or "Committed" or "Approved" or "In Progress" => 1,
+        "Resolved" => 2,
+        _ => 3
+    };
+
+    private IEnumerable<AzureDevOpsWorkItemDto> VisibleItems =>
+        (items ?? []).Where(i => selectedStates.Contains(i.State));
+
+    private IEnumerable<AzureDevOpsWorkItemDto> Selectable => VisibleItems.Where(i => !i.AlreadyImported);
+
+    // Gezählt und importiert wird nur, was gerade sichtbar ist – wer einen Status
+    // wegfiltert, will dessen Items nicht unbemerkt mitimportieren.
+    private int SelectedVisibleCount => Selectable.Count(i => selected.Contains(i.Id));
+
+    private bool AllSelected => Selectable.Any() && Selectable.All(i => selected.Contains(i.Id));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Visible) { loaded = false; return; }
+        if (loaded || Project is null) return;
+        loaded = true;
+
+        items = null;
+        loadError = null;
+        selected.Clear();
+        selectedStates.Clear();
+        knownStates.Clear();
+        includeClosed = false;
+        relinking = false;
+        busy = false;
+        linkChoice = string.Empty;
+
+        if (Project.AzureDevOpsProject is null)
+            await LoadAzureProjectsAsync();
+        else
+            await LoadItemsAsync();
+    }
+
+    private async Task LoadAzureProjectsAsync()
+    {
+        azureProjects = null;
+        azureProjects = await Api.GetAzureDevOpsProjectsAsync() ?? [];
+    }
+
+    private async Task StartRelinkAsync()
+    {
+        relinking = true;
+        linkChoice = Project?.AzureDevOpsProject ?? string.Empty;
+        await LoadAzureProjectsAsync();
+    }
+
+    private async Task LinkAsync()
+    {
+        if (Project is null || string.IsNullOrEmpty(linkChoice)) return;
+        busy = true;
+        var updated = await Api.LinkAzureDevOpsProjectAsync(Project.Id, linkChoice);
+        busy = false;
+        if (updated is null) return;
+
+        relinking = false;
+        await OnProjectLinked.InvokeAsync(updated);
+        // Project-Parameter kommt über den Aufrufer neu herein; bis dahin lokal weiterarbeiten.
+        Project = updated;
+        items = null;
+        selected.Clear();
+        selectedStates.Clear();
+        knownStates.Clear();
+        await LoadItemsAsync();
+    }
+
+    private async Task LoadItemsAsync()
+    {
+        if (Project is null) return;
+        items = null;
+        var result = await Api.GetAzureDevOpsWorkItemsAsync(Project.Id, includeClosed);
+        items = result?.Items ?? [];
+        loadError = result?.Error ?? (result is null ? "Work Items konnten nicht geladen werden." : null);
+
+        var states = items.Select(i => i.State).Distinct().ToList();
+        var fresh = states.Where(s => !knownStates.Contains(s)).ToList();
+        if (knownStates.Count == 0)
+        {
+            // Erstes Laden: Standardfilter.
+            var defaults = fresh.Where(s => DefaultStates.Contains(s, StringComparer.OrdinalIgnoreCase)).ToList();
+            foreach (var s in defaults.Count > 0 ? defaults : fresh) selectedStates.Add(s);
+        }
+        else
+        {
+            // Nachladen (Abgeschlossene eingeschaltet): neu aufgetauchte Zustände zeigen –
+            // genau wegen derer hat man den Schalter umgelegt.
+            foreach (var s in fresh) selectedStates.Add(s);
+        }
+        foreach (var s in states) knownStates.Add(s);
+    }
+
+    private async Task OnIncludeClosedChanged(ChangeEventArgs e)
+    {
+        includeClosed = e.Value is true;
+        await LoadItemsAsync();
+    }
+
+    private void ToggleState(string state)
+    {
+        if (!selectedStates.Remove(state)) selectedStates.Add(state);
+    }
+
+    private void ToggleItem(int id)
+    {
+        if (!selected.Remove(id)) selected.Add(id);
+    }
+
+    private void ToggleAll()
+    {
+        if (AllSelected)
+            foreach (var i in Selectable) selected.Remove(i.Id);
+        else
+            foreach (var i in Selectable) selected.Add(i.Id);
+    }
+
+    private async Task ImportAsync()
+    {
+        if (Project is null) return;
+        var ids = Selectable.Where(i => selected.Contains(i.Id)).Select(i => i.Id).ToList();
+        if (ids.Count == 0) return;
+
+        busy = true;
+        var result = await Api.ImportAzureDevOpsWorkItemsAsync(new AzureDevOpsImportDto(Project.Id, ids));
+        busy = false;
+
+        if (result is null) return; // Toast kommt vom ApiErrorHandler
+        if (result.Error is not null)
+        {
+            Toast.ShowError(result.Error);
+            return;
+        }
+
+        Toast.ShowSuccess(result.Skipped > 0
+            ? $"{result.Imported} importiert, {result.Skipped} übersprungen"
+            : $"{result.Imported} Work Item{(result.Imported == 1 ? "" : "s")} importiert");
+        await OnImported.InvokeAsync();
+        await CloseAsync();
+    }
+
+    private async Task CloseAsync() => await OnClose.InvokeAsync();
+}

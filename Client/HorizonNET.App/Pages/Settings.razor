@@ -224,6 +224,68 @@
     </div>
 </div>
 
+<div class="card mb-3 settings-card">
+    <div class="card-header fw-semibold">Azure DevOps</div>
+    <div class="card-body">
+        <p class="text-muted">
+            Verbinde dich per Personal Access Token mit deiner Azure-DevOps-Organisation, um dir
+            zugewiesene Work Items als Tasks in ein Projekt zu importieren. Die Verknüpfung
+            Projekt ↔ Azure-DevOps-Projekt stellst du im Projekt unter „Bearbeiten“ ein.
+        </p>
+
+        @if (azureStatus is null)
+        {
+            <p class="text-muted mb-0">Status wird geladen…</p>
+        }
+        else if (azureStatus.Connected)
+        {
+            <div class="mb-3">
+                <span class="badge bg-success">Verbunden</span>
+                @if (!string.IsNullOrEmpty(azureStatus.DisplayName))
+                {
+                    <span class="ms-2">@azureStatus.DisplayName</span>
+                }
+                <div class="text-muted small mt-1">@azureStatus.OrganizationUrl</div>
+            </div>
+            <button type="button" class="btn btn-outline-danger" @onclick="DisconnectAzureAsync" disabled="@azureBusy">
+                Verbindung trennen
+            </button>
+        }
+        else
+        {
+            <div class="mb-3">
+                <span class="badge bg-secondary">Nicht verbunden</span>
+            </div>
+            <form @onsubmit="ConnectAzureAsync" @onsubmit:preventDefault="true">
+                <div class="mb-2">
+                    <label for="azureOrg" class="form-label">Organisations-URL</label>
+                    <input id="azureOrg" class="form-control" style="max-width: 28rem;"
+                           placeholder="https://dev.azure.com/meine-organisation"
+                           autocomplete="off" @bind="azureOrgUrl" />
+                </div>
+                <div class="mb-2">
+                    <label for="azurePat" class="form-label">Personal Access Token</label>
+                    <input id="azurePat" type="password" class="form-control" style="max-width: 28rem;"
+                           autocomplete="off" @bind="azurePat" />
+                    <div class="form-text">
+                        Anlegen unter <em>User settings → Personal access tokens</em>. Benötigter Scope:
+                        <strong>Work Items (Read)</strong> – für die Projektauswahl zusätzlich
+                        <strong>Project and Team (Read)</strong>. Der Token wird verschlüsselt gespeichert.
+                    </div>
+                </div>
+                @if (azureError is not null)
+                {
+                    <div class="alert alert-danger py-2">@azureError</div>
+                }
+                <button type="submit" class="btn btn-primary"
+                        disabled="@(azureBusy || string.IsNullOrWhiteSpace(azureOrgUrl) || string.IsNullOrWhiteSpace(azurePat))">
+                    @(azureBusy ? "Verbinde…" : "Verbinden")
+                </button>
+            </form>
+        }
+    </div>
+</div>
+
 <div class="card settings-card">
     <div class="card-header fw-semibold">Über</div>
     <div class="card-body">
@@ -307,6 +369,7 @@
         await JournalLock.EnsureLoadedAsync();
         await Version.EnsureApiLoadedAsync();
         status = await Api.GetGoogleStatusAsync();
+        azureStatus = await Api.GetAzureDevOpsStatusAsync() ?? new AzureDevOpsStatusDto(false, null, null);
 
         // Nur bei bestehender Verbindung – ohne sie ist die Auswahl gar nicht sichtbar.
         if (status?.Connected == true) reminderMinutes = await Api.GetGoogleReminderAsync();
@@ -375,6 +438,48 @@
     {
         if (e.Value is bool collapsed)
             await AppSettings.SetSubTasksCollapsedAsync(collapsed);
+    }
+
+    // ── Azure DevOps ─────────────────────────────────────────────────────────────
+
+    private AzureDevOpsStatusDto? azureStatus;
+    private string azureOrgUrl = string.Empty;
+    private string azurePat = string.Empty;
+    private string? azureError;
+    private bool azureBusy;
+
+    private async Task ConnectAzureAsync()
+    {
+        azureBusy = true;
+        azureError = null;
+        var result = await Api.ConnectAzureDevOpsAsync(new AzureDevOpsConnectDto(azureOrgUrl, azurePat));
+        azureBusy = false;
+
+        if (result is null) return; // Netzwerkfehler – Toast kommt vom ApiErrorHandler
+        if (!result.Success)
+        {
+            azureError = result.Error;
+            return;
+        }
+
+        // Token nicht länger als nötig im Speicher der Seite halten.
+        azurePat = string.Empty;
+        azureStatus = result.Status;
+        Toast.ShowSuccess("Azure DevOps verbunden.");
+    }
+
+    private async Task DisconnectAzureAsync()
+    {
+        var ok = await Confirm.ShowAsync(
+            "Azure DevOps trennen?",
+            "Der gespeicherte Token wird gelöscht. Importierte Tasks und Projekt-Verknüpfungen bleiben erhalten.",
+            "Trennen");
+        if (!ok) return;
+
+        azureBusy = true;
+        await Api.DisconnectAzureDevOpsAsync();
+        azureStatus = await Api.GetAzureDevOpsStatusAsync() ?? new AzureDevOpsStatusDto(false, null, null);
+        azureBusy = false;
     }
 
     private async Task DisconnectAsync()

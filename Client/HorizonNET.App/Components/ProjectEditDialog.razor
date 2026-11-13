@@ -63,6 +63,22 @@
                         </InputSelect>
                     </div>
 
+                    @if (azureProjects is not null)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Azure-DevOps-Projekt</label>
+                            <select class="form-select" value="@(model.AzureDevOpsProject ?? "")"
+                                    @onchange="e => model.AzureDevOpsProject = NullIfEmpty(e.Value?.ToString())">
+                                <option value="">Nicht verknüpft</option>
+                                @foreach (var name in AzureProjectOptions)
+                                {
+                                    <option value="@name">@name</option>
+                                }
+                            </select>
+                            <div class="form-text">Der Import auf der Projektseite zeigt nur Work Items aus diesem Projekt.</div>
+                        </div>
+                    }
+
                     <div class="d-flex align-items-center gap-2">
                         <label class="form-label mb-0">Farbe</label>
                         <input type="color" class="form-control form-control-color"
@@ -114,6 +130,19 @@
 
     private bool IsNew => Project is null;
 
+    // AzDO-Team-Projekte; null = Azure DevOps nicht verbunden (Auswahl ausgeblendet).
+    private List<string>? azureProjects;
+
+    // Eine bestehende Verknüpfung bleibt wählbar, auch wenn das Projekt gerade nicht in
+    // der Liste auftaucht (umbenannt, Token ohne Projekt-Scope) – sonst ginge sie beim
+    // Speichern stillschweigend verloren.
+    private IEnumerable<string> AzureProjectOptions =>
+        Project?.AzureDevOpsProject is { } current && !azureProjects!.Contains(current)
+            ? azureProjects!.Prepend(current)
+            : azureProjects!;
+
+    private static string? NullIfEmpty(string? s) => string.IsNullOrWhiteSpace(s) ? null : s;
+
     private IEnumerable<WorkspaceResponseDto> Workspaces => WorkspaceState.Workspaces ?? [];
 
     protected override async Task OnParametersSetAsync()
@@ -123,6 +152,9 @@
         if (loaded) return;
 
         await WorkspaceState.EnsureLoadedAsync();
+
+        var azure = await Api.GetAzureDevOpsStatusAsync();
+        azureProjects = azure?.Connected == true ? await Api.GetAzureDevOpsProjectsAsync() ?? [] : null;
 
         loaded   = true;
         isSaving = false;
@@ -137,7 +169,8 @@
                 Status      = Enum.Parse<ProjectStatus>(Project.Status),
                 Priority    = Enum.Parse<Priority>(Project.Priority),
                 Color       = Project.Color,
-                WorkspaceId = Project.WorkspaceId
+                WorkspaceId = Project.WorkspaceId,
+                AzureDevOpsProject = Project.AzureDevOpsProject
             };
     }
 
@@ -153,6 +186,10 @@
                 model.Name, description, model.Status, model.Priority, model.Color, model.WorkspaceId))
             : await Api.UpdateProjectAsync(Project.Id, new ProjectUpdateDto(
                 model.Name, description, model.Status, model.Priority, model.Color, model.WorkspaceId));
+
+        // Verknüpfung ist ein eigenes Teil-Update – nur bei Änderung absetzen.
+        if (saved is not null && azureProjects is not null && saved.AzureDevOpsProject != model.AzureDevOpsProject)
+            saved = await Api.LinkAzureDevOpsProjectAsync(saved.Id, model.AzureDevOpsProject) ?? saved;
 
         isSaving = false;
 
@@ -180,5 +217,6 @@
         public Priority Priority { get; set; } = Priority.Medium;
         public string? Color { get; set; }
         public int? WorkspaceId { get; set; }
+        public string? AzureDevOpsProject { get; set; }
     }
 }

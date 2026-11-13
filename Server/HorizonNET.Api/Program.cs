@@ -79,9 +79,13 @@ builder.Services.AddScoped<IExerciseSetRepository, ExerciseSetRepository>();
 builder.Services.AddScoped<IBodyWeightRepository, BodyWeightRepository>();
 builder.Services.AddScoped<IJournalRepository, JournalRepository>();
 builder.Services.AddScoped<IJournalTemplateRepository, JournalTemplateRepository>();
+builder.Services.AddScoped<IAzureDevOpsConnectionRepository, AzureDevOpsConnectionRepository>();
 
 // Google-Kalender-Anbindung (OAuth + späterer Calendar-Zugriff)
 builder.Services.AddScoped<GoogleCalendarService>();
+
+// Azure-DevOps-Import (PAT, REST-API). Typed HttpClient: Handler-Pooling über die Factory.
+builder.Services.AddHttpClient<AzureDevOpsService>(c => c.Timeout = TimeSpan.FromSeconds(30));
 
 // Terminserien materialisieren: scoped Generator (DbContext + Google) und der Hosted
 // Service, der ihn beim Start und täglich anstößt.

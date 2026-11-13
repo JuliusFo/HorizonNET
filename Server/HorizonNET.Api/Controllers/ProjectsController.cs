@@ -18,11 +18,11 @@ public class ProjectsController(IProjectRepository repo) : ControllerBase
     // Fortschrittsbalken auf. Formel-Spiegelung im Client: SyncProjectCounts.
     private static bool Counts(TaskItem t) => t.ParentTaskId == null && t.Kind == TaskKind.Task;
 
-    private static ProjectResponseDto ToDto(Project p) =>
+    internal static ProjectResponseDto ToDto(Project p) =>
         new(p.Id, p.Name, p.Description, p.Status.ToString(), p.Priority.ToString(), p.CreatedAt,
             p.Tasks.Count(Counts),
             p.Tasks.Count(t => Counts(t) && t.IsCompleted),
-            p.Color, p.WorkspaceId);
+            p.Color, p.WorkspaceId, p.AzureDevOpsProject);
 
     [HttpGet]
     public async Task<IActionResult> GetAll()

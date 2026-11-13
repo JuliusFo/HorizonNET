@@ -78,6 +78,10 @@ public class TaskItem
     // Wird ausschließlich serverseitig vom Sync gesetzt, nie über das Client-DTO.
     public string? GoogleEventId { get; set; }
 
+    // Aus Azure DevOps importiert? Dann die Work-Item-ID – für die Erkennung "bereits
+    // importiert" im Import-Dialog. Ausschließlich serverseitig beim Import gesetzt.
+    public int? AzureDevOpsWorkItemId { get; set; }
+
     // Zeitstempel; ausschließlich serverseitig im Repository gesetzt.
     public DateTime CreatedAt { get; set; }
 

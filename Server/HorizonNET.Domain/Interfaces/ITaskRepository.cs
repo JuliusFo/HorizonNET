@@ -43,6 +43,11 @@ public interface ITaskRepository
     // gespiegelten Termine auszublenden (sonst Doppelanzeige Task + Google-Event).
     Task<HashSet<string>> GetGoogleEventIdsAsync();
 
+    // Alle Work-Item-IDs bereits aus Azure DevOps importierter Tasks (auch gelöschte –
+    // wer einen importierten Task wegwirft, will ihn nicht beim nächsten Mal wieder angeboten
+    // bekommen; zurückholen geht über den Papierkorb).
+    Task<HashSet<int>> GetAzureDevOpsWorkItemIdsAsync();
+
     // Nur Id, Titel und Projektzuordnung (samt Sub-Tasks) – für Auswahllisten.
     // Ausnahme von der Regel "Repositories liefern Entitäten": Hier gibt es bewusst keine
     // Entität zurückzugeben. Der Sinn der Methode ist, dass die Datenbank die ungenutzten

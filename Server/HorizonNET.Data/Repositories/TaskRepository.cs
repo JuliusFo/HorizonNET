@@ -373,6 +373,16 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         await context.SaveChangesAsync();
     }
 
+    public async Task<HashSet<int>> GetAzureDevOpsWorkItemIdsAsync()
+    {
+        var ids = await context.Tasks
+            .IgnoreQueryFilters()
+            .Where(t => t.AzureDevOpsWorkItemId != null)
+            .Select(t => t.AzureDevOpsWorkItemId!.Value)
+            .ToListAsync();
+        return ids.ToHashSet();
+    }
+
     public async Task<HashSet<string>> GetGoogleEventIdsAsync()
     {
         var ids = await context.Tasks
