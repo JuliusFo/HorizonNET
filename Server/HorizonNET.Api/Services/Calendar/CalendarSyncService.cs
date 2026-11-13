@@ -79,7 +79,12 @@ public class CalendarSyncService(
     // verwirft die alten Event-IDs und spiegelt die geplanten Tasks im Hintergrund neu.
     public async Task ConnectedAsync(ICalendarProvider connected)
     {
-        foreach (var p in Providers.Where(p => p != connected))
+        // Über den Schlüssel vergleichen, nicht über die Referenz: CalDavCalendarService ist
+        // als typisierter HttpClient registriert und damit transient – der Controller hält
+        // eine andere Instanz als diese Fassade. Ein Referenzvergleich hielt die eigene
+        // Nextcloud-Instanz für "den anderen Anbieter" und löschte die eben gespeicherte
+        // Verbindung gleich wieder.
+        foreach (var p in Providers.Where(p => p.Key != connected.Key))
             await p.DisconnectAsync();
 
         await tasks.ClearAllCalendarEventIdsAsync();

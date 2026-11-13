@@ -336,6 +336,32 @@ public class CalDavTests
         Assert.All(await assert.Tasks.IgnoreQueryFilters().ToListAsync(), t => Assert.Null(t.CalendarEventId));
     }
 
+    // Der Controller und die Fassade halten verschiedene CalDavCalendarService-Instanzen
+    // (typisierter HttpClient = transient). ConnectedAsync darf deshalb die gerade
+    // gespeicherte Nextcloud-Verbindung nicht als "anderen Anbieter" trennen – genau so
+    // verschwand sie direkt nach dem erfolgreichen Verbinden wieder.
+    [Fact]
+    public async Task ConnectedAsync_KeepsConnectionFromSeparateProviderInstance()
+    {
+        using var db = new TestDatabase();
+        using var ctx = db.NewContext();
+        var calendar = TasksControllerTests.NewCalendarService(ctx);
+
+        await new CalDavConnectionRepository(ctx).SaveAsync(new CalDavConnection
+        {
+            ServerUrl = "https://cloud.example.org",
+            Username = "max",
+            AppPassword = "pw",
+            CalendarUrl = "https://cloud.example.org/remote.php/dav/calendars/max/personal/"
+        });
+
+        var controllerInstance = new CalDavCalendarService(new HttpClient(), new CalDavConnectionRepository(ctx),
+            new TaskRepository(ctx), Microsoft.Extensions.Logging.Abstractions.NullLogger<CalDavCalendarService>.Instance);
+        await calendar.ConnectedAsync(controllerInstance);
+
+        Assert.Equal(CalendarProviders.Nextcloud, (await calendar.GetStatusAsync()).Provider);
+    }
+
     [Fact]
     public async Task CalendarSync_PicksNextcloudWhenConnected()
     {
