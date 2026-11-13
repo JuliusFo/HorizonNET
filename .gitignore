@@ -382,3 +382,6 @@ docs/
 # – vgl. Livegang) fiele diese Deckung weg. Die Datenbank finge dann noch *.db ab, der
 # Schlüsselring aber ist eine .xml und stünde ungeschützt da.
 backups/
+
+# Docker-Compose-Umgebung (enthält Secrets)
+.env

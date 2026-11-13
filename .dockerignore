@@ -1,0 +1,18 @@
+**/bin/
+**/obj/
+**/.vs/
+**/.idea/
+**/*.user
+.git/
+.claude/
+backups/
+docs/
+scripts/
+
+# Laufzeitdaten und Secrets gehören nie ins Image
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/appsettings.Secrets.json
+**/appsettings.Development.json
+.env

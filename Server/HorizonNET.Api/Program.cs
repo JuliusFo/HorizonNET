@@ -126,7 +126,13 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.Cookie.Name = "HorizonNET.Auth";
     // HttpOnly ist Standard (JS kommt nicht an den Cookie); Secure erzwingen, weil die
     // API ohnehin nur über HTTPS läuft – lokal wie hinter dem Tunnel.
-    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    //
+    // Ausnahme per Auth:SecureCookie=false (Docker im Heimnetz ohne HTTPS-Proxy): Der
+    // Browser verwirft Secure-Cookies auf http://<server-ip>, der Login liefe ins Leere.
+    // Dann gilt SameAsRequest – über HTTPS bleibt der Cookie trotzdem Secure.
+    options.Cookie.SecurePolicy = builder.Configuration.GetValue("Auth:SecureCookie", true)
+        ? CookieSecurePolicy.Always
+        : CookieSecurePolicy.SameAsRequest;
     options.ExpireTimeSpan = TimeSpan.FromDays(14);
     options.SlidingExpiration = true;
 
@@ -155,12 +161,25 @@ var app = builder.Build();
 // Ganz vorn in der Pipeline, damit HTTPS-Redirect, HSTS und Cookies schon den korrigierten
 // Request sehen. Vertraut wird per Voreinstellung nur Loopback-Absendern – genau dort
 // läuft cloudflared; von fremden Adressen werden die Header ignoriert.
-app.UseForwardedHeaders(new ForwardedHeadersOptions
+//
+// Im Docker-Betrieb kommt der Reverse Proxy aus einem anderen Container bzw. vom
+// Docker-Bridge-Gateway, nicht von Loopback. Dessen Netz lässt sich per
+// ForwardedHeaders:KnownNetworks freischalten (CIDR, mehrere mit Komma/Semikolon),
+// z. B. "172.16.0.0/12". Ohne Angabe bleibt es bei Loopback.
+var forwardedOptions = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor
                      | ForwardedHeaders.XForwardedProto
                      | ForwardedHeaders.XForwardedHost
-});
+};
+var knownNetworks = app.Configuration["ForwardedHeaders:KnownNetworks"];
+if (!string.IsNullOrWhiteSpace(knownNetworks))
+{
+    foreach (var cidr in knownNetworks.Split([',', ';'],
+                 StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        forwardedOptions.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(cidr));
+}
+app.UseForwardedHeaders(forwardedOptions);
 
 // Sicherheits-Header an jeder Antwort (auch statischen Dateien – deshalb VOR
 // UseStaticFiles). Die CSP ist auf das zugeschnitten, was die App wirklich lädt:

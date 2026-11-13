@@ -143,7 +143,7 @@ else
             <button class="btn btn-light w-100 d-flex justify-content-between align-items-center border-0 rounded-0 @(isExpanded ? "border-bottom" : "")"
                     @onclick="() => ToggleSection(section.StatusLabel)">
                 <span class="fw-semibold">
-                    <span class="badge @section.BadgeClass me-2">@sectionProjects.Count</span>
+                    <span class="badge @(section.BadgeClass) me-2">@sectionProjects.Count</span>
                     @L[section.TitleKey]
                 </span>
                 <span>@(isExpanded ? "▲" : "▼")</span>
