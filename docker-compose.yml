@@ -1,0 +1,33 @@
+# HorizonNET per Docker Compose.
+#
+#   cp .env.example .env   # Werte anpassen
+#   docker compose up -d --build
+#
+# Details: README.md, Abschnitt "Docker".
+services:
+  horizonnet:
+    build: .
+    image: horizonnet:latest
+    container_name: horizonnet
+    restart: unless-stopped
+    ports:
+      - "${HORIZON_PORT:-8080}:8080"
+    environment:
+      # Hostnamen, unter denen die App erreichbar ist (Semikolon-getrennt, "*" = alle)
+      AllowedHosts: "${HORIZON_ALLOWED_HOSTS:-*}"
+      # Benutzerkonto – wird nur beim allerersten Start angelegt
+      Auth__Username: "${HORIZON_USERNAME:-}"
+      Auth__InitialPassword: "${HORIZON_INITIAL_PASSWORD:-}"
+      # false nur ohne HTTPS (Zugriff direkt per http://server:port)
+      Auth__SecureCookie: "${HORIZON_SECURE_COOKIE:-true}"
+      # Netz des Reverse Proxys, dessen X-Forwarded-Header vertraut wird
+      ForwardedHeaders__KnownNetworks: "${HORIZON_TRUSTED_PROXIES:-}"
+      # Google-Kalender (optional; Nextcloud wird in der App eingerichtet)
+      Google__ClientId: "${GOOGLE_CLIENT_ID:-}"
+      Google__ClientSecret: "${GOOGLE_CLIENT_SECRET:-}"
+      TZ: "${TZ:-Europe/Berlin}"
+    volumes:
+      - horizonnet-data:/data
+
+volumes:
+  horizonnet-data:

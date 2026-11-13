@@ -364,27 +364,54 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         }
     }
 
-    public async Task SetGoogleEventIdAsync(int taskId, string? googleEventId)
+    public async Task SetCalendarEventIdAsync(int taskId, string? calendarEventId)
     {
         var existing = await context.Tasks.FindAsync(taskId);
         if (existing is null) return;
 
-        existing.GoogleEventId = googleEventId;
+        existing.CalendarEventId = calendarEventId;
         await context.SaveChangesAsync();
     }
 
-    public async Task<HashSet<string>> GetGoogleEventIdsAsync()
+    // Auch Tasks im Papierkorb: Deren Event-ID gehört genauso zum alten Kalender und
+    // würde beim Wiederherstellen sonst gegen den neuen Anbieter verwendet.
+    public async Task ClearAllCalendarEventIdsAsync() =>
+        await context.Tasks
+            .IgnoreQueryFilters()
+            .Where(t => t.CalendarEventId != null)
+            .ExecuteUpdateAsync(u => u.SetProperty(t => t.CalendarEventId, (string?)null));
+
+    public async Task<IReadOnlyList<TaskItem>> GetScheduledFromAsync(DateTime fromDate)
+    {
+        var from = fromDate.Date;
+        return await context.Tasks
+            .Where(t => t.DueDate != null && t.DueDate >= from)
+            .OrderBy(t => t.DueDate)
+            .ToListAsync();
+    }
+
+    public async Task<HashSet<int>> GetAzureDevOpsWorkItemIdsAsync()
     {
         var ids = await context.Tasks
-            .Where(t => t.GoogleEventId != null)
-            .Select(t => t.GoogleEventId!)
+            .IgnoreQueryFilters()
+            .Where(t => t.AzureDevOpsWorkItemId != null)
+            .Select(t => t.AzureDevOpsWorkItemId!.Value)
+            .ToListAsync();
+        return ids.ToHashSet();
+    }
+
+    public async Task<HashSet<string>> GetCalendarEventIdsAsync()
+    {
+        var ids = await context.Tasks
+            .Where(t => t.CalendarEventId != null)
+            .Select(t => t.CalendarEventId!)
             .ToListAsync();
         return ids.ToHashSet();
     }
 
     // Liefert die Tasks zurück, deren FÄLLIGKEITSDATUM sich dabei geändert hat – und nur
-    // die. Das ist genau die Menge, die der Aufrufer nach Google spiegeln muss (Google
-    // kennt vom Task Titel, Beschreibung und Termin, nicht seine Position im Board).
+    // die. Das ist genau die Menge, die der Aufrufer in den Kalender spiegeln muss (der
+    // Kalender kennt vom Task Titel, Beschreibung und Termin, nicht seine Position im Board).
     //
     // Bewusst am tatsächlich geänderten Datum festgemacht statt am Zielstatus: Beim
     // Umsortieren INNERHALB von "Geplant Heute" ändert sich nichts am Termin, die Karten

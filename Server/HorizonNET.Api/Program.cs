@@ -1,5 +1,6 @@
 using System.Reflection;
 using HorizonNET.Api.Services;
+using HorizonNET.Api.Services.Calendar;
 using Microsoft.AspNetCore.DataProtection;
 using HorizonNET.Data;
 using HorizonNET.Data.Repositories;
@@ -79,11 +80,22 @@ builder.Services.AddScoped<IExerciseSetRepository, ExerciseSetRepository>();
 builder.Services.AddScoped<IBodyWeightRepository, BodyWeightRepository>();
 builder.Services.AddScoped<IJournalRepository, JournalRepository>();
 builder.Services.AddScoped<IJournalTemplateRepository, JournalTemplateRepository>();
+builder.Services.AddScoped<IAzureDevOpsConnectionRepository, AzureDevOpsConnectionRepository>();
+builder.Services.AddScoped<ICalDavConnectionRepository, CalDavConnectionRepository>();
 
-// Google-Kalender-Anbindung (OAuth + späterer Calendar-Zugriff)
+// Kalender-Sync: Google (OAuth) oder Nextcloud (CalDAV), immer höchstens einer verbunden.
+// Controller und Seriengenerator sprechen nur mit der Fassade CalendarSyncService.
 builder.Services.AddScoped<GoogleCalendarService>();
+// Umleitungen folgt der CalDAV-Client selbst – der eingebaute Redirect verwirft den
+// Authorization-Header und damit die Anmeldung.
+builder.Services.AddHttpClient<CalDavCalendarService>(c => c.Timeout = TimeSpan.FromSeconds(30))
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
+builder.Services.AddScoped<CalendarSyncService>();
 
-// Terminserien materialisieren: scoped Generator (DbContext + Google) und der Hosted
+// Azure-DevOps-Import (PAT, REST-API). Typed HttpClient: Handler-Pooling über die Factory.
+builder.Services.AddHttpClient<AzureDevOpsService>(c => c.Timeout = TimeSpan.FromSeconds(30));
+
+// Terminserien materialisieren: scoped Generator (DbContext + Kalender-Sync) und der Hosted
 // Service, der ihn beim Start und täglich anstößt.
 builder.Services.AddScoped<TaskSeriesGenerator>();
 builder.Services.AddHostedService<TaskSeriesGeneratorHost>();
@@ -126,7 +138,13 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.Cookie.Name = "HorizonNET.Auth";
     // HttpOnly ist Standard (JS kommt nicht an den Cookie); Secure erzwingen, weil die
     // API ohnehin nur über HTTPS läuft – lokal wie hinter dem Tunnel.
-    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    //
+    // Ausnahme per Auth:SecureCookie=false (Docker im Heimnetz ohne HTTPS-Proxy): Der
+    // Browser verwirft Secure-Cookies auf http://<server-ip>, der Login liefe ins Leere.
+    // Dann gilt SameAsRequest – über HTTPS bleibt der Cookie trotzdem Secure.
+    options.Cookie.SecurePolicy = builder.Configuration.GetValue("Auth:SecureCookie", true)
+        ? CookieSecurePolicy.Always
+        : CookieSecurePolicy.SameAsRequest;
     options.ExpireTimeSpan = TimeSpan.FromDays(14);
     options.SlidingExpiration = true;
 
@@ -155,12 +173,25 @@ var app = builder.Build();
 // Ganz vorn in der Pipeline, damit HTTPS-Redirect, HSTS und Cookies schon den korrigierten
 // Request sehen. Vertraut wird per Voreinstellung nur Loopback-Absendern – genau dort
 // läuft cloudflared; von fremden Adressen werden die Header ignoriert.
-app.UseForwardedHeaders(new ForwardedHeadersOptions
+//
+// Im Docker-Betrieb kommt der Reverse Proxy aus einem anderen Container bzw. vom
+// Docker-Bridge-Gateway, nicht von Loopback. Dessen Netz lässt sich per
+// ForwardedHeaders:KnownNetworks freischalten (CIDR, mehrere mit Komma/Semikolon),
+// z. B. "172.16.0.0/12". Ohne Angabe bleibt es bei Loopback.
+var forwardedOptions = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor
                      | ForwardedHeaders.XForwardedProto
                      | ForwardedHeaders.XForwardedHost
-});
+};
+var knownNetworks = app.Configuration["ForwardedHeaders:KnownNetworks"];
+if (!string.IsNullOrWhiteSpace(knownNetworks))
+{
+    foreach (var cidr in knownNetworks.Split([',', ';'],
+                 StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        forwardedOptions.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(cidr));
+}
+app.UseForwardedHeaders(forwardedOptions);
 
 // Sicherheits-Header an jeder Antwort (auch statischen Dateien – deshalb VOR
 // UseStaticFiles). Die CSP ist auf das zugeschnitten, was die App wirklich lädt:

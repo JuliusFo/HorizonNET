@@ -1,17 +1,23 @@
 using HorizonNET.Api.Services;
-using HorizonNET.Shared.Transfer.DTOs;
+using HorizonNET.Api.Services.Calendar;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HorizonNET.Api.Controllers;
 
+// Nur der OAuth-Flow. Status, Termine, Erinnerung und Trennen laufen anbieterneutral
+// über CalendarController (api/calendar).
 [ApiController]
 [Route("api/[controller]")]
-public class GoogleController(GoogleCalendarService google) : ControllerBase
+public class GoogleController(GoogleCalendarService google, CalendarSyncService calendar) : ControllerBase
 {
     // Startet den OAuth-Flow: Weiterleitung zur Google-Zustimmungsseite.
     [HttpGet("connect")]
-    public IActionResult Connect() => Redirect(google.BuildAuthorizationUrl(RedirectUri()));
+    public IActionResult Connect()
+    {
+        if (!google.IsConfigured) return Redirect(ClientReturnUrl("error"));
+        return Redirect(google.BuildAuthorizationUrl(RedirectUri()));
+    }
 
     // Rückleitung von Google: Code gegen Tokens tauschen, dann zurück zur Einstellungsseite.
     // Anonym, weil der Browser hier per Redirect von accounts.google.com landet – wäre die
@@ -26,7 +32,6 @@ public class GoogleController(GoogleCalendarService google) : ControllerBase
         try
         {
             await google.HandleCallbackAsync(code, RedirectUri());
-            return Redirect(ClientReturnUrl("connected"));
         }
         catch (GoogleScopeNotGrantedException)
         {
@@ -38,36 +43,11 @@ public class GoogleController(GoogleCalendarService google) : ControllerBase
         {
             return Redirect(ClientReturnUrl("error"));
         }
-    }
 
-    [HttpGet("status")]
-    public async Task<IActionResult> Status() => Ok(await google.GetStatusAsync());
-
-    // Termine des primären Google-Kalenders im angegebenen Zeitraum (read-only).
-    [HttpGet("events")]
-    public async Task<IActionResult> Events([FromQuery] DateTimeOffset from, [FromQuery] DateTimeOffset to)
-        => Ok(await google.GetEventsAsync(from.UtcDateTime, to.UtcDateTime));
-
-    // Vorlaufzeit der Erinnerung an den gespiegelten Terminen. Wirkt erst beim nächsten
-    // Spiegeln eines Tasks – bestehende Google-Termine werden nicht rückwirkend angefasst.
-    [HttpGet("reminder")]
-    public async Task<IActionResult> GetReminder() =>
-        Ok(new GoogleReminderDto(await google.GetReminderMinutesAsync()));
-
-    [HttpPut("reminder")]
-    public async Task<IActionResult> SetReminder([FromBody] GoogleReminderDto dto)
-    {
-        if (dto.Minutes is < 0 or > 40320) return BadRequest(); // Google erlaubt max. 4 Wochen
-
-        await google.SetReminderMinutesAsync(dto.Minutes);
-        return NoContent();
-    }
-
-    [HttpDelete]
-    public async Task<IActionResult> Disconnect()
-    {
-        await google.DisconnectAsync();
-        return NoContent();
+        // Entweder-oder: eine bestehende Nextcloud-Verbindung trennen und die geplanten
+        // Tasks im Hintergrund nach Google spiegeln.
+        await calendar.ConnectedAsync(google);
+        return Redirect(ClientReturnUrl("connected"));
     }
 
     // Muss exakt der in der Google Cloud Console registrierten Redirect-URI entsprechen.

@@ -40,6 +40,18 @@ public class ProjectRepository(AppDbContext context) : IProjectRepository
         return existing;
     }
 
+    public async Task<Project?> SetAzureDevOpsProjectAsync(int id, string? azureDevOpsProject)
+    {
+        var existing = await context.Projects
+            .Include(p => p.Tasks)
+            .FirstOrDefaultAsync(p => p.Id == id);
+        if (existing is null) return null;
+
+        existing.AzureDevOpsProject = string.IsNullOrWhiteSpace(azureDevOpsProject) ? null : azureDevOpsProject.Trim();
+        await context.SaveChangesAsync();
+        return existing;
+    }
+
     public async Task<bool> DeleteAsync(int id)
     {
         var existing = await context.Projects.FindAsync(id);

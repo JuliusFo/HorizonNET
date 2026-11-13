@@ -33,6 +33,33 @@ namespace HorizonNET.Data.Migrations
                     b.ToTable("AppSettings");
                 });
 
+            modelBuilder.Entity("HorizonNET.Domain.Entities.AzureDevOpsConnection", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("ConnectedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(320)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OrganizationUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PersonalAccessToken")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AzureDevOpsConnections");
+                });
+
             modelBuilder.Entity("HorizonNET.Domain.Entities.BodyWeightEntry", b =>
                 {
                     b.Property<int>("Id")
@@ -57,6 +84,43 @@ namespace HorizonNET.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("BodyWeightEntries");
+                });
+
+            modelBuilder.Entity("HorizonNET.Domain.Entities.CalDavConnection", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AppPassword")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CalendarName")
+                        .HasMaxLength(320)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CalendarUrl")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ConnectedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ServerUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CalDavConnections");
                 });
 
             modelBuilder.Entity("HorizonNET.Domain.Entities.DailyTask", b =>
@@ -416,6 +480,10 @@ namespace HorizonNET.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("AzureDevOpsProject")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Color")
                         .HasColumnType("TEXT");
 
@@ -458,6 +526,13 @@ namespace HorizonNET.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("AzureDevOpsWorkItemId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("CalendarEventId")
+                        .HasMaxLength(1024)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("TEXT");
 
@@ -475,10 +550,6 @@ namespace HorizonNET.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("EndTime")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("GoogleEventId")
-                        .HasMaxLength(1024)
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Kind")
@@ -535,6 +606,8 @@ namespace HorizonNET.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AzureDevOpsWorkItemId");
 
                     b.HasIndex("ParentTaskId");
 

@@ -138,7 +138,7 @@ else
                     <RadzenMonthView Text="Monat" />
                 </ChildContent>
                 <Template Context="appt">
-                    @if (appt.IsGoogle || appt.Task is null)
+                    @if (appt.IsExternal || appt.Task is null)
                     {
                         <span>@appt.Text</span>
                     }
@@ -213,7 +213,10 @@ else
 @code {
     private RadzenScheduler<CalendarAppointment>? scheduler;
     private List<TaskResponseDto>? tasks;
-    private List<GoogleEventDto> googleEvents = new();
+    private List<CalendarEventDto> externalEvents = new();
+    // Anzeigename und Farbe der Termine aus dem verbundenen Kalender (Google oder Nextcloud).
+    private string externalLabel = "Kalender";
+    private string externalColor = "#4285F4";
     private List<CalendarAppointment> allAppointments = new();   // ungefiltert
     private List<CalendarAppointment> appointments = new();      // an den Scheduler gebunden (gefiltert)
     private Dictionary<int, string?> projectColors = new();
@@ -227,7 +230,7 @@ else
 
     private bool showSeriesDialog;
 
-    // Aktive Filter-Schlüssel (leer = alles anzeigen): "p:{id}", "none", "google".
+    // Aktive Filter-Schlüssel (leer = alles anzeigen): "p:{id}", "none", "external".
     private readonly HashSet<string> activeFilters = new();
     private List<(string Key, string Label, string Color)> legend = new();
 
@@ -251,23 +254,40 @@ else
 
         tasks = await Api.GetTasksAsync();
 
-        // Google-Termine in einem großzügigen Fenster um heute laden (nur falls verbunden;
-        // bei nicht verbunden / Fehler liefert der ApiService eine leere Liste).
+        // Termine des verbundenen Kalenders in einem großzügigen Fenster um heute laden (nur
+        // falls verbunden; bei nicht verbunden / Fehler liefert der ApiService eine leere Liste).
         var now = DateTime.Now;
-        googleEvents = await Api.GetGoogleEventsAsync(
+        externalEvents = await Api.GetCalendarEventsAsync(
             now.AddMonths(-1).ToUniversalTime(), now.AddMonths(2).ToUniversalTime());
+        if (externalEvents.Count > 0)
+        {
+            try
+            {
+                var status = await Api.GetCalendarStatusAsync();
+                (externalLabel, externalColor) = status?.Provider switch
+                {
+                    CalendarProviders.Nextcloud => ("Nextcloud-Kalender", "#0082C9"),
+                    CalendarProviders.Google => ("Google-Kalender", "#4285F4"),
+                    _ => ("Kalender", "#4285F4")
+                };
+            }
+            catch
+            {
+                // Nur Beschriftung/Farbe – der Kalender funktioniert auch ohne.
+            }
+        }
 
         BuildAppointments();
     }
 
-    // Tasks mit Fälligkeitsdatum + Google-Termine in Scheduler-Einträge umwandeln,
+    // Tasks mit Fälligkeitsdatum + Kalender-Termine in Scheduler-Einträge umwandeln,
     // dann Legende neu aufbauen und den aktiven Filter anwenden.
     private void BuildAppointments()
     {
         allAppointments = (tasks ?? [])
             .Where(t => t.DueDate is not null)
             .Select(ToAppointment)
-            .Concat(googleEvents.Select(ToAppointment))
+            .Concat(externalEvents.Select(ToAppointment))
             .ToList();
 
         BuildLegend();
@@ -275,7 +295,7 @@ else
     }
 
     // Legende aus den vorhandenen Terminen ableiten: je Projekt mit geplanten Tasks
-    // ein Eintrag, dazu „Ohne Projekt" und „Google-Kalender", falls vorhanden.
+    // ein Eintrag, dazu „Ohne Projekt" und der verbundene Kalender, falls vorhanden.
     private void BuildLegend()
     {
         var items = allAppointments
@@ -292,8 +312,8 @@ else
         if (allAppointments.Any(a => a.Task is not null && a.Task.ProjectId is null))
             items.Add(("none", "Ohne Projekt", "#6c757d"));
 
-        if (allAppointments.Any(a => a.IsGoogle))
-            items.Add(("google", "Google-Kalender", "#4285F4"));
+        if (allAppointments.Any(a => a.IsExternal))
+            items.Add(("external", externalLabel, externalColor));
 
         legend = items;
     }
@@ -328,21 +348,21 @@ else
     // Der Radzen-Scheduler kennt keinen Ganztags-Bereich, deshalb diese Lösung über die Dauer.
     private static readonly TimeSpan AllDayHeight = TimeSpan.FromMinutes(30);
 
-    private CalendarAppointment ToAppointment(GoogleEventDto e)
+    private CalendarAppointment ToAppointment(CalendarEventDto e)
     {
-        // Ganztägige Google-Termine liefen bisher genauso über den ganzen Tag wie die
+        // Ganztägige Kalender-Termine liefen bisher genauso über den ganzen Tag wie die
         // eigenen: Das AllDay-Kennzeichen aus dem DTO wurde schlicht nicht ausgewertet.
         if (!e.AllDay)
-            return new() { Start = e.Start, End = e.End, Text = e.Title, IsGoogle = true, FilterKey = "google" };
+            return new() { Start = e.Start, End = e.End, Text = e.Title, IsExternal = true, FilterKey = "external" };
 
         return new()
         {
             Start = e.Start.Date,
             End = e.Start.Date + AllDayHeight,
             Text = e.Title,
-            IsGoogle = true,
+            IsExternal = true,
             IsAllDay = true,
-            FilterKey = "google"
+            FilterKey = "external"
         };
     }
 
@@ -433,8 +453,8 @@ else
 
     private void OnAppointmentSelect(SchedulerAppointmentSelectEventArgs<CalendarAppointment> args)
     {
-        // Google-Termine sind read-only – kein Edit-Dialog.
-        if (args.Data is not { IsGoogle: false } appointment) return;
+        // Kalender-Termine sind read-only – kein Edit-Dialog.
+        if (args.Data is not { IsExternal: false } appointment) return;
 
         selectedTask = appointment.Task;
     }
@@ -448,8 +468,8 @@ else
         // eine InvalidCastException geworfen, hier fällt derselbe Fall still durch.
         if (moved.Appointment?.Data is not CalendarAppointment appt) return;
 
-        // Google-Termine sind read-only und werden nicht verschoben.
-        if (appt.IsGoogle || appt.Task is null) return;
+        // Kalender-Termine sind read-only und werden nicht verschoben.
+        if (appt.IsExternal || appt.Task is null) return;
         var task = appt.Task;
 
         var newStart = appt.Start + moved.TimeSpan;
@@ -470,12 +490,12 @@ else
     }
 
     // Look wie die Projektkarten in der Übersicht: abgeschwächter Farbton (~10 %),
-    // farbiger Rand + dezenter linker Akzent, dunkler Text. Google = Google-Blau.
+    // farbiger Rand + dezenter linker Akzent, dunkler Text. Fremde Termine in der Farbe des Anbieters.
     private void OnAppointmentRender(SchedulerAppointmentRenderEventArgs<CalendarAppointment> args)
     {
         if (args.Data is not { } appointment) return; // ohne Termin nichts einzufärben
 
-        var color = appointment.IsGoogle ? "#4285F4" : (ProjectColor(appointment.Task?.ProjectId) ?? "#6c757d");
+        var color = appointment.IsExternal ? externalColor : (ProjectColor(appointment.Task?.ProjectId) ?? "#6c757d");
         var style =
             $"background-color: {color}1A; border: 1px solid {color}; border-left: 3px solid {color}; color: #212529;";
 
@@ -505,7 +525,7 @@ else
     }
 
     // ── Kontextmenü am Termin ─────────────────────────────────────────────────
-    // Google-Termine bekommen keins: Sie sind read-only, jeder Eintrag wäre wirkungslos.
+    // Kalender-Termine bekommen keins: Sie sind read-only, jeder Eintrag wäre wirkungslos.
 
     private enum ApptAction { Done, Abandon, Open, Details, Unschedule, Delete }
 
@@ -714,16 +734,17 @@ else
         public DateTime End { get; set; }
         public string Text { get; set; } = "";
 
-        // Bei Task-Terminen gesetzt; bei read-only Google-Terminen null.
+        // Bei Task-Terminen gesetzt; bei read-only Kalender-Terminen null.
         public TaskResponseDto? Task { get; set; }
 
-        public bool IsGoogle { get; set; }
+        // Termin aus dem verbundenen Kalender (Google/Nextcloud), nicht aus einem Task.
+        public bool IsExternal { get; set; }
 
         // Termin ohne Uhrzeit. Start/End tragen dann nur die halbe Stunde, mit der er
         // als flache Leiste am Tagesanfang gezeichnet wird – nicht seine echte Dauer.
         public bool IsAllDay { get; set; }
 
-        // Schlüssel für die Filter-Legende: "p:{projektId}", "none" oder "google".
+        // Schlüssel für die Filter-Legende: "p:{projektId}", "none" oder "external".
         public string FilterKey { get; set; } = "none";
     }
 }

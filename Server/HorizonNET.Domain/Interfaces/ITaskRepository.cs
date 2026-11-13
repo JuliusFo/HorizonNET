@@ -35,13 +35,26 @@ public interface ITaskRepository
     // Eltern-Tasks tragen (Checkliste eines Termins gehört nicht aufs Board).
     Task<TaskItem?> SetKindAsync(int id, TaskKind kind);
 
-    // Setzt nur die Google-Event-Verknüpfung (serverseitiger Sync). Bewusst getrennt
+    // Setzt nur die Kalender-Event-Verknüpfung (serverseitiger Sync). Bewusst getrennt
     // vom DTO-getriebenen UpdateAsync, damit dieser Wert dort nicht überschrieben wird.
-    Task SetGoogleEventIdAsync(int taskId, string? googleEventId);
+    Task SetCalendarEventIdAsync(int taskId, string? calendarEventId);
 
-    // Alle gesetzten Google-Event-Ids – um beim Lesen die von der App selbst
-    // gespiegelten Termine auszublenden (sonst Doppelanzeige Task + Google-Event).
-    Task<HashSet<string>> GetGoogleEventIdsAsync();
+    // Alle gesetzten Kalender-Event-Ids – um beim Lesen die von der App selbst
+    // gespiegelten Termine auszublenden (sonst Doppelanzeige Task + Kalender-Event).
+    Task<HashSet<string>> GetCalendarEventIdsAsync();
+
+    // Verwirft alle Event-Verknüpfungen (auch im Papierkorb) – beim Wechsel oder Trennen
+    // des Kalender-Anbieters, weil die IDs nur im alten Kalender gelten.
+    Task ClearAllCalendarEventIdsAsync();
+
+    // Alle nicht gelöschten Tasks mit Fälligkeitsdatum ab dem angegebenen Tag – die
+    // Menge, die nach einem Anbieterwechsel neu gespiegelt wird.
+    Task<IReadOnlyList<TaskItem>> GetScheduledFromAsync(DateTime fromDate);
+
+    // Alle Work-Item-IDs bereits aus Azure DevOps importierter Tasks (auch gelöschte –
+    // wer einen importierten Task wegwirft, will ihn nicht beim nächsten Mal wieder angeboten
+    // bekommen; zurückholen geht über den Papierkorb).
+    Task<HashSet<int>> GetAzureDevOpsWorkItemIdsAsync();
 
     // Nur Id, Titel und Projektzuordnung (samt Sub-Tasks) – für Auswahllisten.
     // Ausnahme von der Regel "Repositories liefern Entitäten": Hier gibt es bewusst keine
@@ -52,7 +65,7 @@ public interface ITaskRepository
 
     // Setzt für die übergebenen Tasks SortOrder = Listenindex und Status = status.
     // Zurück kommen die Tasks, deren Fälligkeitsdatum sich dadurch geändert hat – nur die
-    // sind für den Google-Kalender überhaupt von Belang.
+    // sind für den Kalender-Sync überhaupt von Belang.
     // completeSubTasks wirkt nur auf Tasks, die durch diesen Aufruf NEU auf
     // "Fertig"/"Verworfen" wechseln – siehe SetStatusAsync.
     Task<IReadOnlyList<TaskItem>> ReorderAsync(WorkStatus status, IList<int> orderedTaskIds, bool completeSubTasks = false);

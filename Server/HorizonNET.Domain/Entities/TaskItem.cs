@@ -33,7 +33,7 @@ public class TaskItem
 
     // Aufgabe (Board) oder Termin (nur Kalender) – siehe TaskKind. Wird beim Anlegen
     // gesetzt und danach nur über SetKindAsync geändert; der Vollersatz UpdateAsync
-    // lässt das Feld bewusst in Ruhe (wie GoogleEventId und die SortOrder-Felder).
+    // lässt das Feld bewusst in Ruhe (wie CalendarEventId und die SortOrder-Felder).
     public TaskKind Kind { get; set; } = TaskKind.Task;
 
     // Manuelle Reihenfolge innerhalb einer Kanban-Spalte (Status) – bei Sub-Tasks
@@ -74,9 +74,14 @@ public class TaskItem
 
     public DateOnly? SeriesDate { get; set; }
 
-    // Verknüpfung zum gespiegelten Google-Kalender-Eintrag (Einweg-Sync).
+    // Verknüpfung zum gespiegelten Termin im verbundenen Kalender (Google oder
+    // Nextcloud/CalDAV; Einweg-Sync). Beim Anbieterwechsel wird sie verworfen.
     // Wird ausschließlich serverseitig vom Sync gesetzt, nie über das Client-DTO.
-    public string? GoogleEventId { get; set; }
+    public string? CalendarEventId { get; set; }
+
+    // Aus Azure DevOps importiert? Dann die Work-Item-ID – für die Erkennung "bereits
+    // importiert" im Import-Dialog. Ausschließlich serverseitig beim Import gesetzt.
+    public int? AzureDevOpsWorkItemId { get; set; }
 
     // Zeitstempel; ausschließlich serverseitig im Repository gesetzt.
     public DateTime CreatedAt { get; set; }
