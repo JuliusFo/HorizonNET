@@ -139,6 +139,34 @@ public class AzureDevOpsTests
         Assert.Equal($"{Org}/Mein%20Projekt/_workitems/edit/1", items.Single(i => i.Id == 1).Url);
     }
 
+    // Mit "Abgeschlossene" darf kein offenes Item herausfallen, auch wenn die
+    // abgeschlossenen allein das $top-Limit füllen.
+    [Fact]
+    public async Task GetMyWorkItems_IncludeClosed_KeepsOpenItemsFirst()
+    {
+        using var db = new TestDatabase();
+        var projectId = await SeedAsync(db);
+        var queries = new List<string>();
+        var handler = new FakeHandler(req =>
+        {
+            if (req.RequestUri!.AbsolutePath.EndsWith("/_apis/wit/wiql"))
+            {
+                var q = req.Content!.ReadAsStringAsync().Result;
+                queries.Add(q);
+                return q.Contains("NOT IN")
+                    ? Json(new { workItems = new[] { new { id = 1 } } })
+                    : Json(new { workItems = new[] { new { id = 2 }, new { id = 1 } } });
+            }
+            return WorkItemsResponse();
+        });
+
+        using var act = db.NewContext();
+        var items = await NewService(act, handler).GetMyWorkItemsAsync(projectId, includeClosed: true);
+
+        Assert.Equal(2, queries.Count);
+        Assert.Equal([1, 2], items.Select(i => i.Id)); // offen zuerst, keine Dubletten
+    }
+
     [Fact]
     public async Task GetMyWorkItems_UnlinkedProject_Throws()
     {

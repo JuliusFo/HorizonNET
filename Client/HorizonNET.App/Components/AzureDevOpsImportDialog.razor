@@ -83,7 +83,11 @@
                         </div>
                     </div>
 
-                    @if (!VisibleItems.Any())
+                    @if (loadError is not null)
+                    {
+                        @* Grund steht schon oben – keine zweite, irreführende Leermeldung. *@
+                    }
+                    else if (!VisibleItems.Any())
                     {
                         <p class="text-muted mb-0">
                             @(items.Count == 0 ? "Dir sind in diesem Projekt keine offenen Work Items zugewiesen." : "Kein Work Item passt zum Filter.")

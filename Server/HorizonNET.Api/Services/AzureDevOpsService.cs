@@ -193,13 +193,25 @@ public partial class AzureDevOpsService(
 
     internal record WorkItem(int Id, string Title, string State, string Type, string Project, int? Priority, string? DescriptionHtml);
 
+    // Offene und abgeschlossene Items getrennt abfragen: In einer gemeinsamen Abfrage
+    // füllten bei langen Projekten die (meist zahlreicheren, frischer geänderten)
+    // abgeschlossenen Items das $top-Limit, und alte offene Items fielen heraus.
+    // Offene stehen deshalb immer vollständig vorn.
     private async Task<List<int>> QueryMyWorkItemIdsAsync(AzureDevOpsConnection c, string azdoProject, bool includeClosed)
+    {
+        var ids = await RunWiqlAsync(c, azdoProject, closed: false);
+        if (includeClosed)
+            ids.AddRange((await RunWiqlAsync(c, azdoProject, closed: true)).Where(id => !ids.Contains(id)));
+        return ids;
+    }
+
+    private async Task<List<int>> RunWiqlAsync(AzureDevOpsConnection c, string azdoProject, bool closed)
     {
         // Feste Zustandsnamen, kein Nutzertext – nichts zu escapen. @project bezieht sich
         // auf das Projekt in der URL.
-        var where = "[System.TeamProject] = @project AND [System.AssignedTo] = @Me";
-        if (!includeClosed)
-            where += $" AND [System.State] NOT IN ({string.Join(", ", ClosedStates.Select(s => $"'{s}'"))})";
+        var states = string.Join(", ", ClosedStates.Select(s => $"'{s}'"));
+        var where = "[System.TeamProject] = @project AND [System.AssignedTo] = @Me"
+                  + $" AND [System.State] {(closed ? "IN" : "NOT IN")} ({states})";
         var wiql = $"SELECT [System.Id] FROM WorkItems WHERE {where} ORDER BY [System.ChangedDate] DESC";
 
         using var doc = await SendAsync(c, HttpMethod.Post,
