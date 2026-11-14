@@ -513,6 +513,50 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
             .ToListAsync();
     }
 
+    public async Task<WeeklyReportData> GetWeeklyReportAsync(
+        DateOnly weekStart, IReadOnlyCollection<int> workspaceIds, bool withoutWorkspace)
+    {
+        var from = weekStart.ToDateTime(TimeOnly.MinValue);
+        var to = from.AddDays(7);
+
+        var completed = await context.Tasks
+            .Include(t => t.Project)
+            .Include(t => t.ParentTask).ThenInclude(p => p!.Project)
+            .Where(t => t.Kind == TaskKind.Task
+                     && t.Status == WorkStatus.Done
+                     && t.CompletedAt != null && t.CompletedAt >= from && t.CompletedAt < to)
+            .OrderBy(t => t.CompletedAt)
+            .ToListAsync();
+
+        // Ein Sub-Task, dessen Eltern-Task in derselben Woche fertig wurde, wäre doppelt
+        // gemeldet – der Eltern-Task steht für ihn.
+        var completedIds = completed.Select(t => t.Id).ToHashSet();
+        completed = completed
+            .Where(t => t.ParentTaskId is null || !completedIds.Contains(t.ParentTaskId.Value))
+            .ToList();
+
+        var open = await context.Tasks
+            .Include(t => t.Project)
+            .Where(t => t.Kind == TaskKind.Task
+                     && t.ParentTaskId == null
+                     && t.Status != WorkStatus.Done && t.Status != WorkStatus.Abandoned
+                     && (t.Project == null || t.Project.Status != ProjectStatus.Archived))
+            .ToListAsync();
+
+        // Filter im Speicher: Bei Sub-Tasks zählt das Projekt des Eltern-Tasks, und die
+        // Mengen einer Woche sind klein.
+        bool Matches(TaskItem t)
+        {
+            if (workspaceIds.Count == 0 && !withoutWorkspace) return true;
+            var project = t.Project ?? t.ParentTask?.Project;
+            return project?.WorkspaceId is int ws
+                ? workspaceIds.Contains(ws)
+                : withoutWorkspace;
+        }
+
+        return new WeeklyReportData(completed.Where(Matches).ToList(), open.Where(Matches).ToList());
+    }
+
     public async Task<IEnumerable<TaskItem>> SearchAsync(string query, int limit)
     {
         var pattern = SearchPattern.For(query);

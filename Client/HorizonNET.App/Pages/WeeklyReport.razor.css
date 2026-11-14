@@ -1,0 +1,10 @@
+.week-label {
+    min-width: 13rem;
+    text-align: center;
+}
+
+/* Die Mail ist reiner Text – Festbreite zeigt Listen und Einrückungen so, wie sie ankommen. */
+.mail-body {
+    font-family: var(--bs-font-monospace);
+    font-size: 0.875rem;
+}

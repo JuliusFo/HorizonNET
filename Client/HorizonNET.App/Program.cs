@@ -57,6 +57,9 @@ builder.Services.AddScoped<TimerState>();
 // Lokale UI-Einstellungen (localStorage)
 builder.Services.AddScoped<SettingsState>();
 
+// Empfänger & Co. der Wochenabschluss-Mail (localStorage)
+builder.Services.AddScoped<WeeklyMailSettings>();
+
 // Bildschirmsperre des Journals (PIN + Auto-Lock). Bewusst nur UI-Schutz.
 builder.Services.AddScoped<JournalLockState>();
 

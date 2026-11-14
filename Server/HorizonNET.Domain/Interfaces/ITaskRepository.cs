@@ -90,6 +90,17 @@ public interface ITaskRepository
     // Projekt. Stützt sich auf CompletedAt – siehe dort zur Genauigkeit bei Altdaten.
     Task<IEnumerable<TaskItem>> GetCompletedOnAsync(DateOnly date);
 
+    // Grundlage der Wochenabschluss-Mail: in der Woche ab weekStart (Montag, 7 Tage)
+    // erledigte Aufgaben und alle derzeit offenen Haupt-Aufgaben, beides inkl. Projekt.
+    // Termine (TaskKind.Appointment) und Verworfenes bleiben draußen. Erledigte Sub-Tasks
+    // kommen mit (ParentTask geladen), außer ihr Eltern-Task ist selbst in der Woche
+    // erledigt – dann steht er schon für sie. Offene Tasks aus archivierten Projekten
+    // fehlen. Filter: Tasks aus den genannten Arbeitsbereichen; withoutWorkspace nimmt
+    // Inbox und Projekte ohne Arbeitsbereich dazu. Keins von beidem = alles.
+    // "Offen" ist der Stand JETZT, nicht der am Ende der gewählten Woche.
+    Task<WeeklyReportData> GetWeeklyReportAsync(
+        DateOnly weekStart, IReadOnlyCollection<int> workspaceIds, bool withoutWorkspace);
+
     // Soft-gelöschte Tasks (für den Papierkorb), aber nur eigenständig gelöschte
     // "Wurzeln": Tasks, die als Teil desselben Vorgangs mit ihrem Projekt oder
     // Eltern-Task gelöscht wurden, kommen dort automatisch mit zurück und tauchen
@@ -99,3 +110,5 @@ public interface ITaskRepository
     // Endgültiges Löschen eines soft-gelöschten Tasks inkl. Sub-Tasks (nicht umkehrbar).
     Task<bool> PurgeAsync(int id);
 }
+
+public record WeeklyReportData(IReadOnlyList<TaskItem> Completed, IReadOnlyList<TaskItem> Open);
