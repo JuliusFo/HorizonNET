@@ -5,39 +5,12 @@
     Datei automatisch in jede .csproj unterhalb des Repo-Roots, daher tragen alle
     Assemblies (API, Client, Domain, Data, Shared) dieselbe Version.
 
-    Version anheben = nur diese eine Zeile ändern (optional zusätzlich `git tag vX.Y.Z`).
+    Version anheben = nur die Zeile <Version> unten ändern, am besten über den Claude-Skill
+    /release (Version, CHANGELOG, Tag vX.Y.Z, GitHub-Release).
     <Version> setzt AssemblyVersion (X.Y.Z.0), FileVersion und InformationalVersion (X.Y.Z).
 
-    Startwert war 0.9.0 ("langsam Richtung 1.0"); 0.10.0 nach Phase 10, 0.11.0 nach Phase 11.
-    Der ursprüngliche Plan (1.0.0 nach Phase 9, siehe docs/konzept-versionierung.md) wurde
-    bewusst verworfen – die 1.0 kommt später. Minor zählt weiter hoch: nach 0.11.0 folgt
-    0.12.0, nicht 0.2.
-
-    LÜCKE 0.12.0–0.15.0: Die Phasen 12 (Kleinere UI/UX-Verbesserungen), 13 (Notizen in
-    Ordnern und Kommentare), 14 (Journal) und 15 (Refactoring) sind abgeschlossen, ohne
-    dass diese Zeile mitgezogen wurde. Statt vier Nummern nachzutragen, die nie eine
-    gebaute Assembly getragen hat, springt die Version nach Phase 16 direkt auf 0.16.0 –
-    die Regel "Minor = Phasennummer" ist damit wieder gültig und bleibt die einzige, die
-    man sich merken muss.
-
-    Mit dem Livegang (27.08.2026, horizon.cloudfox.xyz) endet die Phasen-Kopplung:
-    ab hier normales SemVer. 1.0.1 ist der erste Stand nach dem Livegang
-    (Sub-Task-Rückfrage beim Abschließen + Projektkacheln zählen nur Haupt-Tasks).
-    1.0.2: Kanban-Karte ohne sporadisches Projektname-Label (Farbe zeigt das Projekt).
-    1.0.3: Journal/Notizen verlieren getippten Text nicht mehr beim Auto-Save-Render.
-    1.1.0: Heute-Seite (Häkchen-Bug, Fälligkeit leeren, mobile Ansicht) + „Titel kopieren"
-    auf der Task-Detailseite.
-    1.2.0: Termine vs. Aufgaben – TaskKind (Aufgabe/Termin), Terminserien mit Slots,
-    Generator (Hosted Service), Serien-Verwaltung im Kalender. Zwei Migrationen
-    (AddTaskKind, AddTaskSeries), werden beim Start automatisch angewendet.
-    1.3.0: PR #1 (mahe4) – Docker-Deployment (inkl. /healthz), Azure-DevOps-Import,
-    Kalendersync wahlweise mit Nextcloud/CalDAV statt Google, Wochenabschluss-Mail
-    per mailto. Drei Migrationen (AddAzureDevOps, AddCalDavConnection,
-    AzureDevOpsWorkItemPerOrganization), werden beim Start automatisch angewendet –
-    vorher DB sichern. Dazu Sicherheitsupdate: Microsoft-Pakete 10.0.10 → 10.0.15
-    (u. a. WebAssembly.Server: GHSA-g27p-qf6j-c96c, GHSA-qjpx-jqm5-h2c4; KeyMigration:
-    Cryptography.Pkcs/Xml), Override auf Microsoft.OpenApi entfällt. Auf dem vServer
-    zusätzlich die ASP.NET Core Runtime auf 10.0.15 heben.
+    Was jede Version enthält – auch die Zeit vor dem Livegang, als die Minor-Version die
+    Phasen zählte – steht in CHANGELOG.md. Seit dem Livegang (27.08.2026) gilt SemVer.
   -->
   <PropertyGroup>
     <Version>1.3.0</Version>

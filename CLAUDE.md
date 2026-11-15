@@ -1,7 +1,7 @@
 # HorizonNET – persönlicher Tages-Organizer
 
 > Projektanweisungen für Claude Code. Arbeitssprache mit dem Nutzer: **Deutsch**. Code-Kommentare und Doku: **Deutsch**. Commit-Messages: **Englisch**.
-> Release-Stand: `<Version>` in `Directory.Build.props` (mit Versionshistorie im Kommentar) und die Tags `vX.Y.Z`.
+> Release-Stand: `<Version>` in `Directory.Build.props`, die Tags `vX.Y.Z` und `CHANGELOG.md`.
 
 Diese Datei lädt in jede Session und enthält nur, was immer gilt. Details stehen in `docs/` – der Ordner ist per `.gitignore` **nicht versioniert** und existiert nur auf dem Rechner des Nutzers.
 
@@ -48,9 +48,9 @@ scripts/                             Migrationen, Deployment-Paket, Server-Insta
 - **Task für Task:** Größere Arbeit in einzelne Tasks zerlegen, jeden umsetzen → bauen → testen → dem Nutzer melden, dass er committfähig ist, **dann anhalten**. Kein Sammel-Diff über mehrere Tasks.
 - **Der Nutzer committet in der Regel selbst.** Nur auf ausdrückliche Bitte committen, pushen oder taggen. Nie ungeprüft behaupten, etwas sei „noch nicht committet“ – vorher `git status`/`git log` ansehen.
 - **Phasen** sind Projekte in der App-DB (`Phase X - <Titel>` in `Projects`/`Tasks`, nur `DeletedAt IS NULL`), nicht Dateien im Repo. Teilschritte innerhalb einer Phase heißen 9a, 9b, …
-- **Fertig heißt:** `dotnet build` (warnungsfrei, Warnungen sind Fehler) und `dotnet test` im Root grün; bei sichtbaren Änderungen in der laufenden App geprüft.
+- **Fertig heißt:** `dotnet build` (warnungsfrei, Warnungen sind Fehler) und `dotnet test` im Root grün; bei sichtbaren Änderungen in der laufenden App geprüft; Eintrag unter `[Unreleased]` in `CHANGELOG.md`.
 - **Commits:** Präfix wie bisher (`Feat:`, `Fix:`, `Chore:`, `Docs:`), Englisch, kurz und thematisch.
-- **Versionierung:** SemVer seit dem Livegang. Version nur in `Directory.Build.props` anheben und dort im Kommentar eintragen, was die Version enthält (inkl. Migrationen und Hinweisen fürs Deployment). Tag `vX.Y.Z` und GitHub-Release nach dem Push.
+- **Versionierung:** SemVer seit dem Livegang. Sichtbare Änderungen (und interne, soweit erwähnenswert) gleich beim Umsetzen unter `[Unreleased]` in `CHANGELOG.md` eintragen – Abschnitte Sicherheit, Neu, Geändert, Behoben, Intern, Deployment. Ein Release macht der Skill `/release` (Version, CHANGELOG-Abschnitt, Tag, GitHub-Release, Hinweise fürs Deployment); `<Version>` sonst nicht von Hand anheben.
 
 ## 5. Fallen
 
