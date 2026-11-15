@@ -9,7 +9,7 @@ namespace HorizonNET.Api.Controllers;
 
 // CRUD für Terminserien (Schablonen). Nach Anlegen/Ändern läuft der Generator sofort,
 // damit die Termine im Kalender stehen, ohne auf den nächtlichen Lauf zu warten.
-// Google-Sync für geänderte/entfernte Termine liegt hier (über den Generator), nicht im
+// Kalender-Sync für geänderte/entfernte Termine liegt hier (über den Generator), nicht im
 // Repository – wie beim TasksController.
 [ApiController]
 [Route("api/[controller]")]
@@ -80,7 +80,7 @@ public class TaskSeriesController(ITaskSeriesRepository repo, TaskSeriesGenerato
             Slots = ToSlots(dto.Slots)
         });
 
-        await generator.RunAsync(); // Termine sofort materialisieren (best-effort Google-Sync inklusive)
+        await generator.RunAsync(); // Termine sofort materialisieren (best-effort Kalender-Sync inklusive)
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, ToDto(created));
     }
 
@@ -103,7 +103,7 @@ public class TaskSeriesController(ITaskSeriesRepository repo, TaskSeriesGenerato
         });
         if (change is null) return NotFound();
 
-        await generator.SyncAsync(change);  // geänderte/entfernte Termine in Google nachziehen
+        await generator.SyncAsync(change);  // geänderte/entfernte Termine im Kalender nachziehen
         await generator.RunAsync();         // neue Slots sofort materialisieren
         return Ok(ToDto(change.Series));
     }
@@ -114,7 +114,7 @@ public class TaskSeriesController(ITaskSeriesRepository repo, TaskSeriesGenerato
         var change = await repo.DeleteAsync(id);
         if (change is null) return NotFound();
 
-        await generator.SyncAsync(change); // Google-Events der mitgelöschten Termine entfernen
+        await generator.SyncAsync(change); // Kalender-Events der mitgelöschten Termine entfernen
         return NoContent();
     }
 

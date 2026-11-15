@@ -1,0 +1,270 @@
+@page "/wochenabschluss"
+@inject ApiService Api
+@inject WeeklyMailSettings MailSettings
+@inject WorkspaceState WorkspaceState
+@inject ToastService Toast
+@inject IJSRuntime JS
+
+<PageTitle>Wochenabschluss – HorizonNET</PageTitle>
+
+<h1 class="mb-3">Wochenabschluss</h1>
+
+<p class="text-muted">
+    Erzeugt die Freitags-Mail aus deinen Tasks: was in der Woche erledigt wurde und was
+    noch ansteht. „Mail öffnen“ übergibt alles an dein Mail-Programm – gesendet wird
+    erst dort.
+</p>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+            <button class="btn btn-outline-secondary btn-sm" title="Vorige Woche" @onclick="() => ShiftWeekAsync(-1)">‹</button>
+            <span class="fw-semibold week-label">
+                KW @WeeklyMail.WeekNumber(weekStart) · @WeeklyMail.RangeLabel(weekStart)
+            </span>
+            <button class="btn btn-outline-secondary btn-sm" title="Nächste Woche" @onclick="() => ShiftWeekAsync(1)"
+                    disabled="@(weekStart >= CurrentMonday)">›</button>
+            @if (weekStart != CurrentMonday)
+            {
+                <button class="btn btn-link btn-sm" @onclick="() => GoToWeekAsync(CurrentMonday)">Diese Woche</button>
+            }
+            @if (report is not null)
+            {
+                <span class="text-muted small ms-auto">@report.Completed.Count erledigt · @report.Open.Count offen</span>
+            }
+        </div>
+
+        <div class="form-label mb-1">Arbeitsbereiche</div>
+        <div class="d-flex flex-wrap gap-2 mb-1">
+            @foreach (var ws in WorkspaceState.Workspaces ?? [])
+            {
+                var id = ws.Id;
+                <input type="checkbox" class="btn-check" id="ws-@id" autocomplete="off"
+                       checked="@MailSettings.WorkspaceIds.Contains(id)"
+                       @onchange="e => ToggleWorkspaceAsync(id, (bool)e.Value!)" />
+                <label class="btn btn-sm btn-outline-primary" for="ws-@id">@ws.Name</label>
+            }
+            <input type="checkbox" class="btn-check" id="ws-none" autocomplete="off"
+                   checked="@MailSettings.WithoutWorkspace"
+                   @onchange="e => ToggleWithoutWorkspaceAsync((bool)e.Value!)" />
+            <label class="btn btn-sm btn-outline-primary" for="ws-none">Ohne Arbeitsbereich / Inbox</label>
+        </div>
+        <div class="form-text mt-0">Nichts ausgewählt = alle Tasks. „Offen“ ist der heutige Stand.</div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header fw-semibold">Empfänger</div>
+    <div class="card-body">
+        <label for="mailTo" class="form-label">An</label>
+        <input id="mailTo" class="form-control" placeholder="anna@firma.de; ben@firma.de"
+               value="@MailSettings.To" @onchange="e => SetToAsync((string?)e.Value)" />
+        @if (InvalidTo.Count > 0)
+        {
+            <div class="form-text text-danger">Ungültig: @string.Join(", ", InvalidTo)</div>
+        }
+
+        <label for="mailCc" class="form-label mt-3">CC</label>
+        <input id="mailCc" class="form-control" placeholder="optional"
+               value="@MailSettings.Cc" @onchange="e => SetCcAsync((string?)e.Value)" />
+        @if (InvalidCc.Count > 0)
+        {
+            <div class="form-text text-danger">Ungültig: @string.Join(", ", InvalidCc)</div>
+        }
+        <div class="form-text">Mehrere Adressen mit Komma, Semikolon oder Leerzeichen trennen. Wird in diesem Browser gespeichert.</div>
+
+        <div class="row g-3 mt-1">
+            <div class="col-md-6">
+                <label for="mailGreeting" class="form-label">Anrede</label>
+                <input id="mailGreeting" class="form-control"
+                       value="@MailSettings.Greeting" @onchange="e => SetGreetingAsync((string?)e.Value)" />
+            </div>
+            <div class="col-md-6">
+                <label for="mailSignature" class="form-label">Gruß / Signatur</label>
+                <textarea id="mailSignature" class="form-control" rows="2"
+                          value="@MailSettings.Signature" @onchange="e => SetSignatureAsync((string?)e.Value)"></textarea>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header fw-semibold d-flex align-items-center">
+        <span>Mail</span>
+        <button class="btn btn-link btn-sm ms-auto p-0" @onclick="Regenerate" disabled="@(report is null)">Text neu erzeugen</button>
+    </div>
+    <div class="card-body">
+        @if (loadFailed)
+        {
+            <div class="d-flex align-items-center gap-2">
+                <span class="text-danger">Der Bericht konnte nicht geladen werden.</span>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="LoadAsync">Erneut versuchen</button>
+            </div>
+        }
+        else if (report is null)
+        {
+            <p class="text-muted mb-0">Wird geladen…</p>
+        }
+        else
+        {
+            <label for="mailSubject" class="form-label">Betreff</label>
+            <input id="mailSubject" class="form-control mb-3" @bind="subject" @bind:event="oninput" />
+
+            <label for="mailBody" class="form-label">Text</label>
+            <textarea id="mailBody" class="form-control mail-body" rows="18"
+                      @bind="body" @bind:event="oninput"></textarea>
+            <div class="form-text">
+                Vor dem Öffnen frei anpassbar. Wechsel von Woche, Arbeitsbereich, Anrede oder
+                Signatur erzeugt den Text neu.
+            </div>
+
+            @if (MailtoTooLong)
+            {
+                <div class="alert alert-warning py-2 mt-3 mb-0" role="alert">
+                    Die Mail ist recht lang (@Mailto.Length Zeichen im Link). Manche Mail-Programme
+                    schneiden den Text dann ab – im Zweifel „Text kopieren“ und einfügen.
+                </div>
+            }
+
+            <div class="d-flex flex-wrap gap-2 mt-3">
+                @if (CanOpenMail)
+                {
+                    <a class="btn btn-primary" href="@Mailto">Mail öffnen</a>
+                }
+                else
+                {
+                    <button class="btn btn-primary" disabled title="Mindestens eine gültige An-Adresse eintragen">Mail öffnen</button>
+                }
+                <button class="btn btn-outline-secondary" @onclick="CopyAsync">Text kopieren</button>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private DateOnly weekStart;
+    private WeeklyReportDto? report;
+    private string subject = string.Empty;
+    private string body = string.Empty;
+
+    private static DateOnly CurrentMonday => WeeklyMail.MondayOf(DateOnly.FromDateTime(DateTime.Now));
+
+    private List<string> ToAddresses => WeeklyMail.ParseAddresses(MailSettings.To);
+    private List<string> CcAddresses => WeeklyMail.ParseAddresses(MailSettings.Cc);
+    private List<string> InvalidTo => ToAddresses.Where(a => !WeeklyMail.IsValidAddress(a)).ToList();
+    private List<string> InvalidCc => CcAddresses.Where(a => !WeeklyMail.IsValidAddress(a)).ToList();
+
+    private bool CanOpenMail => ToAddresses.Count > 0 && InvalidTo.Count == 0 && InvalidCc.Count == 0;
+
+    private string Mailto => WeeklyMail.MailtoUri(ToAddresses, CcAddresses, subject, body);
+    private bool MailtoTooLong => Mailto.Length > WeeklyMail.SafeMailtoLength;
+
+    protected override async Task OnInitializedAsync()
+    {
+        weekStart = CurrentMonday;
+        await MailSettings.EnsureLoadedAsync();
+        await WorkspaceState.EnsureLoadedAsync();
+        await LoadAsync();
+    }
+
+    private bool loadFailed;
+
+    // Zählt jede Anfrage mit. Wer schnell durch die Wochen blättert, bekommt die
+    // Antworten u. U. in anderer Reihenfolge – angezeigt wird nur die zur letzten Anfrage.
+    private int loadVersion;
+
+    private async Task LoadAsync()
+    {
+        var version = ++loadVersion;
+        report = null;
+        loadFailed = false;
+
+        // Arbeitsbereiche, die es nicht mehr gibt, nicht weiter mitschicken.
+        var existing = (WorkspaceState.Workspaces ?? []).Select(w => w.Id).ToHashSet();
+        var ids = MailSettings.WorkspaceIds.Where(existing.Contains).ToList();
+
+        WeeklyReportDto? result;
+        try
+        {
+            result = await Api.GetWeeklyReportAsync(weekStart, ids, MailSettings.WithoutWorkspace);
+        }
+        catch (Exception)
+        {
+            result = null;
+        }
+
+        if (version != loadVersion) return;
+        report = result;
+        loadFailed = result is null;
+        Regenerate();
+    }
+
+    private void Regenerate()
+    {
+        if (report is null) return;
+        subject = WeeklyMail.Subject(report.WeekStart);
+        body = WeeklyMail.Body(report, MailSettings.Greeting, MailSettings.Signature);
+    }
+
+    private Task ShiftWeekAsync(int weeks) => GoToWeekAsync(weekStart.AddDays(7 * weeks));
+
+    private async Task GoToWeekAsync(DateOnly monday)
+    {
+        weekStart = monday;
+        await LoadAsync();
+    }
+
+    private async Task ToggleWorkspaceAsync(int id, bool selected)
+    {
+        MailSettings.WorkspaceIds.Remove(id);
+        if (selected) MailSettings.WorkspaceIds.Add(id);
+        await MailSettings.SaveAsync();
+        await LoadAsync();
+    }
+
+    private async Task ToggleWithoutWorkspaceAsync(bool selected)
+    {
+        MailSettings.WithoutWorkspace = selected;
+        await MailSettings.SaveAsync();
+        await LoadAsync();
+    }
+
+    private async Task SetToAsync(string? value)
+    {
+        MailSettings.To = value?.Trim() ?? string.Empty;
+        await MailSettings.SaveAsync();
+    }
+
+    private async Task SetCcAsync(string? value)
+    {
+        MailSettings.Cc = value?.Trim() ?? string.Empty;
+        await MailSettings.SaveAsync();
+    }
+
+    private async Task SetGreetingAsync(string? value)
+    {
+        MailSettings.Greeting = value ?? string.Empty;
+        await MailSettings.SaveAsync();
+        Regenerate();
+    }
+
+    private async Task SetSignatureAsync(string? value)
+    {
+        MailSettings.Signature = value ?? string.Empty;
+        await MailSettings.SaveAsync();
+        Regenerate();
+    }
+
+    private async Task CopyAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", body);
+            Toast.ShowSuccess("Text kopiert");
+        }
+        catch (JSException)
+        {
+            Toast.ShowError("Kopieren nicht möglich.");
+        }
+    }
+}

@@ -92,9 +92,9 @@ public record TaskResponseDto(
     List<TaskResponseDto>? SubTasks = null,
     DateTime CreatedAt = default,
     DateTime UpdatedAt = default,
-    // Ist der Task aktuell in den Google-Kalender gespiegelt? (Server leitet es aus
-    // dem Vorhandensein einer GoogleEventId ab; nur Lese-Richtung.)
-    bool IsSyncedToGoogle = false,
+    // Ist der Task aktuell in den verbundenen Kalender gespiegelt? (Server leitet es aus
+    // dem Vorhandensein einer CalendarEventId ab; nur Lese-Richtung.)
+    bool IsSyncedToCalendar = false,
     // Zeiterfassung: Summe der abgeschlossenen Intervalle in Sekunden.
     int TrackedSeconds = 0,
     // Startzeitpunkt des laufenden Intervalls; null = Timer läuft nicht.

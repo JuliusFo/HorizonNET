@@ -35,13 +35,40 @@ public interface ITaskRepository
     // Eltern-Tasks tragen (Checkliste eines Termins gehört nicht aufs Board).
     Task<TaskItem?> SetKindAsync(int id, TaskKind kind);
 
-    // Setzt nur die Google-Event-Verknüpfung (serverseitiger Sync). Bewusst getrennt
+    // Setzt nur die Kalender-Event-Verknüpfung (serverseitiger Sync). Bewusst getrennt
     // vom DTO-getriebenen UpdateAsync, damit dieser Wert dort nicht überschrieben wird.
-    Task SetGoogleEventIdAsync(int taskId, string? googleEventId);
+    Task SetCalendarEventIdAsync(int taskId, string? calendarEventId);
 
-    // Alle gesetzten Google-Event-Ids – um beim Lesen die von der App selbst
-    // gespiegelten Termine auszublenden (sonst Doppelanzeige Task + Google-Event).
-    Task<HashSet<string>> GetGoogleEventIdsAsync();
+    // Alle gesetzten Kalender-Event-Ids – um beim Lesen die von der App selbst
+    // gespiegelten Termine auszublenden (sonst Doppelanzeige Task + Kalender-Event).
+    Task<HashSet<string>> GetCalendarEventIdsAsync();
+
+    // Verwirft alle Event-Verknüpfungen (auch im Papierkorb) – beim Wechsel oder Trennen
+    // des Kalender-Anbieters, weil die IDs nur im alten Kalender gelten.
+    Task ClearAllCalendarEventIdsAsync();
+
+    // Alle nicht gelöschten Tasks mit Fälligkeitsdatum ab dem angegebenen Tag – die
+    // Menge, die nach einem Anbieterwechsel neu gespiegelt wird.
+    // Nur die IDs – der Kalender-Abgleich liest jeden Task erst unmittelbar vor dem
+    // Spiegeln frisch (GetForCalendarSyncAsync).
+    Task<IReadOnlyList<int>> GetScheduledIdsFromAsync(DateTime fromDate);
+
+    // Aktueller Stand eines Tasks direkt aus der Datenbank, ungetrackt (kein Papierkorb).
+    Task<TaskItem?> GetForCalendarSyncAsync(int taskId);
+
+    // Die gespeicherte Event-ID, frisch aus der Datenbank (nicht aus dem Change-Tracker).
+    Task<string?> GetCalendarEventIdAsync(int taskId);
+
+    // Alle Work-Item-IDs bereits aus Azure DevOps importierter Tasks (auch gelöschte –
+    // wer einen importierten Task wegwirft, will ihn nicht beim nächsten Mal wieder angeboten
+    // bekommen; zurückholen geht über den Papierkorb).
+    // Bereits importierte Work-Item-IDs der Organisation (inkl. Papierkorb und Altbestand
+    // ohne bekannte Organisation).
+    Task<HashSet<int>> GetAzureDevOpsWorkItemIdsAsync(string organizationUrl);
+
+    // Legt importierte Tasks in einer Transaktion an. False (und nichts angelegt), wenn
+    // eines der Work Items inzwischen schon importiert wurde (eindeutiger Index).
+    Task<bool> CreateImportedAsync(IReadOnlyList<TaskItem> tasks);
 
     // Nur Id, Titel und Projektzuordnung (samt Sub-Tasks) – für Auswahllisten.
     // Ausnahme von der Regel "Repositories liefern Entitäten": Hier gibt es bewusst keine
@@ -52,7 +79,7 @@ public interface ITaskRepository
 
     // Setzt für die übergebenen Tasks SortOrder = Listenindex und Status = status.
     // Zurück kommen die Tasks, deren Fälligkeitsdatum sich dadurch geändert hat – nur die
-    // sind für den Google-Kalender überhaupt von Belang.
+    // sind für den Kalender-Sync überhaupt von Belang.
     // completeSubTasks wirkt nur auf Tasks, die durch diesen Aufruf NEU auf
     // "Fertig"/"Verworfen" wechseln – siehe SetStatusAsync.
     Task<IReadOnlyList<TaskItem>> ReorderAsync(WorkStatus status, IList<int> orderedTaskIds, bool completeSubTasks = false);
@@ -77,6 +104,17 @@ public interface ITaskRepository
     // Projekt. Stützt sich auf CompletedAt – siehe dort zur Genauigkeit bei Altdaten.
     Task<IEnumerable<TaskItem>> GetCompletedOnAsync(DateOnly date);
 
+    // Grundlage der Wochenabschluss-Mail: in der Woche ab weekStart (Montag, 7 Tage)
+    // erledigte Aufgaben und alle derzeit offenen Haupt-Aufgaben, beides inkl. Projekt.
+    // Termine (TaskKind.Appointment) und Verworfenes bleiben draußen. Erledigte Sub-Tasks
+    // kommen mit (ParentTask geladen), außer ihr Eltern-Task ist selbst in der Woche
+    // erledigt – dann steht er schon für sie. Offene Tasks aus archivierten Projekten
+    // fehlen. Filter: Tasks aus den genannten Arbeitsbereichen; withoutWorkspace nimmt
+    // Inbox und Projekte ohne Arbeitsbereich dazu. Keins von beidem = alles.
+    // "Offen" ist der Stand JETZT, nicht der am Ende der gewählten Woche.
+    Task<WeeklyReportData> GetWeeklyReportAsync(
+        DateOnly weekStart, IReadOnlyCollection<int> workspaceIds, bool withoutWorkspace);
+
     // Soft-gelöschte Tasks (für den Papierkorb), aber nur eigenständig gelöschte
     // "Wurzeln": Tasks, die als Teil desselben Vorgangs mit ihrem Projekt oder
     // Eltern-Task gelöscht wurden, kommen dort automatisch mit zurück und tauchen
@@ -86,3 +124,5 @@ public interface ITaskRepository
     // Endgültiges Löschen eines soft-gelöschten Tasks inkl. Sub-Tasks (nicht umkehrbar).
     Task<bool> PurgeAsync(int id);
 }
+
+public record WeeklyReportData(IReadOnlyList<TaskItem> Completed, IReadOnlyList<TaskItem> Open);

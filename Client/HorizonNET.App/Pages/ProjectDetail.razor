@@ -96,9 +96,18 @@ else
     }
 
     <!-- Formular zum Anlegen eines neuen Tasks -->
-    <button class="btn btn-outline-primary mb-3" @onclick="ToggleForm">
-        @(showForm ? L["NewTask_Cancel"] : L["NewTask_Button"])
-    </button>
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <button class="btn btn-outline-primary" @onclick="ToggleForm">
+            @(showForm ? L["NewTask_Cancel"] : L["NewTask_Button"])
+        </button>
+        @if (azureConnected)
+        {
+            <button class="btn btn-outline-secondary" @onclick="() => showAzureImport = true"
+                    title="Dir zugewiesene Work Items als Tasks übernehmen">
+                Aus Azure DevOps importieren
+            </button>
+        }
+    </div>
 
     @if (showForm)
     {
@@ -197,6 +206,12 @@ else
                 OnTaskUpdated="HandleTaskUpdated"
                 OnClose="@(() => selectedTask = null)" />
 
+<AzureDevOpsImportDialog Visible="showAzureImport"
+                         Project="project"
+                         OnImported="HandleAzureImportedAsync"
+                         OnProjectLinked="HandleProjectSavedAsync"
+                         OnClose="@(() => showAzureImport = false)" />
+
 <ProjectEditDialog Visible="showProjectDialog"
                    Project="project"
                    OnSaved="HandleProjectSavedAsync"
@@ -216,6 +231,10 @@ else
 
     // Projekt bearbeiten (geteilter Dialog)
     private bool showProjectDialog;
+
+    // Azure-DevOps-Import: Button nur bei bestehender Verbindung.
+    private bool azureConnected;
+    private bool showAzureImport;
 
     // Neuer Task
     private TaskCreateFormModel newTask = new();
@@ -259,9 +278,18 @@ else
         subTasksToggled.Clear();
         subDoneExpanded.Clear();
 
+        showAzureImport    = false;
+
         project = await Api.GetProjectAsync(Id);
         tasks   = await Api.GetTasksByProjectAsync(Id);
         notes   = await Api.GetNotesByProjectAsync(Id) ?? new();
+        azureConnected = (await Api.GetAzureDevOpsStatusAsync())?.Connected == true;
+    }
+
+    private async Task HandleAzureImportedAsync()
+    {
+        tasks = await Api.GetTasksByProjectAsync(Id) ?? tasks;
+        SyncProjectCounts();
     }
 
     // ── Reihenfolge ──────────────────────────────────────────────────────────

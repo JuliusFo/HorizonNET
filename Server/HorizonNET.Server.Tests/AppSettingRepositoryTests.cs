@@ -3,11 +3,11 @@ using HorizonNET.Data.Repositories;
 namespace HorizonNET.Server.Tests;
 
 // Erste serverseitige Einstellung überhaupt: Alles andere liegt im localStorage des
-// Clients. Diese Tests halten das Verhalten fest, auf das sich der Google-Sync verlässt –
+// Clients. Diese Tests halten das Verhalten fest, auf das sich der Kalender-Sync verlässt –
 // vor allem, dass ein NICHT gesetzter Wert als "nicht gesetzt" zurückkommt und nicht als 0.
 public class AppSettingRepositoryTests
 {
-    private const string Key = "google.reminderMinutes";
+    private const string Key = "calendar.reminderMinutes";
 
     [Fact]
     public async Task GetAsync_OhneWert_LiefertNull()

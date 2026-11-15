@@ -1,3 +1,4 @@
+using HorizonNET.Api.Services.Calendar;
 using HorizonNET.Api.Services;
 using HorizonNET.Domain.Entities;
 using HorizonNET.Domain.Interfaces;
@@ -13,7 +14,7 @@ namespace HorizonNET.Api.Controllers;
 public class TasksController(
     ITaskRepository repo,
     ITimeEntryRepository timeEntries,
-    GoogleCalendarService google) : ControllerBase
+    CalendarSyncService calendar) : ControllerBase
 {
     private static TaskResponseDto ToDto(TaskItem t) =>
         new(t.Id, t.Title, t.Description, t.DueDate, t.StartTime, t.EndTime,
@@ -24,7 +25,7 @@ public class TasksController(
             t.ListSortOrder,
             t.ParentTaskId,
             t.SubTasks.Count > 0 ? t.SubTasks.OrderBy(s => s.SortOrder).Select(s => ToDto(s)).ToList() : null,
-            t.CreatedAt, t.UpdatedAt, t.GoogleEventId != null,
+            t.CreatedAt, t.UpdatedAt, t.CalendarEventId != null,
             // Nur abgeschlossene Intervalle summieren; das laufende meldet RunningSince,
             // damit der Client die Uhr selbst weiterzählen kann.
             TrackedSeconds: (int)t.TimeEntries
@@ -92,7 +93,7 @@ public class TasksController(
             Kind = dto.Kind
         };
         var created = await repo.CreateAsync(task);
-        await google.SyncTaskAsync(created); // geplanten Task in Google spiegeln (best-effort)
+        await calendar.SyncTaskAsync(created); // geplanten Task in den Kalender spiegeln (best-effort)
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, ToDto(created));
     }
 
@@ -100,13 +101,13 @@ public class TasksController(
     public async Task<IActionResult> Reorder([FromBody] TaskReorderDto dto)
     {
         // Ein Statuswechsel kann das Fälligkeitsdatum setzen ("Geplant Heute"), und das
-        // gehört nach Google. Welche Tasks das betrifft, weiß das Repository – es hat den
+        // gehört in den Kalender. Welche Tasks das betrifft, weiß das Repository – es hat den
         // Wechsel gerade vollzogen. Wer nur seine Position in der Spalte ändert, ist nicht
         // dabei und kostet damit auch keinen Netzaufruf.
         var rescheduled = await repo.ReorderAsync(dto.Status, dto.OrderedTaskIds, dto.CompleteSubTasks);
 
         foreach (var task in rescheduled)
-            await google.SyncTaskAsync(task); // best-effort
+            await calendar.SyncTaskAsync(task); // best-effort
 
         return NoContent();
     }
@@ -118,7 +119,7 @@ public class TasksController(
         return NoContent();
     }
 
-    // Reihenfolge der Haupt-Tasks in der Projektliste. Kein Google-Sync nötig: weder
+    // Reihenfolge der Haupt-Tasks in der Projektliste. Kein Kalender-Sync nötig: weder
     // Status noch Fälligkeitsdatum ändern sich (anders als bei "reorder").
     [HttpPut("reorder-list")]
     public async Task<IActionResult> ReorderTaskList([FromBody] List<int> orderedTaskIds)
@@ -156,7 +157,7 @@ public class TasksController(
             ReminderMinutes = dto.ReminderMinutes
         }, dto.CompleteSubTasks);
         if (updated is null) return NotFound();
-        await google.SyncTaskAsync(updated); // Änderung nach Google spiegeln (best-effort)
+        await calendar.SyncTaskAsync(updated); // Änderung in den Kalender spiegeln (best-effort)
         return Ok(ToDto(updated));
     }
 
@@ -172,8 +173,8 @@ public class TasksController(
         if (updated is null) return NotFound();
 
         // Ein Statuswechsel kann das Fälligkeitsdatum setzen ("Geplant Heute") – deshalb
-        // wie beim Vollersatz nach Google spiegeln.
-        await google.SyncTaskAsync(updated); // best-effort
+        // wie beim Vollersatz in den Kalender spiegeln.
+        await calendar.SyncTaskAsync(updated); // best-effort
         return Ok(ToDto(updated));
     }
 
@@ -182,7 +183,7 @@ public class TasksController(
     {
         var updated = await repo.SetScheduleAsync(id, dto.DueDate, dto.StartTime, dto.EndTime);
         if (updated is null) return NotFound();
-        await google.SyncTaskAsync(updated); // best-effort
+        await calendar.SyncTaskAsync(updated); // best-effort
         return Ok(ToDto(updated));
     }
 
@@ -191,11 +192,11 @@ public class TasksController(
     {
         var updated = await repo.SetProjectAsync(id, dto.ProjectId);
         if (updated is null) return NotFound();
-        await google.SyncTaskAsync(updated); // best-effort
+        await calendar.SyncTaskAsync(updated); // best-effort
         return Ok(ToDto(updated));
     }
 
-    // Aufgabe ↔ Termin. Kein Google-Sync nötig: gespiegelt wird nach Termin-Daten
+    // Aufgabe ↔ Termin. Kein Kalender-Sync nötig: gespiegelt wird nach Termin-Daten
     // (Fälligkeit/Uhrzeit), und die ändern sich hier nicht.
     [HttpPut("{id:int}/kind")]
     public async Task<IActionResult> SetKind(int id, [FromBody] TaskKindDto dto)
@@ -278,16 +279,16 @@ public class TasksController(
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
-        // Event-ID vor dem Löschen merken, um den Google-Eintrag danach zu entfernen.
+        // Event-ID vor dem Löschen merken, um den Kalender-Eintrag danach zu entfernen.
         var task = await repo.GetByIdAsync(id);
         if (task is null) return NotFound();
-        var googleEventId = task.GoogleEventId;
+        var calendarEventId = task.CalendarEventId;
 
         var deleted = await repo.DeleteAsync(id);
         if (!deleted) return NotFound();
 
-        if (!string.IsNullOrEmpty(googleEventId))
-            await google.DeleteTaskEventAsync(googleEventId); // best-effort
+        if (!string.IsNullOrEmpty(calendarEventId))
+            await calendar.DeleteTaskEventAsync(calendarEventId); // best-effort
 
         return NoContent();
     }
@@ -298,11 +299,11 @@ public class TasksController(
         var restored = await repo.RestoreAsync(id);
         if (!restored) return NotFound();
 
-        // Wiederhergestellten Task erneut nach Google spiegeln (best-effort);
+        // Wiederhergestellten Task erneut in den Kalender spiegeln (best-effort);
         // SyncTaskAsync legt bei ungültiger Event-ID (404/410) einen neuen Termin an.
         var task = await repo.GetByIdAsync(id);
         if (task is not null)
-            await google.SyncTaskAsync(task);
+            await calendar.SyncTaskAsync(task);
 
         return NoContent();
     }

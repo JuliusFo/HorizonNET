@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="Google.Apis.Auth" Version="1.75.0" />
     <PackageReference Include="Google.Apis.Calendar.v3" Version="1.75.0.4206" />
+    <PackageReference Include="Ical.Net" Version="5.2.4" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
     <!-- Override des transitiven Microsoft.OpenApi (2.0.0) wegen GHSA-v5pm-xwqc-g5wc;
          gepatcht ab 2.7.5. Microsoft.AspNetCore.OpenApi 10.0.10 zieht weiterhin 2.0.0. -->

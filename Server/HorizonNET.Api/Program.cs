@@ -1,5 +1,6 @@
 using System.Reflection;
 using HorizonNET.Api.Services;
+using HorizonNET.Api.Services.Calendar;
 using Microsoft.AspNetCore.DataProtection;
 using HorizonNET.Data;
 using HorizonNET.Data.Repositories;
@@ -12,6 +13,26 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
+
+// Healthcheck für Docker (HEALTHCHECK im Dockerfile): Das aspnet-Image hat weder curl
+// noch wget, also fragt derselbe Einstiegspunkt den laufenden Prozess per HTTP ab und
+// endet mit 0 (gesund) oder 1. Jede Antwort unter 500 zählt – auch ein 400 der
+// Host-Filterung beweist, dass der Server antwortet.
+if (args.Contains("--healthcheck"))
+{
+    var port = (Environment.GetEnvironmentVariable("ASPNETCORE_HTTP_PORTS") ?? "8080")
+        .Split([';', ','], StringSplitOptions.RemoveEmptyEntries)[0].Trim();
+    try
+    {
+        using var probe = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+        using var response = await probe.GetAsync($"http://127.0.0.1:{port}/healthz");
+        return (int)response.StatusCode < 500 ? 0 : 1;
+    }
+    catch
+    {
+        return 1;
+    }
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,6 +52,10 @@ if (builder.Environment.IsDevelopment())
 
 // Controller und Validierung
 builder.Services.AddControllers();
+
+// /healthz: prüft, dass die Datenbank erreichbar ist (für den Docker-Healthcheck).
+builder.Services.AddHealthChecks()
+    .AddCheck<HorizonNET.Api.Services.DatabaseHealthCheck>("database");
 
 // Eingebaute .NET 10 OpenAPI-Unterstützung
 builder.Services.AddOpenApi();
@@ -79,11 +104,23 @@ builder.Services.AddScoped<IExerciseSetRepository, ExerciseSetRepository>();
 builder.Services.AddScoped<IBodyWeightRepository, BodyWeightRepository>();
 builder.Services.AddScoped<IJournalRepository, JournalRepository>();
 builder.Services.AddScoped<IJournalTemplateRepository, JournalTemplateRepository>();
+builder.Services.AddScoped<IAzureDevOpsConnectionRepository, AzureDevOpsConnectionRepository>();
+builder.Services.AddScoped<ICalDavConnectionRepository, CalDavConnectionRepository>();
 
-// Google-Kalender-Anbindung (OAuth + späterer Calendar-Zugriff)
+// Kalender-Sync: Google (OAuth) oder Nextcloud (CalDAV), immer höchstens einer verbunden.
+// Controller und Seriengenerator sprechen nur mit der Fassade CalendarSyncService.
 builder.Services.AddScoped<GoogleCalendarService>();
+// Umleitungen folgt der CalDAV-Client selbst – der eingebaute Redirect verwirft den
+// Authorization-Header und damit die Anmeldung.
+builder.Services.AddHttpClient<CalDavCalendarService>(c => c.Timeout = TimeSpan.FromSeconds(30))
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
+builder.Services.AddSingleton<CalendarSyncCoordinator>();
+builder.Services.AddScoped<CalendarSyncService>();
 
-// Terminserien materialisieren: scoped Generator (DbContext + Google) und der Hosted
+// Azure-DevOps-Import (PAT, REST-API). Typed HttpClient: Handler-Pooling über die Factory.
+builder.Services.AddHttpClient<AzureDevOpsService>(c => c.Timeout = TimeSpan.FromSeconds(30));
+
+// Terminserien materialisieren: scoped Generator (DbContext + Kalender-Sync) und der Hosted
 // Service, der ihn beim Start und täglich anstößt.
 builder.Services.AddScoped<TaskSeriesGenerator>();
 builder.Services.AddHostedService<TaskSeriesGeneratorHost>();
@@ -126,7 +163,13 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.Cookie.Name = "HorizonNET.Auth";
     // HttpOnly ist Standard (JS kommt nicht an den Cookie); Secure erzwingen, weil die
     // API ohnehin nur über HTTPS läuft – lokal wie hinter dem Tunnel.
-    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    //
+    // Ausnahme per Auth:SecureCookie=false (Docker im Heimnetz ohne HTTPS-Proxy): Der
+    // Browser verwirft Secure-Cookies auf http://<server-ip>, der Login liefe ins Leere.
+    // Dann gilt SameAsRequest – über HTTPS bleibt der Cookie trotzdem Secure.
+    options.Cookie.SecurePolicy = builder.Configuration.GetValue("Auth:SecureCookie", true)
+        ? CookieSecurePolicy.Always
+        : CookieSecurePolicy.SameAsRequest;
     options.ExpireTimeSpan = TimeSpan.FromDays(14);
     options.SlidingExpiration = true;
 
@@ -155,12 +198,25 @@ var app = builder.Build();
 // Ganz vorn in der Pipeline, damit HTTPS-Redirect, HSTS und Cookies schon den korrigierten
 // Request sehen. Vertraut wird per Voreinstellung nur Loopback-Absendern – genau dort
 // läuft cloudflared; von fremden Adressen werden die Header ignoriert.
-app.UseForwardedHeaders(new ForwardedHeadersOptions
+//
+// Im Docker-Betrieb kommt der Reverse Proxy aus einem anderen Container bzw. vom
+// Docker-Bridge-Gateway, nicht von Loopback. Dessen Netz lässt sich per
+// ForwardedHeaders:KnownNetworks freischalten (CIDR, mehrere mit Komma/Semikolon),
+// z. B. "172.16.0.0/12". Ohne Angabe bleibt es bei Loopback.
+var forwardedOptions = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor
                      | ForwardedHeaders.XForwardedProto
                      | ForwardedHeaders.XForwardedHost
-});
+};
+var knownNetworks = app.Configuration["ForwardedHeaders:KnownNetworks"];
+if (!string.IsNullOrWhiteSpace(knownNetworks))
+{
+    foreach (var cidr in knownNetworks.Split([',', ';'],
+                 StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        forwardedOptions.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(cidr));
+}
+app.UseForwardedHeaders(forwardedOptions);
 
 // Sicherheits-Header an jeder Antwort (auch statischen Dateien – deshalb VOR
 // UseStaticFiles). Die CSP ist auf das zugeschnitten, was die App wirklich lädt:
@@ -236,6 +292,9 @@ app.MapStaticAssets().AllowAnonymous();
 
 app.MapControllers();
 
+// Anonym: Der Healthcheck kennt keine Sitzung. Verrät nur "Healthy"/"Unhealthy".
+app.MapHealthChecks("/healthz").AllowAnonymous();
+
 // Deep-Links und F5 auf Client-Routen (/settings, /journal/…) liefern die App-Hülle;
 // AllowAnonymous wegen der Fallback-Policy – der Login findet ja erst IN der App statt.
 app.MapFallbackToFile("index.html").AllowAnonymous();
@@ -305,3 +364,4 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+return 0;

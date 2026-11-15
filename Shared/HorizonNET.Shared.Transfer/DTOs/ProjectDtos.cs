@@ -35,5 +35,7 @@ public record ProjectResponseDto(
     int TaskCount,
     int DoneTaskCount,
     string? Color = null,
-    int? WorkspaceId = null
+    int? WorkspaceId = null,
+    // Verknüpftes Azure-DevOps-Projekt; gesetzt über api/azuredevops/projects/{id}/link.
+    string? AzureDevOpsProject = null
 );

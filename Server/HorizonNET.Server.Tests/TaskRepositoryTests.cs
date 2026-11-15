@@ -208,7 +208,7 @@ public class TaskRepositoryTests
 
     // ── Umsortieren im Kanban-Board ──────────────────────────────────────────────
     // ReorderAsync meldet zurück, welche Tasks ein neues Fälligkeitsdatum bekommen haben.
-    // Daran hängt der Google-Sync: Nur diese Tasks werden gespiegelt. Meldet die Methode
+    // Daran hängt der Kalender-Sync: Nur diese Tasks werden gespiegelt. Meldet die Methode
     // zu viel, kostet jedes Verschieben unnötige Netzaufrufe; meldet sie zu wenig, steht
     // im Kalender ein veralteter Termin.
 

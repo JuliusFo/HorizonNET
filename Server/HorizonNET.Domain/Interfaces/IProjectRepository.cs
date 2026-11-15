@@ -14,6 +14,9 @@ public interface IProjectRepository
 
     Task<bool> DeleteAsync(int id);
 
+    // Teil-Update: nur die Azure-DevOps-Verknüpfung (null = lösen).
+    Task<Project?> SetAzureDevOpsProjectAsync(int id, string? azureDevOpsProject);
+
     // Macht ein Soft-Delete rückgängig (Projekt + im selben Vorgang gelöschte Tasks).
     Task<bool> RestoreAsync(int id);
 
