@@ -1,0 +1,38 @@
+# Dependabot für HorizonNET.
+#
+# - GitHub Actions: wöchentliche Versions-Updates, alle in einem PR.
+# - NuGet: nur Sicherheitsupdates, keine regelmäßigen Versions-Updates
+#   (open-pull-requests-limit: 0). Die Microsoft-Pakete kommen gemeinsam in einem PR, weil
+#   sie auf denselben Patch gehören wie die ASP.NET Core Runtime auf dem vServer – nach dem
+#   Merge also dort die Runtime und im Dockerfile ASPNET_VERSION nachziehen.
+#   Versionen stehen zentral in Directory.Packages.props (Central Package Management).
+#   Sicherheitsupdates brauchen in den Repo-Einstellungen „Dependabot alerts“ und
+#   „Dependabot security updates“.
+#
+# Den wöchentlichen Check auf neu gemeldete Lücken übernimmt zusätzlich die CI (schedule,
+# NuGetAudit + TreatWarningsAsErrors).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: Chore
+    groups:
+      actions:
+        patterns: ['*']
+
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    commit-message:
+      prefix: Fix
+    groups:
+      microsoft:
+        applies-to: security-updates
+        patterns:
+          - 'Microsoft.*'
+          - 'System.*'
