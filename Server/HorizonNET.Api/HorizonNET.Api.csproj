@@ -10,20 +10,19 @@
     <PackageReference Include="Google.Apis.Auth" Version="1.75.0" />
     <PackageReference Include="Google.Apis.Calendar.v3" Version="1.75.0.4206" />
     <PackageReference Include="Ical.Net" Version="5.2.4" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
-    <!-- Override des transitiven Microsoft.OpenApi (2.0.0) wegen GHSA-v5pm-xwqc-g5wc;
-         gepatcht ab 2.7.5. Microsoft.AspNetCore.OpenApi 10.0.10 zieht weiterhin 2.0.0. -->
-    <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
+    <!-- Zieht seit 10.0.15 selbst Microsoft.OpenApi >= 2.13.0; der frühere manuelle
+         Override auf 2.7.5 (GHSA-v5pm-xwqc-g5wc) ist damit entfallen. -->
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.15" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.15">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Scalar.AspNetCore" Version="2.16.15" />
     <!-- UseBlazorFrameworkFiles: Die API liefert den WASM-Client mit aus (Same-Origin,
          ein Prozess für App + Daten – kein CORS, Cookies ohne Sonderbehandlung). -->
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.10" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.15" />
     <!-- Betrieb als Windows-Dienst auf dem vServer (UseWindowsService in Program.cs) -->
-    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.15" />
   </ItemGroup>
 
   <ItemGroup>

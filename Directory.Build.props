@@ -30,9 +30,17 @@
     1.2.0: Termine vs. Aufgaben – TaskKind (Aufgabe/Termin), Terminserien mit Slots,
     Generator (Hosted Service), Serien-Verwaltung im Kalender. Zwei Migrationen
     (AddTaskKind, AddTaskSeries), werden beim Start automatisch angewendet.
+    1.3.0: PR #1 (mahe4) – Docker-Deployment (inkl. /healthz), Azure-DevOps-Import,
+    Kalendersync wahlweise mit Nextcloud/CalDAV statt Google, Wochenabschluss-Mail
+    per mailto. Drei Migrationen (AddAzureDevOps, AddCalDavConnection,
+    AzureDevOpsWorkItemPerOrganization), werden beim Start automatisch angewendet –
+    vorher DB sichern. Dazu Sicherheitsupdate: Microsoft-Pakete 10.0.10 → 10.0.15
+    (u. a. WebAssembly.Server: GHSA-g27p-qf6j-c96c, GHSA-qjpx-jqm5-h2c4; KeyMigration:
+    Cryptography.Pkcs/Xml), Override auf Microsoft.OpenApi entfällt. Auf dem vServer
+    zusätzlich die ASP.NET Core Runtime auf 10.0.15 heben.
   -->
   <PropertyGroup>
-    <Version>1.2.0</Version>
+    <Version>1.3.0</Version>
   </PropertyGroup>
 
 </Project>
