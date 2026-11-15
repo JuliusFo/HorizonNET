@@ -1,0 +1,55 @@
+<Project>
+
+  <!--
+    Central Package Management: Alle Paketversionen stehen hier, die .csproj nennen nur
+    noch den Paketnamen. Ein Update (etwa die Microsoft-Pakete auf den nächsten Patch)
+    ist damit eine Änderung an genau einer Datei statt an fünf.
+
+    Abweichende Version in einem einzelnen Projekt: VersionOverride="…" an der
+    PackageReference, mit Kommentar, warum.
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Eine Version hier gilt auch für Pakete, die nur transitiv hereinkommen: Ein
+         Sicherheits-Override braucht so keine zusätzliche PackageReference mehr. -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <!-- Microsoft-Pakete: gemeinsam auf denselben Patch heben, passend zur ASP.NET Core
+       Runtime auf dem vServer (framework-abhängiges Deployment). -->
+  <ItemGroup Label="Microsoft">
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.15" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.15" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.15" />
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.Abstractions" Version="10.0.15" />
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.Extensions" Version="10.0.15" />
+    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.15" />
+    <!-- Zieht seit 10.0.15 selbst Microsoft.OpenApi >= 2.13.0; der frühere manuelle
+         Override auf 2.7.5 (GHSA-v5pm-xwqc-g5wc) ist damit entfallen. -->
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.15" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.15" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.15" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.15" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.15" />
+    <PackageVersion Include="Microsoft.Extensions.Localization" Version="10.0.15" />
+  </ItemGroup>
+
+  <ItemGroup Label="Drittanbieter">
+    <PackageVersion Include="Google.Apis.Auth" Version="1.75.0" />
+    <PackageVersion Include="Google.Apis.Calendar.v3" Version="1.75.0.4206" />
+    <PackageVersion Include="Ical.Net" Version="5.2.4" />
+    <PackageVersion Include="Radzen.Blazor" Version="11.0.4" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.16.15" />
+    <!-- Override der transitiven SQLitePCLRaw-Pakete (2.1.11) wegen GHSA-2m69-gcr7-jv3q;
+         referenziert in HorizonNET.Data und HorizonNET.KeyMigration. -->
+    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.4" />
+  </ItemGroup>
+
+  <ItemGroup Label="Tests">
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+</Project>

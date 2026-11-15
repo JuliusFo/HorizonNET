@@ -20,7 +20,7 @@ WORKDIR /src
 
 # Erst nur Projektdateien → Restore-Layer bleibt gecacht, solange sich keine
 # Paketreferenzen ändern.
-COPY Directory.Build.props ./
+COPY Directory.Build.props Directory.Packages.props global.json nuget.config ./
 COPY Shared/HorizonNET.Shared.Transfer/HorizonNET.Shared.Transfer.csproj Shared/HorizonNET.Shared.Transfer/
 COPY Server/HorizonNET.Domain/HorizonNET.Domain.csproj Server/HorizonNET.Domain/
 COPY Server/HorizonNET.Data/HorizonNET.Data.csproj Server/HorizonNET.Data/
