@@ -41,6 +41,19 @@
   -->
   <PropertyGroup>
     <Version>1.3.0</Version>
+    <Product>HorizonNET</Product>
+  </PropertyGroup>
+
+  <!-- Gemeinsame Compiler-Einstellungen aller Projekte (früher in jeder .csproj einzeln).
+       TargetFramework bleibt bewusst in den .csproj, damit jedes Projekt auf einen Blick
+       zeigt, wofür es gebaut wird. -->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Der Build ist warnungsfrei und soll es bleiben: Jede neue Warnung bricht ihn ab,
+         auch NuGetAudit-Meldungen (NU1902/NU1903) zu neu bekannt gewordenen Lücken. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest</AnalysisLevel>
   </PropertyGroup>
 
 </Project>

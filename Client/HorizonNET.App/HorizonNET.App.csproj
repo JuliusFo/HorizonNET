@@ -2,8 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
     <!-- Kein OverrideHtmlAssetPlaceholders: Die Platzhalter-Transformation der index.html
          läuft nur beim Publish DIESES Projekts – beim Same-Origin-Publish über die API
          bliebe der rohe Platzhalter stehen und die App bootet nicht. Stattdessen stehen
