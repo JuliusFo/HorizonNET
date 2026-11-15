@@ -1,0 +1,83 @@
+# Build und Tests bei jedem Push auf master und jedem Pull Request, dazu einmal pro Woche.
+#
+# - build-test: ganze Solution unter Linux bauen und testen. TreatWarningsAsErrors steht in
+#   Directory.Build.props, jede Warnung (auch NuGetAudit NU1902/NU1903) bricht den Build ab.
+# - docker: das Image bauen (ohne Push). Prüft das Dockerfile, das vor dem Restore nur
+#   einzelne Dateien kopiert, und den Release-Publish samt WASM-Trimming.
+# - line-endings: Jede committete Textdatei muss ihrer normalisierten Form entsprechen
+#   (kein CRLF im Repository).
+#
+# Der wöchentliche Lauf (schedule) fängt Sicherheitsmeldungen zu Paketen ab, die erst nach
+# dem letzten Commit bekannt geworden sind: Der Restore meldet sie per NuGetAudit, und
+# TreatWarningsAsErrors macht daraus einen roten Lauf.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    - cron: '0 5 * * 1'   # montags 05:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Ein neuerer Lauf desselben Pull Requests (oder von master) bricht den älteren ab. Pull
+# Requests sind über ihre Nummer gruppiert, nicht über github.ref: Ein pull_request-Lauf,
+# den GitHub erst nach dem Merge startet, hat keinen refs/pull/N/merge mehr und würde sonst
+# in der Gruppe von master landen und dessen Lauf abbrechen (Erfahrung aus FerretSharp).
+concurrency:
+  group: ci-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-test:
+    name: Build und Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Build
+        run: dotnet build HorizonNET.slnx
+
+      - name: Tests
+        run: dotnet test HorizonNET.slnx --no-build
+
+  docker:
+    name: Docker-Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Image bauen
+        run: docker build --tag horizonnet:ci .
+
+  # Eigener Job, damit ein Treffer Build und Tests nicht überspringt. git status übersieht
+  # eine solche Datei, solange die Stat-Daten im Index frisch sind; --renormalize vergleicht
+  # den Inhalt.
+  line-endings:
+    name: Zeilenenden
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Normalisierte Form
+        run: |
+          git add --renormalize .
+          if ! git diff --cached --quiet; then
+            echo "::error::Dateien weichen von ihrer normalisierten Form ab (CRLF im Repository). Beheben mit: git add --renormalize <Datei>"
+            git -c core.quotePath=false diff --cached --stat=200
+            exit 1
+          fi
