@@ -23,6 +23,14 @@ public class CalDavException(string message) : Exception(message);
 // Jeder Task wird als eigene Ressource {Kalender-URL}{UID}.ics abgelegt. Die UID leitet
 // sich aus dem Task ab (NewUid) – ein erneutes Spiegeln in denselben Kalender, etwa nach
 // Trennen und Neuverbinden, überschreibt so den alten Termin statt ihn zu verdoppeln.
+//
+// Einweg-Sync ohne If-Match/ETag: Die App ist die Quelle der Wahrheit, ein PUT
+// überschreibt den Termin bedingungslos. Wer ihn in Nextcloud bearbeitet, verliert die
+// Änderung beim nächsten Speichern des Tasks – gewollt, wie bei Google.
+//
+// Zugangsdaten gehen nur an den Ursprung (Schema, Host, Port) der eingetragenen
+// Server-URL: Umleitungen und vom Server gelieferte hrefs, die woandershin zeigen –
+// auch ein Wechsel von https auf http –, werden abgewiesen (EnsureSameOrigin).
 public class CalDavCalendarService(
     HttpClient http,
     ICalDavConnectionRepository repo,
@@ -34,7 +42,18 @@ public class CalDavCalendarService(
 
     private const int MaxRedirects = 5;
 
-    private sealed record DavAuth(string Username, string Password);
+    // Obergrenze für eine Antwort. Ein Monat Termine ist weit unter einem MB; alles
+    // darüber ist ein Fehler oder ein bösartiger Server.
+    private const int MaxResponseBytes = 10 * 1024 * 1024;
+
+    // Präfix der UIDs, die die App selbst vergibt (NewUid). Termine damit sind immer
+    // eigene – auch wenn die Verknüpfung am Task fehlt (z. B. nach einem Wechsel zu
+    // Google und zurück) – und erscheinen nie zusätzlich als fremde Termine.
+    public const string OwnUidPrefix = "horizonnet-task-";
+
+    // Origin = normalisierte Server-URL. Jede Anfrage mit diesen Zugangsdaten muss
+    // denselben Ursprung haben.
+    private sealed record DavAuth(string Username, string Password, Uri Origin);
 
     public string Key => CalendarProviders.Nextcloud;
 
@@ -58,7 +77,7 @@ public class CalDavCalendarService(
     {
         var server = NormalizeServerUrl(serverUrl)
             ?? throw new CalDavException("Ungültige Server-URL. Erwartet z. B. https://cloud.example.org");
-        var auth = ValidateCredentials(username, appPassword);
+        var auth = ValidateCredentials(username, appPassword, server);
 
         var principal = await FindPrincipalAsync(auth, server)
             ?? throw new CalDavException(
@@ -71,7 +90,11 @@ public class CalDavCalendarService(
 
         var listXml = await PropfindAsync(auth, home, 1,
             "<d:resourcetype/><d:displayname/><c:supported-calendar-component-set/><d:current-user-privilege-set/>");
-        var calendars = ParseCalendars(listXml.Xml, listXml.Url);
+        // Nur Kalender auf dem eingetragenen Server: Ein absoluter href auf einen fremden
+        // Host dürfte weder angesprochen noch als Kalender-URL gespeichert werden.
+        var calendars = ParseCalendars(listXml.Xml, listXml.Url)
+            .Where(c => IsSameOrigin(new Uri(c.Url), server))
+            .ToList();
         if (calendars.Count == 0)
             throw new CalDavException("Keine beschreibbaren Terminkalender gefunden.");
 
@@ -115,11 +138,30 @@ public class CalDavCalendarService(
         return builder.Uri;
     }
 
-    private static DavAuth ValidateCredentials(string? username, string? password)
+    private static DavAuth ValidateCredentials(string? username, string? password, Uri origin)
     {
         if (string.IsNullOrWhiteSpace(username)) throw new CalDavException("Bitte einen Benutzernamen angeben.");
         if (string.IsNullOrWhiteSpace(password)) throw new CalDavException("Bitte ein App-Passwort angeben.");
-        return new DavAuth(username.Trim(), password.Trim());
+        return new DavAuth(username.Trim(), password.Trim(), origin);
+    }
+
+    // Gleicher Ursprung = gleiches Schema, gleicher Host, gleicher Port.
+    public static bool IsSameOrigin(Uri candidate, Uri origin) =>
+        candidate.IsAbsoluteUri
+        && string.Equals(candidate.Scheme, origin.Scheme, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(candidate.IdnHost, origin.IdnHost, StringComparison.OrdinalIgnoreCase)
+        && candidate.Port == origin.Port;
+
+    public static void EnsureSameOrigin(Uri candidate, Uri origin)
+    {
+        if (IsSameOrigin(candidate, origin)) return;
+
+        var sameHost = string.Equals(candidate.IdnHost, origin.IdnHost, StringComparison.OrdinalIgnoreCase);
+        if (sameHost && origin.Scheme == Uri.UriSchemeHttp && candidate.Scheme == Uri.UriSchemeHttps)
+            throw new CalDavOriginException("Der Server leitet auf https um. Bitte die Adresse mit https:// eintragen.");
+        throw new CalDavOriginException(
+            "Der Server verweist auf eine andere Adresse. Aus Sicherheitsgründen werden die " +
+            "Zugangsdaten nur an die eingetragene Server-URL geschickt – bitte diese Adresse eintragen.");
     }
 
     // Probiert die üblichen Einstiegspunkte durch. Nextcloud antwortet unter
@@ -132,6 +174,7 @@ public class CalDavCalendarService(
             ? new[] { server }
             : [new Uri(server, "remote.php/dav/"), new Uri(server, ".well-known/caldav"), server];
 
+        CalDavOriginException? originError = null;
         foreach (var candidate in candidates)
         {
             try
@@ -144,11 +187,18 @@ public class CalDavCalendarService(
             {
                 throw new CalDavException("Anmeldung fehlgeschlagen – Benutzername oder App-Passwort falsch.");
             }
+            catch (CalDavOriginException ex)
+            {
+                // Merken: Findet kein Kandidat etwas, ist "leitet auf https um" die
+                // hilfreichere Meldung als "kein CalDAV-Server gefunden".
+                originError ??= ex;
+            }
             catch (CalDavException)
             {
                 // nächster Kandidat
             }
         }
+        if (originError is not null) throw originError;
         return null;
     }
 
@@ -180,7 +230,7 @@ public class CalDavCalendarService(
 
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
-                await InvalidateConnectionAsync();
+                await HandleUnauthorizedAsync(conn);
                 return;
             }
             if (!response.IsSuccessStatusCode)
@@ -218,21 +268,41 @@ public class CalDavCalendarService(
     {
         using var response = await SendAsync(Auth(conn), HttpMethod.Delete, EventUri(conn, uid));
         if (response.StatusCode == HttpStatusCode.Unauthorized)
-            await InvalidateConnectionAsync();
+            await HandleUnauthorizedAsync(conn);
         // 404/410: bereits weg – nichts zu tun.
     }
 
     // Stabile UID je Task: Id + Erstellzeitpunkt, damit eine nach dem endgültigen Löschen
     // wiederverwendete Id nicht den Termin eines früheren Tasks überschreibt.
     public static string NewUid(TaskItem task) =>
-        $"horizonnet-task-{task.Id}-{task.CreatedAt.Ticks}";
+        $"{OwnUidPrefix}{task.Id}-{task.CreatedAt.Ticks}";
 
     private static Uri EventUri(CalDavConnection conn, string uid) =>
         new(new Uri(conn.CalendarUrl), Uri.EscapeDataString(uid) + ".ics");
 
-    // App-Passwort in Nextcloud widerrufen: Verbindung verwerfen, damit die App wieder
-    // "nicht verbunden" zeigt (wie beim widerrufenen Google-Token).
-    private Task InvalidateConnectionAsync() => repo.DeleteAsync();
+    // Ein 401 heißt nicht zwingend "App-Passwort widerrufen": Nextclouds Brute-Force-
+    // Schutz oder ein kurz hakendes Auth-Backend liefern ihn auch vorübergehend. Erst wenn
+    // eine zweite, unabhängige Anfrage (PROPFIND auf den Kalender) ebenfalls mit 401
+    // scheitert, wird die Verbindung verworfen, damit die App wieder "nicht verbunden"
+    // zeigt (wie beim widerrufenen Google-Token). Sonst nur ein Log-Eintrag.
+    private async Task HandleUnauthorizedAsync(CalDavConnection conn)
+    {
+        try
+        {
+            await PropfindAsync(Auth(conn), new Uri(conn.CalendarUrl), 0, "<d:resourcetype/>");
+            logger.LogWarning("CalDAV meldete 401, die Gegenprobe war erfolgreich – Verbindung bleibt bestehen.");
+        }
+        catch (CalDavAuthException)
+        {
+            logger.LogWarning("CalDAV-Anmeldung dauerhaft abgelehnt – Verbindung wird getrennt.");
+            await repo.DeleteAsync();
+        }
+        catch (CalDavException ex)
+        {
+            logger.LogWarning("CalDAV meldete 401, Gegenprobe nicht möglich ({Message}) – Verbindung bleibt bestehen.",
+                ex.Message);
+        }
+    }
 
     // Baut die .ics-Ressource. Termine mit Uhrzeit in UTC (Nextcloud zeigt sie in der
     // Zeitzone des Nutzers), ganztägige als DATE mit exklusivem Ende.
@@ -309,12 +379,12 @@ public class CalDavCalendarService(
 
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
-                await InvalidateConnectionAsync();
+                await HandleUnauthorizedAsync(conn);
                 return [];
             }
             if (!response.IsSuccessStatusCode) return [];
 
-            var xml = await response.Content.ReadAsStringAsync();
+            var xml = await ReadLimitedAsync(response.Content);
             return ParseEvents(xml, ownEventIds);
         }
         catch (Exception ex)
@@ -326,7 +396,8 @@ public class CalDavCalendarService(
     }
 
     // Liest die calendar-data-Blöcke einer REPORT-Antwort. Fremde Termine werden
-    // zurückgegeben, die eigenen (ownEventIds = UIDs) und abgesagte ausgeblendet.
+    // zurückgegeben, die eigenen (ownEventIds = UIDs, oder UID mit OwnUidPrefix) und
+    // abgesagte ausgeblendet.
     public static List<CalendarEventDto> ParseEvents(string multistatusXml, IReadOnlySet<string> ownEventIds)
     {
         var result = new List<CalendarEventDto>();
@@ -341,7 +412,9 @@ public class CalDavCalendarService(
             if (cal is null) continue;
             foreach (var ev in cal.Events)
             {
-                if (ev.Uid is not null && ownEventIds.Contains(ev.Uid)) continue;
+                if (ev.Uid is not null &&
+                    (ownEventIds.Contains(ev.Uid) || ev.Uid.StartsWith(OwnUidPrefix, StringComparison.Ordinal)))
+                    continue;
                 if (!ev.IsActive) continue;
 
                 var dto = ToEventDto(ev);
@@ -393,9 +466,14 @@ public class CalDavCalendarService(
 
     private sealed class CalDavAuthException() : CalDavException("Nicht angemeldet.");
 
+    // Ziel außerhalb des eingetragenen Servers (anderer Host/Port, https↔http).
+    public sealed class CalDavOriginException(string message) : CalDavException(message);
+
     private sealed record DavResult(XDocument Xml, Uri Url);
 
-    private static DavAuth Auth(CalDavConnection c) => new(c.Username, c.AppPassword);
+    private static DavAuth Auth(CalDavConnection c) =>
+        new(c.Username, c.AppPassword, NormalizeServerUrl(c.ServerUrl)
+                                       ?? throw new CalDavException("Gespeicherte Server-URL ist ungültig."));
 
     // PROPFIND mit den angegebenen Properties (Präfixe d: und c: sind deklariert).
     // Erwartet 207 Multi-Status; 401 wird als CalDavAuthException gemeldet.
@@ -415,7 +493,7 @@ public class CalDavCalendarService(
         if (response.StatusCode != HttpStatusCode.MultiStatus)
             throw new CalDavException($"Unerwartete Antwort vom Server ({(int)response.StatusCode}).");
 
-        var text = await response.Content.ReadAsStringAsync();
+        var text = await ReadLimitedAsync(response.Content);
         try
         {
             return new DavResult(XDocument.Parse(text), response.RequestMessage?.RequestUri ?? url);
@@ -426,10 +504,35 @@ public class CalDavCalendarService(
         }
     }
 
+    // Liest eine Antwort höchstens bis MaxResponseBytes.
+    private static async Task<string> ReadLimitedAsync(HttpContent content)
+    {
+        if (content.Headers.ContentLength > MaxResponseBytes)
+            throw new CalDavException("Die Antwort des Servers ist zu groß.");
+
+        await using var stream = await content.ReadAsStreamAsync();
+        using var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        int read;
+        while ((read = await stream.ReadAsync(chunk)) > 0)
+        {
+            if (buffer.Length + read > MaxResponseBytes)
+                throw new CalDavException("Die Antwort des Servers ist zu groß.");
+            buffer.Write(chunk, 0, read);
+        }
+
+        var charset = content.Headers.ContentType?.CharSet?.Trim('"');
+        Encoding encoding;
+        try { encoding = string.IsNullOrEmpty(charset) ? Encoding.UTF8 : Encoding.GetEncoding(charset); }
+        catch (ArgumentException) { encoding = Encoding.UTF8; }
+        return encoding.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
+    }
+
     // Sendet mit Basic-Auth und folgt Umleitungen selbst: Der eingebaute Redirect von
     // HttpClient wirft den Authorization-Header weg (und machte aus PROPFIND u. U. GET).
-    // Umleitungen auf einen anderen Host werden nicht verfolgt, damit das App-Passwort
-    // nur an den Server geht, den der Nutzer eingetragen hat.
+    // Jede Ziel-URL – die erste wie jede Umleitung – muss denselben Ursprung haben wie
+    // die eingetragene Server-URL (auth.Origin), damit das App-Passwort nirgendwo anders
+    // hingeht, auch nicht per http im Klartext.
     private async Task<HttpResponseMessage> SendAsync(
         DavAuth auth, HttpMethod method, Uri url,
         string? body = null, string? contentType = null, int? depth = null)
@@ -437,6 +540,8 @@ public class CalDavCalendarService(
         var current = url;
         for (var i = 0; ; i++)
         {
+            EnsureSameOrigin(current, auth.Origin);
+
             var request = new HttpRequestMessage(method, current);
             request.Headers.Authorization = new AuthenticationHeaderValue("Basic",
                 Convert.ToBase64String(Encoding.UTF8.GetBytes($"{auth.Username}:{auth.Password}")));
@@ -470,11 +575,19 @@ public class CalDavCalendarService(
             var next = response.Headers.Location.IsAbsoluteUri
                 ? response.Headers.Location
                 : new Uri(current, response.Headers.Location);
+            var seeOther = response.StatusCode == HttpStatusCode.SeeOther;
             response.Dispose();
 
-            if (!string.Equals(next.Host, url.Host, StringComparison.OrdinalIgnoreCase))
-                throw new CalDavException("Der Server leitet auf einen anderen Host um. Bitte dessen Adresse eintragen.");
-            current = next;
+            // 303 See Other: Das Ergebnis liegt unter der neuen Adresse und wird per GET
+            // abgeholt – ohne Body (RFC 9110, 15.4.4).
+            if (seeOther && method != HttpMethod.Head)
+            {
+                method = HttpMethod.Get;
+                body = null;
+                depth = null;
+            }
+
+            current = next; // den Ursprung prüft der nächste Schleifendurchlauf
         }
     }
 

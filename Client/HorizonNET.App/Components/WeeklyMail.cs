@@ -113,15 +113,20 @@ public static partial class WeeklyMail
     public static string MailtoUri(IEnumerable<string> to, IEnumerable<string> cc, string subject, string body)
     {
         var sb = new StringBuilder("mailto:");
-        sb.Append(string.Join(',', to));
+        sb.Append(string.Join(',', to.Select(EscapeAddress)));
 
         var query = new List<string>();
         var ccList = cc.ToList();
-        if (ccList.Count > 0) query.Add($"cc={string.Join(',', ccList)}");
+        if (ccList.Count > 0) query.Add($"cc={string.Join(',', ccList.Select(EscapeAddress))}");
         query.Add($"subject={Uri.EscapeDataString(subject)}");
         var crlf = body.Replace("\r\n", "\n").Replace("\n", "\r\n");
         query.Add($"body={Uri.EscapeDataString(crlf)}");
 
         return sb.Append('?').Append(string.Join('&', query)).ToString();
     }
+
+    // Adressen kodieren (RFC 6068): Ein "?", "&" oder "%" in einer Eingabe soll den Link
+    // nicht aufbrechen oder weitere Felder einschleusen. Das "@" bleibt lesbar.
+    private static string EscapeAddress(string address) =>
+        Uri.EscapeDataString(address).Replace("%40", "@");
 }

@@ -204,6 +204,202 @@ public class AzureDevOpsTests
         Assert.Equal(WorkStatus.Planned, task.Status);
     }
 
+    // Mehr als 200 IDs (offen + abgeschlossen): Die workitems-API nimmt höchstens 200 je
+    // Aufruf, also muss in mehreren Blöcken gelesen werden – ohne dass etwas fehlt.
+    [Fact]
+    public async Task GetMyWorkItems_MoreThan200_ReadsInChunks()
+    {
+        using var db = new TestDatabase();
+        var projectId = await SeedAsync(db);
+        var chunkSizes = new List<int>();
+        var handler = new FakeHandler(req =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            if (path.EndsWith("/_apis/wit/wiql"))
+            {
+                var closed = !req.Content!.ReadAsStringAsync().Result.Contains("NOT IN");
+                var range = closed ? Enumerable.Range(201, 150) : Enumerable.Range(1, 200);
+                return Json(new { workItems = range.Select(id => new { id }).ToArray() });
+            }
+            if (path.EndsWith("/_apis/wit/workitems"))
+            {
+                var ids = System.Web.HttpUtility.ParseQueryString(req.RequestUri.Query)["ids"]!
+                    .Split(',').Select(int.Parse).ToList();
+                chunkSizes.Add(ids.Count);
+                return Json(new
+                {
+                    value = ids.Select(id => new
+                    {
+                        id,
+                        fields = new Dictionary<string, object>
+                        {
+                            ["System.Title"] = $"Item {id}", ["System.State"] = id > 200 ? "Closed" : "Active",
+                            ["System.WorkItemType"] = "Task", ["System.TeamProject"] = "Mein Projekt"
+                        }
+                    }).ToArray()
+                });
+            }
+            return Json(new { value = Array.Empty<object>() });
+        });
+
+        using var act = db.NewContext();
+        var items = await NewService(act, handler).GetMyWorkItemsAsync(projectId, includeClosed: true);
+
+        Assert.Equal(350, items.Count);
+        Assert.Equal([200, 150], chunkSizes);
+        Assert.Equal(Enumerable.Range(1, 350), items.Select(i => i.Id));
+    }
+
+    // Ein importierter Task im Papierkorb zählt weiter als "bereits importiert": Ein
+    // erneuter Import legte sonst eine Dublette neben den wiederherstellbaren Task.
+    [Fact]
+    public async Task Import_TrashedTaskCountsAsImported()
+    {
+        using var db = new TestDatabase();
+        var projectId = await SeedAsync(db);
+        using (var seed = db.NewContext())
+        {
+            seed.Tasks.Add(new TaskItem
+            {
+                Title = "gelöscht", ProjectId = projectId, AzureDevOpsWorkItemId = 1,
+                AzureDevOpsOrganizationUrl = Org, DeletedAt = DateTime.Now
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        using (var act = db.NewContext())
+        {
+            var (created, skipped) = await NewService(act, new FakeHandler(_ => WorkItemsResponse()))
+                .ImportAsync(projectId, [1]);
+            Assert.Empty(created);
+            Assert.Equal(1, skipped);
+        }
+
+        using var assert = db.NewContext();
+        Assert.Equal(1, await assert.Tasks.IgnoreQueryFilters().CountAsync(t => t.AzureDevOpsWorkItemId == 1));
+    }
+
+    // Work-Item-IDs sind nur je Organisation eindeutig.
+    [Fact]
+    public async Task ImportedIds_AreScopedToOrganization()
+    {
+        using var db = new TestDatabase();
+        var projectId = await SeedAsync(db);
+        using (var seed = db.NewContext())
+        {
+            seed.Tasks.Add(new TaskItem
+            {
+                Title = "andere Org", ProjectId = projectId, AzureDevOpsWorkItemId = 1,
+                AzureDevOpsOrganizationUrl = "https://dev.azure.com/andere-org"
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        using (var act = db.NewContext())
+        {
+            var (created, _) = await NewService(act, new FakeHandler(_ => WorkItemsResponse()))
+                .ImportAsync(projectId, [1]);
+            Assert.Equal(Org, Assert.Single(created).AzureDevOpsOrganizationUrl);
+        }
+    }
+
+    // Zwei parallele Imports desselben Items: Der eindeutige Index lässt nur einen durch,
+    // der andere legt gar nichts an (Transaktion) und meldet sich verständlich.
+    [Fact]
+    public async Task Import_ConcurrentDuplicate_IsRejectedByUniqueIndex()
+    {
+        using var db = new TestDatabase();
+        var projectId = await SeedAsync(db);
+
+        using (var first = db.NewContext())
+            Assert.True(await new TaskRepository(first).CreateImportedAsync(
+                [new TaskItem { Title = "#1", ProjectId = projectId, AzureDevOpsWorkItemId = 1, AzureDevOpsOrganizationUrl = Org }]));
+
+        using (var second = db.NewContext())
+            Assert.False(await new TaskRepository(second).CreateImportedAsync(
+            [
+                new TaskItem { Title = "#5", ProjectId = projectId, AzureDevOpsWorkItemId = 5, AzureDevOpsOrganizationUrl = Org },
+                new TaskItem { Title = "#1", ProjectId = projectId, AzureDevOpsWorkItemId = 1, AzureDevOpsOrganizationUrl = Org }
+            ]));
+
+        using var assert = db.NewContext();
+        Assert.Equal(["#1"], await assert.Tasks.Select(t => t.Title).ToListAsync());
+    }
+
+    // Bugs tragen ihren Text je nach Prozessvorlage in den Reproschritten.
+    [Fact]
+    public async Task Import_Bug_FallsBackToReproSteps()
+    {
+        using var db = new TestDatabase();
+        var projectId = await SeedAsync(db);
+        var handler = new FakeHandler(_ => Json(new
+        {
+            value = new[]
+            {
+                new { id = 9, fields = new Dictionary<string, object>
+                {
+                    ["System.Title"] = "Absturz", ["System.State"] = "New", ["System.WorkItemType"] = "Bug",
+                    ["System.TeamProject"] = "Mein Projekt",
+                    ["Microsoft.VSTS.TCM.ReproSteps"] = "<div>Schritt 1</div>"
+                } }
+            }
+        }));
+
+        using var act = db.NewContext();
+        var (created, _) = await NewService(act, handler).ImportAsync(projectId, [9]);
+        Assert.Equal("Schritt 1", Assert.Single(created).Description);
+    }
+
+    [Fact]
+    public async Task UnexpectedJson_IsReadableError()
+    {
+        using var db = new TestDatabase();
+        var projectId = await SeedAsync(db);
+        var handler = new FakeHandler(_ => Json(new { etwas = "anderes" }));
+
+        using var act = db.NewContext();
+        var ex = await Assert.ThrowsAsync<AzureDevOpsException>(
+            () => NewService(act, handler).GetMyWorkItemsAsync(projectId, false));
+        Assert.Contains("unerwartet", ex.Message);
+    }
+
+    [Fact]
+    public async Task GetProjects_FollowsContinuationToken()
+    {
+        using var db = new TestDatabase();
+        await SeedAsync(db);
+        var handler = new FakeHandler(req =>
+        {
+            var second = req.RequestUri!.Query.Contains("continuationToken=weiter");
+            var response = Json(new { value = new[] { new { name = second ? "Beta" : "Alpha" } } });
+            if (!second) response.Headers.Add("x-ms-continuationtoken", "weiter");
+            return response;
+        });
+
+        using var act = db.NewContext();
+        Assert.Equal(["Alpha", "Beta"], await NewService(act, handler).GetProjectsAsync());
+    }
+
+    // Die abgeschlossenen Zustände kommen aus den Kategorien der Work-Item-Typen – so
+    // stimmen sie auch für eigene Prozessvorlagen.
+    [Fact]
+    public void ParseClosedStates_UsesStateCategories()
+    {
+        using var doc = JsonDocument.Parse("""
+            { "value": [
+              { "name": "Task", "states": [
+                { "name": "Neu", "category": "Proposed" },
+                { "name": "In Arbeit", "category": "InProgress" },
+                { "name": "Erledigt", "category": "Completed" } ] },
+              { "name": "Bug", "states": [
+                { "name": "Behoben", "category": "Resolved" },
+                { "name": "Abgelehnt", "category": "Removed" } ] }
+            ] }
+            """);
+
+        Assert.Equal(["Abgelehnt", "Behoben", "Erledigt"], AzureDevOpsService.ParseClosedStates(doc.RootElement));
+    }
+
     [Theory]
     [InlineData(1, Priority.High)]
     [InlineData(2, Priority.Medium)]

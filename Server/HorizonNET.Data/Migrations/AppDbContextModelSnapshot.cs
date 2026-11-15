@@ -526,6 +526,10 @@ namespace HorizonNET.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("AzureDevOpsOrganizationUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("AzureDevOpsWorkItemId")
                         .HasColumnType("INTEGER");
 
@@ -607,13 +611,15 @@ namespace HorizonNET.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AzureDevOpsWorkItemId");
-
                     b.HasIndex("ParentTaskId");
 
                     b.HasIndex("ProjectId");
 
                     b.HasIndex("SeriesSlotId");
+
+                    b.HasIndex("AzureDevOpsOrganizationUrl", "AzureDevOpsWorkItemId")
+                        .IsUnique()
+                        .HasFilter("\"AzureDevOpsWorkItemId\" IS NOT NULL");
 
                     b.HasIndex("SeriesId", "SeriesSlotId", "SeriesDate")
                         .IsUnique();

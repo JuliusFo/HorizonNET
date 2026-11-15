@@ -4,7 +4,7 @@
 @* Import von Work Items aus Azure DevOps in das aktuelle Projekt (Overlay im Stil von
    ProjectEditDialog). Ein Horizon-Projekt gehört zu genau einem Azure-DevOps-Projekt:
    Ist noch keins verknüpft, wählt man es hier zuerst aus. *@
-@if (Visible && Project is not null)
+@if (Visible && project is not null)
 {
     <div class="ado-dialog-backdrop" @onclick="CloseAsync"></div>
     <div class="ado-dialog">
@@ -12,10 +12,10 @@
             <div class="ado-dialog-header">
                 <div class="min-w-0">
                     <h5 class="mb-0">Aus Azure DevOps importieren</h5>
-                    @if (Project.AzureDevOpsProject is { } linked && !relinking)
+                    @if (project.AzureDevOpsProject is { } linked && !relinking)
                     {
                         <div class="small text-muted text-truncate">
-                            @linked → @Project.Name
+                            @linked → @project.Name
                             <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline"
                                     @onclick="StartRelinkAsync">ändern</button>
                         </div>
@@ -25,11 +25,11 @@
             </div>
 
             <div class="ado-dialog-body">
-                @if (Project.AzureDevOpsProject is null || relinking)
+                @if (project.AzureDevOpsProject is null || relinking)
                 {
                     @* ── Schritt 1: Projekt verknüpfen ── *@
                     <p class="text-muted">
-                        Mit welchem Azure-DevOps-Projekt gehört <strong>@Project.Name</strong> zusammen?
+                        Mit welchem Azure-DevOps-Projekt gehört <strong>@project.Name</strong> zusammen?
                         Der Import zeigt danach nur Work Items aus diesem Projekt.
                     </p>
                     @if (azureProjects is null)
@@ -90,7 +90,7 @@
                     else if (!VisibleItems.Any())
                     {
                         <p class="text-muted mb-0">
-                            @(items.Count == 0 ? "Dir sind in diesem Projekt keine offenen Work Items zugewiesen." : "Kein Work Item passt zum Filter.")
+                            @(items.Count == 0 ? EmptyText : "Kein Work Item passt zum Filter.")
                         </p>
                     }
                     else
@@ -132,7 +132,7 @@
             </div>
 
             <div class="ado-dialog-footer">
-                @if (Project.AzureDevOpsProject is null || relinking)
+                @if (project.AzureDevOpsProject is null || relinking)
                 {
                     <button type="button" class="btn btn-primary"
                             disabled="@(busy || string.IsNullOrEmpty(linkChoice))" @onclick="LinkAsync">
@@ -184,6 +184,10 @@
     private bool busy;
     private bool loaded;
 
+    // Lokale Kopie des Projekts: Nach dem Verknüpfen arbeitet der Dialog mit dem
+    // aktualisierten Stand weiter, ohne in den eigenen [Parameter] zu schreiben (BL0005).
+    private ProjectResponseDto? project;
+
     private List<string>? azureProjects;
     private string linkChoice = string.Empty;
     private bool relinking;
@@ -208,6 +212,10 @@
     // wegfiltert, will dessen Items nicht unbemerkt mitimportieren.
     private int SelectedVisibleCount => Selectable.Count(i => selected.Contains(i.Id));
 
+    private string EmptyText => includeClosed
+        ? "Dir sind in diesem Projekt keine Work Items zugewiesen."
+        : "Dir sind in diesem Projekt keine offenen Work Items zugewiesen.";
+
     private bool AllSelected => Selectable.Any() && Selectable.All(i => selected.Contains(i.Id));
 
     protected override async Task OnParametersSetAsync()
@@ -215,6 +223,7 @@
         if (!Visible) { loaded = false; return; }
         if (loaded || Project is null) return;
         loaded = true;
+        project = Project;
 
         items = null;
         loadError = null;
@@ -226,7 +235,7 @@
         busy = false;
         linkChoice = string.Empty;
 
-        if (Project.AzureDevOpsProject is null)
+        if (project.AzureDevOpsProject is null)
             await LoadAzureProjectsAsync();
         else
             await LoadItemsAsync();
@@ -241,22 +250,21 @@
     private async Task StartRelinkAsync()
     {
         relinking = true;
-        linkChoice = Project?.AzureDevOpsProject ?? string.Empty;
+        linkChoice = project?.AzureDevOpsProject ?? string.Empty;
         await LoadAzureProjectsAsync();
     }
 
     private async Task LinkAsync()
     {
-        if (Project is null || string.IsNullOrEmpty(linkChoice)) return;
+        if (project is null || string.IsNullOrEmpty(linkChoice)) return;
         busy = true;
-        var updated = await Api.LinkAzureDevOpsProjectAsync(Project.Id, linkChoice);
+        var updated = await Api.LinkAzureDevOpsProjectAsync(project.Id, linkChoice);
         busy = false;
         if (updated is null) return;
 
         relinking = false;
+        project = updated;
         await OnProjectLinked.InvokeAsync(updated);
-        // Project-Parameter kommt über den Aufrufer neu herein; bis dahin lokal weiterarbeiten.
-        Project = updated;
         items = null;
         selected.Clear();
         selectedStates.Clear();
@@ -266,9 +274,9 @@
 
     private async Task LoadItemsAsync()
     {
-        if (Project is null) return;
+        if (project is null) return;
         items = null;
-        var result = await Api.GetAzureDevOpsWorkItemsAsync(Project.Id, includeClosed);
+        var result = await Api.GetAzureDevOpsWorkItemsAsync(project.Id, includeClosed);
         items = result?.Items ?? [];
         loadError = result?.Error ?? (result is null ? "Work Items konnten nicht geladen werden." : null);
 
@@ -315,12 +323,12 @@
 
     private async Task ImportAsync()
     {
-        if (Project is null) return;
+        if (project is null) return;
         var ids = Selectable.Where(i => selected.Contains(i.Id)).Select(i => i.Id).ToList();
         if (ids.Count == 0) return;
 
         busy = true;
-        var result = await Api.ImportAzureDevOpsWorkItemsAsync(new AzureDevOpsImportDto(Project.Id, ids));
+        var result = await Api.ImportAzureDevOpsWorkItemsAsync(new AzureDevOpsImportDto(project.Id, ids));
         busy = false;
 
         if (result is null) return; // Toast kommt vom ApiErrorHandler

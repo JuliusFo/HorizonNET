@@ -34,7 +34,8 @@ public class CalendarController(CalendarSyncService calendar) : ControllerBase
         return NoContent();
     }
 
-    // Trennt den verbundenen Anbieter. Die Termine bleiben im Kalender stehen.
+    // Trennt den verbundenen Anbieter. Die Termine bleiben im Kalender stehen, die
+    // Verknüpfungen zu ihnen ebenfalls – ein erneutes Verbinden setzt nahtlos fort.
     [HttpDelete]
     public async Task<IActionResult> Disconnect()
     {

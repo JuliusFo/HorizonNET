@@ -30,6 +30,11 @@ public class GoogleCalendarService : ICalendarProvider
         "https://www.googleapis.com/auth/userinfo.email" // nur zum Anzeigen der verbundenen Adresse
     ];
 
+    // Private Extended Property an jedem gespiegelten Termin. Daran erkennt die App ihre
+    // eigenen Termine auch ohne gespeicherte Event-ID (z. B. nach einem Wechsel zu
+    // Nextcloud und zurück) und zeigt sie nicht zusätzlich als fremde Termine an.
+    public const string OwnEventMarker = "horizonnetTask";
+
     private readonly IGoogleConnectionRepository repo;
     private readonly ITaskRepository taskRepo;
     private readonly IConfiguration config;
@@ -182,7 +187,7 @@ public class GoogleCalendarService : ICalendarProvider
             // Termine ausblenden, die die App selbst aus Tasks gespiegelt hat – sonst
             // erschiene jeder geplante Task doppelt (lokaler Task + sein Google-Event).
             return (response.Items ?? [])
-                .Where(e => e.Id is null || !ownIds.Contains(e.Id))
+                .Where(e => !IsOwnEvent(e, ownIds))
                 .Select(ToEventDto)
                 .Where(e => e is not null)
                 .Select(e => e!)
@@ -203,6 +208,10 @@ public class GoogleCalendarService : ICalendarProvider
             return [];
         }
     }
+
+    public static bool IsOwnEvent(Event e, IReadOnlySet<string> ownIds) =>
+        (e.Id is not null && ownIds.Contains(e.Id))
+        || e.ExtendedProperties?.Private__?.ContainsKey(OwnEventMarker) == true;
 
     private static CalendarEventDto? ToEventDto(Event e)
     {
@@ -339,14 +348,18 @@ public class GoogleCalendarService : ICalendarProvider
 
     // Baut den Google-Event-Body. Mit Uhrzeit → Termin mit Uhrzeit, sonst ganztägig
     // (End-Datum exklusiv) – die Regeln dazu stehen in TaskEventData.
-    private static Event BuildEvent(TaskEventData data)
+    public static Event BuildEvent(TaskEventData data)
     {
         var ev = new Event
         {
             Summary = data.Title,
             Description = data.Description,
             Transparency = data.Busy ? "opaque" : "transparent",
-            Reminders = BuildReminders(data.ReminderMinutes)
+            Reminders = BuildReminders(data.ReminderMinutes),
+            ExtendedProperties = new Event.ExtendedPropertiesData
+            {
+                Private__ = new Dictionary<string, string> { [OwnEventMarker] = "1" }
+            }
         };
 
         if (data.AllDay)

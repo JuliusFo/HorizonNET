@@ -49,12 +49,26 @@ public interface ITaskRepository
 
     // Alle nicht gelöschten Tasks mit Fälligkeitsdatum ab dem angegebenen Tag – die
     // Menge, die nach einem Anbieterwechsel neu gespiegelt wird.
-    Task<IReadOnlyList<TaskItem>> GetScheduledFromAsync(DateTime fromDate);
+    // Nur die IDs – der Kalender-Abgleich liest jeden Task erst unmittelbar vor dem
+    // Spiegeln frisch (GetForCalendarSyncAsync).
+    Task<IReadOnlyList<int>> GetScheduledIdsFromAsync(DateTime fromDate);
+
+    // Aktueller Stand eines Tasks direkt aus der Datenbank, ungetrackt (kein Papierkorb).
+    Task<TaskItem?> GetForCalendarSyncAsync(int taskId);
+
+    // Die gespeicherte Event-ID, frisch aus der Datenbank (nicht aus dem Change-Tracker).
+    Task<string?> GetCalendarEventIdAsync(int taskId);
 
     // Alle Work-Item-IDs bereits aus Azure DevOps importierter Tasks (auch gelöschte –
     // wer einen importierten Task wegwirft, will ihn nicht beim nächsten Mal wieder angeboten
     // bekommen; zurückholen geht über den Papierkorb).
-    Task<HashSet<int>> GetAzureDevOpsWorkItemIdsAsync();
+    // Bereits importierte Work-Item-IDs der Organisation (inkl. Papierkorb und Altbestand
+    // ohne bekannte Organisation).
+    Task<HashSet<int>> GetAzureDevOpsWorkItemIdsAsync(string organizationUrl);
+
+    // Legt importierte Tasks in einer Transaktion an. False (und nichts angelegt), wenn
+    // eines der Work Items inzwischen schon importiert wurde (eindeutiger Index).
+    Task<bool> CreateImportedAsync(IReadOnlyList<TaskItem> tasks);
 
     // Nur Id, Titel und Projektzuordnung (samt Sub-Tasks) – für Auswahllisten.
     // Ausnahme von der Regel "Repositories liefern Entitäten": Hier gibt es bewusst keine

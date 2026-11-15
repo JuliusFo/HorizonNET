@@ -281,7 +281,14 @@
                                 <label for="caldavServer" class="form-label">Server-URL</label>
                                 <input id="caldavServer" class="form-control" style="max-width: 28rem;"
                                        placeholder="https://cloud.example.org"
-                                       autocomplete="off" @bind="caldavServer" />
+                                       autocomplete="off" @bind="caldavServer" @bind:event="oninput" />
+                                @if (caldavServer.TrimStart().StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    <div class="form-text text-warning">
+                                        Unverschlüsselt: Über http:// gehen Benutzername und App-Passwort im
+                                        Klartext über das Netz. Nur im eigenen, vertrauenswürdigen Netz verwenden.
+                                    </div>
+                                }
                             </div>
                             <div class="mb-3">
                                 <label for="caldavUser" class="form-label">Benutzername</label>

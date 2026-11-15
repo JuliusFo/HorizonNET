@@ -119,6 +119,72 @@ public class WeeklyReportTests
         }
     }
 
+    // Ein Projekt aus einem gelöschten Arbeitsbereich zeigt die App ungruppiert – im
+    // Bericht zählt es deshalb als "ohne Arbeitsbereich", statt ohne Hinweis zu fehlen.
+    [Fact]
+    public async Task WorkspaceFilter_ProjectOfDeletedWorkspace_CountsAsUnassigned()
+    {
+        using var db = new TestDatabase();
+        int workId;
+        using (var ctx = db.NewContext())
+        {
+            var work = new Workspace { Name = "Arbeit" };
+            var gone = new Workspace { Name = "Weg", DeletedAt = DateTime.Now };
+            ctx.Tasks.AddRange(
+                Task("Job", WorkStatus.Done, InWeek, project: new Project { Name = "Job", Workspace = work }),
+                Task("Verwaist", WorkStatus.Done, InWeek, project: new Project { Name = "Alt", Workspace = gone }));
+            await ctx.SaveChangesAsync();
+            workId = work.Id;
+        }
+
+        using (var act = db.NewContext())
+        {
+            var onlyWork = await new TaskRepository(act).GetWeeklyReportAsync(Monday, [workId], false);
+            Assert.Equal(["Job"], onlyWork.Completed.Select(t => t.Title));
+        }
+
+        using (var act = db.NewContext())
+        {
+            var withUnassigned = await new TaskRepository(act).GetWeeklyReportAsync(Monday, [workId], true);
+            Assert.Equal(["Job", "Verwaist"], withUnassigned.Completed.Select(t => t.Title).Order());
+        }
+    }
+
+    // Früher verworfen, jetzt doch erledigt: Der Erledigt-Zeitpunkt ist jetzt, sonst
+    // fehlte der Task im Bericht der Woche, in der er wirklich fertig wurde.
+    [Fact]
+    public async Task AbandonedThenDone_GetsNewCompletedAt()
+    {
+        using var db = new TestDatabase();
+        int id;
+        var abandonedAt = DateTime.Now.AddDays(-30);
+        using (var ctx = db.NewContext())
+        {
+            var task = Task("Doch gemacht", WorkStatus.Abandoned, abandonedAt);
+            ctx.Tasks.Add(task);
+            await ctx.SaveChangesAsync();
+            id = task.Id;
+        }
+
+        using (var act = db.NewContext())
+            await new TaskRepository(act).SetStatusAsync(id, WorkStatus.Done);
+
+        using var assert = db.NewContext();
+        var completedAt = (await assert.Tasks.FindAsync(id))!.CompletedAt!.Value;
+        Assert.True(completedAt > DateTime.Now.AddMinutes(-1), $"CompletedAt blieb bei {completedAt}");
+    }
+
+    [Theory]
+    [InlineData("0001-01-01")]
+    [InlineData("9999-12-31")]
+    public async Task Weekly_WeekStartOutOfRange_IsBadRequest(string weekStart)
+    {
+        using var db = new TestDatabase();
+        using var ctx = db.NewContext();
+        var result = await new ReportsController(new TaskRepository(ctx)).Weekly(DateOnly.Parse(weekStart), null);
+        Assert.IsType<Microsoft.AspNetCore.Mvc.BadRequestObjectResult>(result);
+    }
+
     [Theory]
     [InlineData("2026-11-09", "2026-11-09")] // Montag bleibt
     [InlineData("2026-11-13", "2026-11-09")] // Freitag

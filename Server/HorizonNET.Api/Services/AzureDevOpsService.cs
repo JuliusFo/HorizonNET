@@ -29,15 +29,20 @@ public partial class AzureDevOpsService(
 {
     private const string ApiVersion = "7.1";
 
-    // Zustände, die als "abgeschlossen" gelten (Agile, Scrum, Basic, CMMI). Ohne
-    // includeClosed fragt der Import sie gar nicht erst ab – sonst kämen bei langen
-    // Projekten hunderte erledigte Items zurück.
-    private static readonly string[] ClosedStates = ["Closed", "Done", "Removed", "Resolved"];
+    // Ersatz, falls die Zustände des Projekts nicht gelesen werden können: die
+    // abgeschlossenen Zustände der Standardvorlagen (Agile, Scrum, Basic, CMMI).
+    private static readonly string[] DefaultClosedStates = ["Closed", "Done", "Removed", "Resolved"];
+
+    // Zustandskategorien, die als "abgeschlossen" gelten. Resolved zählt mit (wie bisher
+    // der Zustand "Resolved" in Agile): Das Item ist fachlich erledigt, wartet nur auf Abnahme.
+    private static readonly string[] ClosedCategories = ["Completed", "Removed", "Resolved"];
 
     private static readonly string[] Fields =
     [
         "System.Id", "System.Title", "System.State", "System.WorkItemType",
-        "System.TeamProject", "Microsoft.VSTS.Common.Priority", "System.Description"
+        "System.TeamProject", "Microsoft.VSTS.Common.Priority", "System.Description",
+        // Bugs haben (je nach Prozessvorlage) keine Beschreibung, sondern Reproschritte.
+        "Microsoft.VSTS.TCM.ReproSteps"
     ];
 
     // Grenzen der Task-Spalten (AppDbContext).
@@ -115,15 +120,34 @@ public partial class AzureDevOpsService(
 
     // ── Projekte ─────────────────────────────────────────────────────────────
 
+    // Seitenweise über den Continuation-Token: Organisationen mit mehr als 500 Projekten
+    // bekämen sonst nur einen Ausschnitt. Die Seitenzahl ist gedeckelt, damit ein Server,
+    // der immer wieder einen Token schickt, keine Endlosschleife auslöst.
+    private const int MaxProjectPages = 20;
+
     public async Task<List<string>> GetProjectsAsync()
     {
         var c = await RequireConnectionAsync();
-        using var doc = await SendAsync(c, HttpMethod.Get,
-            $"{c.OrganizationUrl}/_apis/projects?$top=500&api-version={ApiVersion}");
+        var names = new List<string>();
+        string? continuation = null;
 
-        return doc.RootElement.GetProperty("value").EnumerateArray()
-            .Select(p => p.GetProperty("name").GetString() ?? "")
-            .Where(n => n.Length > 0)
+        for (var page = 0; page < MaxProjectPages; page++)
+        {
+            var url = $"{c.OrganizationUrl}/_apis/projects?$top=500&api-version={ApiVersion}"
+                      + (continuation is null ? "" : $"&continuationToken={Uri.EscapeDataString(continuation)}");
+            var (doc, next) = await SendWithContinuationAsync(c, HttpMethod.Get, url);
+            using (doc)
+            {
+                names.AddRange(Read(() => doc.RootElement.GetProperty("value").EnumerateArray()
+                    .Select(p => GetString(p, "name") ?? "")
+                    .Where(n => n.Length > 0)
+                    .ToList()));
+            }
+            if (string.IsNullOrEmpty(next) || next == continuation) break;
+            continuation = next;
+        }
+
+        return names.Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -140,7 +164,7 @@ public partial class AzureDevOpsService(
 
         var ids = await QueryMyWorkItemIdsAsync(c, azdoProject, includeClosed);
         var items = await GetWorkItemsAsync(c, ids);
-        var imported = await tasks.GetAzureDevOpsWorkItemIdsAsync();
+        var imported = await tasks.GetAzureDevOpsWorkItemIdsAsync(c.OrganizationUrl);
 
         // Reihenfolge der WIQL-Abfrage (zuletzt geändert zuerst) beibehalten.
         var byId = items.ToDictionary(i => i.Id);
@@ -151,17 +175,21 @@ public partial class AzureDevOpsService(
 
     // Legt für jedes ausgewählte Work Item einen Task im Horizon-Projekt an.
     // Titel & Co. werden frisch aus Azure DevOps gelesen, nicht vom Client übernommen.
+    //
+    // Alles oder nichts: Die Tasks gehen in einer Transaktion in die Datenbank. Läuft
+    // parallel ein zweiter Import derselben Items (Doppelklick, zweiter Tab), schlägt der
+    // eindeutige Index zu und dieser Import legt gar nichts an, statt Dubletten zu erzeugen.
     public async Task<(List<TaskItem> Created, int Skipped)> ImportAsync(int projectId, IReadOnlyCollection<int> workItemIds)
     {
         var c = await RequireConnectionAsync();
         var azdoProject = await RequireLinkedProjectAsync(projectId);
 
         var requested = workItemIds.Distinct().ToList();
-        var imported = await tasks.GetAzureDevOpsWorkItemIdsAsync();
+        var imported = await tasks.GetAzureDevOpsWorkItemIdsAsync(c.OrganizationUrl);
         var toFetch = requested.Where(id => !imported.Contains(id)).ToHashSet();
         var items = await GetWorkItemsAsync(c, toFetch.ToList());
 
-        var created = new List<TaskItem>();
+        var toCreate = new List<TaskItem>();
         foreach (var item in items)
         {
             // Nur Items aus dem verknüpften Projekt – der Dialog zeigt nichts anderes,
@@ -175,23 +203,29 @@ public partial class AzureDevOpsService(
             var task = new TaskItem
             {
                 Title = Truncate($"#{item.Id} {item.Title}", MaxTitleLength),
-                Description = NullIfEmpty(Truncate(HtmlToText(item.DescriptionHtml), MaxDescriptionLength)),
+                Description = NullIfEmpty(Truncate(HtmlToText(item.DescriptionHtml ?? item.ReproStepsHtml), MaxDescriptionLength)),
                 Link = TaskLink.IsValid(link) ? link : null,
                 Priority = MapPriority(item.Priority),
                 ProjectId = projectId,
                 Status = WorkStatus.Planned,
                 Kind = TaskKind.Task,
-                AzureDevOpsWorkItemId = item.Id
+                AzureDevOpsWorkItemId = item.Id,
+                AzureDevOpsOrganizationUrl = c.OrganizationUrl
             };
-            created.Add(await tasks.CreateAsync(task));
+            toCreate.Add(task);
         }
 
-        return (created, requested.Count - created.Count);
+        if (!await tasks.CreateImportedAsync(toCreate))
+            throw new AzureDevOpsException(
+                "Einige Work Items wurden gerade parallel importiert. Bitte die Liste neu laden.");
+
+        return (toCreate, requested.Count - toCreate.Count);
     }
 
     // ── Bausteine ────────────────────────────────────────────────────────────
 
-    internal record WorkItem(int Id, string Title, string State, string Type, string Project, int? Priority, string? DescriptionHtml);
+    internal record WorkItem(int Id, string Title, string State, string Type, string Project, int? Priority,
+        string? DescriptionHtml, string? ReproStepsHtml);
 
     // Offene und abgeschlossene Items getrennt abfragen: In einer gemeinsamen Abfrage
     // füllten bei langen Projekten die (meist zahlreicheren, frischer geänderten)
@@ -199,17 +233,62 @@ public partial class AzureDevOpsService(
     // Offene stehen deshalb immer vollständig vorn.
     private async Task<List<int>> QueryMyWorkItemIdsAsync(AzureDevOpsConnection c, string azdoProject, bool includeClosed)
     {
-        var ids = await RunWiqlAsync(c, azdoProject, closed: false);
+        var closedStates = await GetClosedStatesAsync(c, azdoProject);
+        var ids = await RunWiqlAsync(c, azdoProject, closedStates, closed: false);
         if (includeClosed)
-            ids.AddRange((await RunWiqlAsync(c, azdoProject, closed: true)).Where(id => !ids.Contains(id)));
+            ids.AddRange((await RunWiqlAsync(c, azdoProject, closedStates, closed: true)).Where(id => !ids.Contains(id)));
         return ids;
     }
 
-    private async Task<List<int>> RunWiqlAsync(AzureDevOpsConnection c, string azdoProject, bool closed)
+    // Die abgeschlossenen Zustände des Projekts, aus den Zustandskategorien seiner
+    // Work-Item-Typen. So stimmt die Trennung auch bei eigenen Prozessvorlagen
+    // ("Erledigt", "Abgelehnt" …). Klappt das nicht, gelten die Namen der Standardvorlagen.
+    private async Task<IReadOnlyList<string>> GetClosedStatesAsync(AzureDevOpsConnection c, string azdoProject)
     {
-        // Feste Zustandsnamen, kein Nutzertext – nichts zu escapen. @project bezieht sich
-        // auf das Projekt in der URL.
-        var states = string.Join(", ", ClosedStates.Select(s => $"'{s}'"));
+        try
+        {
+            using var doc = await SendAsync(c, HttpMethod.Get,
+                $"{c.OrganizationUrl}/{Uri.EscapeDataString(azdoProject)}/_apis/wit/workitemtypes?api-version={ApiVersion}");
+            var states = ParseClosedStates(doc.RootElement);
+            return states.Count > 0 ? states : DefaultClosedStates;
+        }
+        catch (AzureDevOpsException)
+        {
+            return DefaultClosedStates;
+        }
+    }
+
+    public static List<string> ParseClosedStates(JsonElement root)
+    {
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("value", out var types)
+            || types.ValueKind != JsonValueKind.Array)
+            return [];
+
+        foreach (var type in types.EnumerateArray())
+        {
+            if (type.ValueKind != JsonValueKind.Object || !type.TryGetProperty("states", out var states)
+                || states.ValueKind != JsonValueKind.Array)
+                continue;
+            foreach (var state in states.EnumerateArray())
+            {
+                if (state.ValueKind != JsonValueKind.Object) continue;
+                var name = GetString(state, "name");
+                var category = GetString(state, "category");
+                if (!string.IsNullOrEmpty(name) && category is not null
+                    && ClosedCategories.Contains(category, StringComparer.OrdinalIgnoreCase))
+                    result.Add(name);
+            }
+        }
+        return result.Order(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private async Task<List<int>> RunWiqlAsync(AzureDevOpsConnection c, string azdoProject,
+        IReadOnlyList<string> closedStates, bool closed)
+    {
+        // Die Zustandsnamen kommen vom Server, nicht vom Nutzer – trotzdem als WIQL-String
+        // escapen (Apostroph verdoppeln). @project bezieht sich auf das Projekt in der URL.
+        var states = string.Join(", ", closedStates.Select(s => $"'{s.Replace("'", "''")}'"));
         var where = "[System.TeamProject] = @project AND [System.AssignedTo] = @Me"
                   + $" AND [System.State] {(closed ? "IN" : "NOT IN")} ({states})";
         var wiql = $"SELECT [System.Id] FROM WorkItems WHERE {where} ORDER BY [System.ChangedDate] DESC";
@@ -218,9 +297,9 @@ public partial class AzureDevOpsService(
             $"{c.OrganizationUrl}/{Uri.EscapeDataString(azdoProject)}/_apis/wit/wiql?$top={MaxItems}&api-version={ApiVersion}",
             new { query = wiql });
 
-        return doc.RootElement.GetProperty("workItems").EnumerateArray()
+        return Read(() => doc.RootElement.GetProperty("workItems").EnumerateArray()
             .Select(w => w.GetProperty("id").GetInt32())
-            .ToList();
+            .ToList());
     }
 
     private async Task<List<WorkItem>> GetWorkItemsAsync(AzureDevOpsConnection c, List<int> ids)
@@ -233,21 +312,48 @@ public partial class AzureDevOpsService(
                     + $"&fields={string.Join(',', Fields)}&errorPolicy=omit&api-version={ApiVersion}";
             using var doc = await SendAsync(c, HttpMethod.Get, url);
 
-            foreach (var w in doc.RootElement.GetProperty("value").EnumerateArray())
-            {
-                // errorPolicy=omit liefert für nicht (mehr) sichtbare IDs null-Einträge.
-                if (w.ValueKind != JsonValueKind.Object || !w.TryGetProperty("fields", out var f)) continue;
-                result.Add(new WorkItem(
-                    w.GetProperty("id").GetInt32(),
-                    GetString(f, "System.Title") ?? "(ohne Titel)",
-                    GetString(f, "System.State") ?? "",
-                    GetString(f, "System.WorkItemType") ?? "",
-                    GetString(f, "System.TeamProject") ?? "",
-                    f.TryGetProperty("Microsoft.VSTS.Common.Priority", out var p) && p.TryGetInt32(out var pi) ? pi : null,
-                    GetString(f, "System.Description")));
-            }
+            result.AddRange(Read(() => ParseWorkItems(doc.RootElement)));
         }
         return result;
+    }
+
+    private static List<WorkItem> ParseWorkItems(JsonElement root)
+    {
+        var result = new List<WorkItem>();
+        foreach (var w in root.GetProperty("value").EnumerateArray())
+        {
+            // errorPolicy=omit liefert für nicht (mehr) sichtbare IDs null-Einträge.
+            if (w.ValueKind != JsonValueKind.Object || !w.TryGetProperty("fields", out var f)
+                || f.ValueKind != JsonValueKind.Object
+                || !w.TryGetProperty("id", out var idProp) || !idProp.TryGetInt32(out var id))
+                continue;
+            result.Add(new WorkItem(
+                id,
+                GetString(f, "System.Title") ?? "(ohne Titel)",
+                GetString(f, "System.State") ?? "",
+                GetString(f, "System.WorkItemType") ?? "",
+                GetString(f, "System.TeamProject") ?? "",
+                f.TryGetProperty("Microsoft.VSTS.Common.Priority", out var p) && p.TryGetInt32(out var pi) ? pi : null,
+                NullIfBlank(GetString(f, "System.Description")),
+                NullIfBlank(GetString(f, "Microsoft.VSTS.TCM.ReproSteps"))));
+        }
+        return result;
+    }
+
+    private static string? NullIfBlank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s;
+
+    // Liest eine Antwort, deren Form nicht der erwarteten entspricht (fehlende Felder,
+    // falscher Typ), als verständlichen Fehler statt als 500er.
+    private static T Read<T>(Func<T> read)
+    {
+        try
+        {
+            return read();
+        }
+        catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException or FormatException)
+        {
+            throw new AzureDevOpsException("Azure DevOps hat unerwartet geantwortet.");
+        }
     }
 
     private static string? GetString(JsonElement fields, string name) =>
@@ -305,7 +411,13 @@ public partial class AzureDevOpsService(
 
     // Ein Aufruf mit Basic-Auth (leerer Benutzer + PAT) und Übersetzung der typischen
     // Fehlerbilder in verständliche Meldungen.
-    private async Task<JsonDocument> SendAsync(AzureDevOpsConnection c, HttpMethod method, string url, object? body = null)
+    private async Task<JsonDocument> SendAsync(AzureDevOpsConnection c, HttpMethod method, string url, object? body = null) =>
+        (await SendWithContinuationAsync(c, method, url, body)).Doc;
+
+    // Wie SendAsync, liefert zusätzlich den Continuation-Token der Antwort (Header
+    // x-ms-continuationtoken) für seitenweise Abfragen.
+    private async Task<(JsonDocument Doc, string? Continuation)> SendWithContinuationAsync(
+        AzureDevOpsConnection c, HttpMethod method, string url, object? body = null)
     {
         using var request = new HttpRequestMessage(method, url);
         request.Headers.Authorization = new AuthenticationHeaderValue("Basic",
@@ -344,8 +456,19 @@ public partial class AzureDevOpsService(
             if (!response.IsSuccessStatusCode)
                 throw new AzureDevOpsException($"Azure DevOps meldet einen Fehler ({(int)response.StatusCode}).");
 
+            var continuation = response.Headers.TryGetValues("x-ms-continuationtoken", out var values)
+                ? values.FirstOrDefault()
+                : null;
+
             await using var stream = await response.Content.ReadAsStreamAsync();
-            return await JsonDocument.ParseAsync(stream);
+            try
+            {
+                return (await JsonDocument.ParseAsync(stream), continuation);
+            }
+            catch (JsonException)
+            {
+                throw new AzureDevOpsException("Azure DevOps hat unerwartet geantwortet.");
+            }
         }
     }
 }

@@ -14,6 +14,26 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 
+// Healthcheck für Docker (HEALTHCHECK im Dockerfile): Das aspnet-Image hat weder curl
+// noch wget, also fragt derselbe Einstiegspunkt den laufenden Prozess per HTTP ab und
+// endet mit 0 (gesund) oder 1. Jede Antwort unter 500 zählt – auch ein 400 der
+// Host-Filterung beweist, dass der Server antwortet.
+if (args.Contains("--healthcheck"))
+{
+    var port = (Environment.GetEnvironmentVariable("ASPNETCORE_HTTP_PORTS") ?? "8080")
+        .Split([';', ','], StringSplitOptions.RemoveEmptyEntries)[0].Trim();
+    try
+    {
+        using var probe = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+        using var response = await probe.GetAsync($"http://127.0.0.1:{port}/healthz");
+        return (int)response.StatusCode < 500 ? 0 : 1;
+    }
+    catch
+    {
+        return 1;
+    }
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Betrieb als Windows-Dienst auf dem vServer: meldet Start/Stopp an den Dienstmanager
@@ -32,6 +52,10 @@ if (builder.Environment.IsDevelopment())
 
 // Controller und Validierung
 builder.Services.AddControllers();
+
+// /healthz: prüft, dass die Datenbank erreichbar ist (für den Docker-Healthcheck).
+builder.Services.AddHealthChecks()
+    .AddCheck<HorizonNET.Api.Services.DatabaseHealthCheck>("database");
 
 // Eingebaute .NET 10 OpenAPI-Unterstützung
 builder.Services.AddOpenApi();
@@ -90,6 +114,7 @@ builder.Services.AddScoped<GoogleCalendarService>();
 // Authorization-Header und damit die Anmeldung.
 builder.Services.AddHttpClient<CalDavCalendarService>(c => c.Timeout = TimeSpan.FromSeconds(30))
     .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
+builder.Services.AddSingleton<CalendarSyncCoordinator>();
 builder.Services.AddScoped<CalendarSyncService>();
 
 // Azure-DevOps-Import (PAT, REST-API). Typed HttpClient: Handler-Pooling über die Factory.
@@ -267,6 +292,9 @@ app.MapStaticAssets().AllowAnonymous();
 
 app.MapControllers();
 
+// Anonym: Der Healthcheck kennt keine Sitzung. Verrät nur "Healthy"/"Unhealthy".
+app.MapHealthChecks("/healthz").AllowAnonymous();
+
 // Deep-Links und F5 auf Client-Routen (/settings, /journal/…) liefern die App-Hülle;
 // AllowAnonymous wegen der Fallback-Policy – der Login findet ja erst IN der App statt.
 app.MapFallbackToFile("index.html").AllowAnonymous();
@@ -336,3 +364,4 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+return 0;

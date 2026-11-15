@@ -75,13 +75,20 @@ public class TaskItem
     public DateOnly? SeriesDate { get; set; }
 
     // Verknüpfung zum gespiegelten Termin im verbundenen Kalender (Google oder
-    // Nextcloud/CalDAV; Einweg-Sync). Beim Anbieterwechsel wird sie verworfen.
+    // Nextcloud/CalDAV; Einweg-Sync). Nur beim Anbieterwechsel wird sie verworfen,
+    // nicht beim Trennen (siehe CalendarSyncService).
     // Wird ausschließlich serverseitig vom Sync gesetzt, nie über das Client-DTO.
     public string? CalendarEventId { get; set; }
 
     // Aus Azure DevOps importiert? Dann die Work-Item-ID – für die Erkennung "bereits
     // importiert" im Import-Dialog. Ausschließlich serverseitig beim Import gesetzt.
     public int? AzureDevOpsWorkItemId { get; set; }
+
+    // Organisation, aus der das Work Item stammt (normalisierte URL wie in
+    // AzureDevOpsConnection). Work-Item-IDs sind nur je Organisation eindeutig – nach
+    // einem Wechsel der Organisation gälte #42 sonst fälschlich als bereits importiert.
+    // Null bei Imports aus der Zeit vor dieser Spalte, deren Organisation unbekannt ist.
+    public string? AzureDevOpsOrganizationUrl { get; set; }
 
     // Zeitstempel; ausschließlich serverseitig im Repository gesetzt.
     public DateTime CreatedAt { get; set; }

@@ -94,7 +94,14 @@
         <button class="btn btn-link btn-sm ms-auto p-0" @onclick="Regenerate" disabled="@(report is null)">Text neu erzeugen</button>
     </div>
     <div class="card-body">
-        @if (report is null)
+        @if (loadFailed)
+        {
+            <div class="d-flex align-items-center gap-2">
+                <span class="text-danger">Der Bericht konnte nicht geladen werden.</span>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="LoadAsync">Erneut versuchen</button>
+            </div>
+        }
+        else if (report is null)
         {
             <p class="text-muted mb-0">Wird geladen…</p>
         }
@@ -160,13 +167,35 @@
         await LoadAsync();
     }
 
+    private bool loadFailed;
+
+    // Zählt jede Anfrage mit. Wer schnell durch die Wochen blättert, bekommt die
+    // Antworten u. U. in anderer Reihenfolge – angezeigt wird nur die zur letzten Anfrage.
+    private int loadVersion;
+
     private async Task LoadAsync()
     {
+        var version = ++loadVersion;
         report = null;
+        loadFailed = false;
+
         // Arbeitsbereiche, die es nicht mehr gibt, nicht weiter mitschicken.
         var existing = (WorkspaceState.Workspaces ?? []).Select(w => w.Id).ToHashSet();
         var ids = MailSettings.WorkspaceIds.Where(existing.Contains).ToList();
-        report = await Api.GetWeeklyReportAsync(weekStart, ids, MailSettings.WithoutWorkspace);
+
+        WeeklyReportDto? result;
+        try
+        {
+            result = await Api.GetWeeklyReportAsync(weekStart, ids, MailSettings.WithoutWorkspace);
+        }
+        catch (Exception)
+        {
+            result = null;
+        }
+
+        if (version != loadVersion) return;
+        report = result;
+        loadFailed = result is null;
         Regenerate();
     }
 

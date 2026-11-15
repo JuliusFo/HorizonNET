@@ -163,7 +163,7 @@ public class CalDavTests
     {
         var events = CalDavCalendarService.ParseEvents(ReportResponse, NoOwnIds);
 
-        Assert.Equal(3, events.Count);
+        Assert.Equal(2, events.Count); // der dritte ist ein eigener (UID-Präfix)
 
         var meeting = events.Single(e => e.Title == "Team-Meeting");
         Assert.False(meeting.AllDay);
@@ -184,6 +184,16 @@ public class CalDavTests
 
         Assert.DoesNotContain(events, e => e.Title == "Eigener Task");
         Assert.Equal(2, events.Count);
+    }
+
+    // Auch ohne Verknüpfung am Task (z. B. nach dem Neuverbinden desselben Kalenders
+    // für vergangene Tasks) sind die selbst angelegten Termine am UID-Präfix erkennbar.
+    [Fact]
+    public void ParseEvents_HidesOwnUidPrefix_EvenWithoutStoredIds()
+    {
+        var events = CalDavCalendarService.ParseEvents(ReportResponse, NoOwnIds);
+
+        Assert.DoesNotContain(events, e => e.Title == "Eigener Task");
     }
 
     // ── Discovery ──────────────────────────────────────────────────────────────

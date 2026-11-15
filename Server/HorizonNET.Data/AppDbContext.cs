@@ -66,7 +66,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IDataProtectio
             e.Property(t => t.Link).HasMaxLength(2048);
             e.Property(t => t.WaitingFor).HasMaxLength(200);
             e.Property(t => t.CalendarEventId).HasMaxLength(1024);
-            e.HasIndex(t => t.AzureDevOpsWorkItemId);
+            e.Property(t => t.AzureDevOpsOrganizationUrl).HasMaxLength(512);
+            // Eindeutig je Organisation, auch über den Papierkorb hinweg: Zwei parallele
+            // Imports desselben Work Items scheitern damit an der Datenbank statt
+            // Dubletten anzulegen.
+            e.HasIndex(t => new { t.AzureDevOpsOrganizationUrl, t.AzureDevOpsWorkItemId })
+                .IsUnique()
+                .HasFilter("\"AzureDevOpsWorkItemId\" IS NOT NULL");
 
             e.HasOne(t => t.Project)
                 .WithMany(p => p.Tasks)

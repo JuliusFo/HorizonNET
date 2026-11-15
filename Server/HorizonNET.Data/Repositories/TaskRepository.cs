@@ -290,7 +290,10 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
         var wasDone = previous is WorkStatus.Done or WorkStatus.Abandoned;
         var isDone = next is WorkStatus.Done or WorkStatus.Abandoned;
 
-        if (!wasDone && isDone) task.CompletedAt = DateTime.Now;
+        // Auch der Wechsel zwischen Verworfen und Erledigt datiert neu: Ein Task, der in
+        // einer früheren Woche verworfen und diese Woche doch erledigt wurde, gehört in
+        // den Bericht dieser Woche.
+        if (isDone && previous != next) task.CompletedAt = DateTime.Now;
         else if (wasDone && !isDone) task.CompletedAt = null;
     }
 
@@ -381,23 +384,58 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
             .Where(t => t.CalendarEventId != null)
             .ExecuteUpdateAsync(u => u.SetProperty(t => t.CalendarEventId, (string?)null));
 
-    public async Task<IReadOnlyList<TaskItem>> GetScheduledFromAsync(DateTime fromDate)
+    public async Task<IReadOnlyList<int>> GetScheduledIdsFromAsync(DateTime fromDate)
     {
         var from = fromDate.Date;
         return await context.Tasks
             .Where(t => t.DueDate != null && t.DueDate >= from)
             .OrderBy(t => t.DueDate)
+            .Select(t => t.Id)
             .ToListAsync();
     }
 
-    public async Task<HashSet<int>> GetAzureDevOpsWorkItemIdsAsync()
+    public async Task<TaskItem?> GetForCalendarSyncAsync(int taskId) =>
+        await context.Tasks.AsNoTracking().FirstOrDefaultAsync(t => t.Id == taskId);
+
+    public async Task<string?> GetCalendarEventIdAsync(int taskId) =>
+        await context.Tasks
+            .IgnoreQueryFilters()
+            .Where(t => t.Id == taskId)
+            .Select(t => t.CalendarEventId)
+            .FirstOrDefaultAsync();
+
+    public async Task<HashSet<int>> GetAzureDevOpsWorkItemIdsAsync(string organizationUrl)
     {
         var ids = await context.Tasks
             .IgnoreQueryFilters()
-            .Where(t => t.AzureDevOpsWorkItemId != null)
+            .Where(t => t.AzureDevOpsWorkItemId != null
+                        && (t.AzureDevOpsOrganizationUrl == null || t.AzureDevOpsOrganizationUrl == organizationUrl))
             .Select(t => t.AzureDevOpsWorkItemId!.Value)
             .ToListAsync();
         return ids.ToHashSet();
+    }
+
+    public async Task<bool> CreateImportedAsync(IReadOnlyList<TaskItem> tasks)
+    {
+        if (tasks.Count == 0) return true;
+
+        await using var transaction = await context.Database.BeginTransactionAsync();
+        try
+        {
+            foreach (var task in tasks)
+                await CreateAsync(task);
+            await transaction.CommitAsync();
+            return true;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Microsoft.Data.Sqlite.SqliteException
+                                           { SqliteExtendedErrorCode: 2067 }) // SQLITE_CONSTRAINT_UNIQUE
+        {
+            await transaction.RollbackAsync();
+            // Die bereits hinzugefügten Entitäten nicht beim nächsten SaveChanges nachschieben.
+            foreach (var task in tasks)
+                context.Entry(task).State = EntityState.Detached;
+            return false;
+        }
     }
 
     public async Task<HashSet<string>> GetCalendarEventIdsAsync()
@@ -543,13 +581,18 @@ public class TaskRepository(AppDbContext context) : ITaskRepository
                      && (t.Project == null || t.Project.Status != ProjectStatus.Archived))
             .ToListAsync();
 
+        // Projekte eines gelöschten (Papierkorb-)Arbeitsbereichs behalten ihre WorkspaceId,
+        // die App zeigt sie aber ungruppiert. Im Bericht zählen sie deshalb ebenfalls als
+        // "ohne Arbeitsbereich" – sonst fielen ihre Tasks ohne Hinweis heraus.
+        var activeWorkspaceIds = (await context.Workspaces.Select(w => w.Id).ToListAsync()).ToHashSet();
+
         // Filter im Speicher: Bei Sub-Tasks zählt das Projekt des Eltern-Tasks, und die
         // Mengen einer Woche sind klein.
         bool Matches(TaskItem t)
         {
             if (workspaceIds.Count == 0 && !withoutWorkspace) return true;
             var project = t.Project ?? t.ParentTask?.Project;
-            return project?.WorkspaceId is int ws
+            return project?.WorkspaceId is int ws && activeWorkspaceIds.Contains(ws)
                 ? workspaceIds.Contains(ws)
                 : withoutWorkspace;
         }

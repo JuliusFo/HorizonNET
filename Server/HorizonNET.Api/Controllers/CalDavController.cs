@@ -39,8 +39,8 @@ public class CalDavController(CalDavCalendarService caldav, CalendarSyncService 
             return Ok(new CalDavConnectResultDto(false, ex.Message, null));
         }
 
-        // Entweder-oder: Google trennen, alte Event-IDs verwerfen, geplante Tasks im
-        // Hintergrund in den gewählten Kalender spiegeln.
+        // Entweder-oder: Google trennen, bei einem Anbieterwechsel die alten Event-IDs
+        // verwerfen, geplante Tasks im Hintergrund in den gewählten Kalender spiegeln.
         await calendar.ConnectedAsync(caldav);
         return Ok(new CalDavConnectResultDto(true, null, await calendar.GetStatusAsync()));
     }

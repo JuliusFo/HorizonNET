@@ -32,6 +32,11 @@ public class GoogleController(GoogleCalendarService google, CalendarSyncService 
         try
         {
             await google.HandleCallbackAsync(code, RedirectUri());
+
+            // Entweder-oder: eine bestehende Nextcloud-Verbindung trennen und die geplanten
+            // Tasks im Hintergrund nach Google spiegeln. Im try, damit auch ein Fehler hier
+            // auf ?google=error landet statt als 500er im Browser.
+            await calendar.ConnectedAsync(google);
         }
         catch (GoogleScopeNotGrantedException)
         {
@@ -44,9 +49,6 @@ public class GoogleController(GoogleCalendarService google, CalendarSyncService 
             return Redirect(ClientReturnUrl("error"));
         }
 
-        // Entweder-oder: eine bestehende Nextcloud-Verbindung trennen und die geplanten
-        // Tasks im Hintergrund nach Google spiegeln.
-        await calendar.ConnectedAsync(google);
         return Redirect(ClientReturnUrl("connected"));
     }
 

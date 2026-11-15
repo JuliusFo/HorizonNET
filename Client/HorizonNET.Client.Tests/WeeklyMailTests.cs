@@ -78,6 +78,13 @@ public class WeeklyMailTests
     }
 
     [Fact]
+    public void MailtoUri_EncodesAddresses()
+    {
+        var uri = WeeklyMail.MailtoUri(["a@x.de?subject=fake"], ["b&c@y.de"], "S", "B");
+        Assert.StartsWith("mailto:a@x.de%3Fsubject%3Dfake?cc=b%26c@y.de&subject=S", uri);
+    }
+
+    [Fact]
     public void MailtoUri_OmitsCcWhenEmpty() =>
         Assert.DoesNotContain("cc=", WeeklyMail.MailtoUri(["a@x.de"], [], "S", "B"));
 

@@ -145,6 +145,10 @@
 
     private IEnumerable<WorkspaceResponseDto> Workspaces => WorkspaceState.Workspaces ?? [];
 
+    // Zählt jedes Öffnen mit. Eine Azure-Antwort, die erst nach dem Schließen (oder nach
+    // dem nächsten Öffnen) eintrifft, gehört zu einem alten Dialog und wird verworfen.
+    private int openGeneration;
+
     protected override async Task OnParametersSetAsync()
     {
         // Beim Öffnen einmalig befüllen; beim Schließen für das nächste Mal zurücksetzen.
@@ -153,13 +157,13 @@
 
         await WorkspaceState.EnsureLoadedAsync();
 
-        var azure = await Api.GetAzureDevOpsStatusAsync();
-        azureProjects = azure?.Connected == true ? await Api.GetAzureDevOpsProjectsAsync() ?? [] : null;
-
         loaded   = true;
         isSaving = false;
         error    = null;
+        azureProjects = null;
 
+        // Das Modell steht sofort: Wer schon tippt, während Azure DevOps noch antwortet,
+        // verliert nichts. Die Projektliste kommt danach und blendet nur die Auswahl ein.
         model = Project is null
             ? new ProjectFormModel { WorkspaceId = DefaultWorkspaceId }
             : new ProjectFormModel
@@ -172,6 +176,27 @@
                 WorkspaceId = Project.WorkspaceId,
                 AzureDevOpsProject = Project.AzureDevOpsProject
             };
+
+        _ = LoadAzureProjectsAsync(++openGeneration);
+    }
+
+    private async Task LoadAzureProjectsAsync(int generation)
+    {
+        List<string>? list;
+        try
+        {
+            var azure = await Api.GetAzureDevOpsStatusAsync();
+            list = azure?.Connected == true ? await Api.GetAzureDevOpsProjectsAsync() ?? [] : null;
+        }
+        catch (Exception)
+        {
+            // Ohne Antwort bleibt die Auswahl ausgeblendet; der Rest des Dialogs geht weiter.
+            return;
+        }
+
+        if (generation != openGeneration || !Visible) return;
+        azureProjects = list;
+        StateHasChanged();
     }
 
     private async Task SaveAsync()

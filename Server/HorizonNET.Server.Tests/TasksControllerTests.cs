@@ -115,16 +115,19 @@ public class TasksControllerTests
     // Die Kalender-Fassade ist eine konkrete Klasse und damit ein Pflichtparameter des
     // Controllers. Ohne gespeicherte Verbindung (weder Google noch Nextcloud) steigt jeder
     // Aufruf sofort wieder aus – es geht also nie etwas ins Netz.
-    internal static CalendarSyncService NewCalendarService(AppDbContext ctx)
+    //
+    // Mit http (Fake-Handler) lässt sich der Nextcloud-Weg ohne echten Server durchspielen.
+    internal static CalendarSyncService NewCalendarService(AppDbContext ctx, HttpClient? http = null,
+        CalendarSyncCoordinator? coordinator = null)
     {
         var config = new ConfigurationBuilder().Build();
         var tasks = new TaskRepository(ctx);
         var google = new GoogleCalendarService(config, new GoogleConnectionRepository(ctx), tasks);
-        var caldav = new CalDavCalendarService(new HttpClient(), new CalDavConnectionRepository(ctx), tasks,
+        var caldav = new CalDavCalendarService(http ?? new HttpClient(), new CalDavConnectionRepository(ctx), tasks,
             NullLogger<CalDavCalendarService>.Instance);
         var scopes = new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
 
         return new CalendarSyncService(google, caldav, tasks, new AppSettingRepository(ctx), scopes,
-            NullLogger<CalendarSyncService>.Instance);
+            coordinator ?? new CalendarSyncCoordinator(), NullLogger<CalendarSyncService>.Instance);
     }
 }
