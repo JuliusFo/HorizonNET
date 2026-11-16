@@ -17,6 +17,7 @@ Abschnitte je Version in dieser Reihenfolge, leere weglassen: **Sicherheit**, **
 - CI mit GitHub Actions: Build und Tests, Docker-Image und Zeilenenden bei jedem Push, jedem PR und montags.
 - Dependabot: wöchentliche Updates der GitHub Actions, Sicherheitsupdates für NuGet (Microsoft-Pakete gebündelt).
 - `CLAUDE.md` mit Projektanweisungen, dieser Changelog und der Skill `/release`.
+- Skill `/branch-code-review` mit HorizonNET-Checkliste, Regeln je Bereich in `.claude/rules/` und Architekturentscheidungen (ADRs 0001–0006) in `docs/decisions/`.
 
 ## [1.3.0] - 2026-11-15
 

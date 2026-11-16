@@ -372,7 +372,9 @@ FodyWeavers.xsd
 appsettings.Secrets.json
 
 # Lokale Planungs-/Konzeptdokumente (nicht committen)
-docs/
+docs/*
+# Ausnahme: Architekturentscheidungen (ADRs) gehören ins Repo.
+!docs/decisions/
 
 # Datenbank-Sicherungen (scripts/backup-database.ps1). Enthalten die Datenbank UND den
 # DataProtection-Schlüsselring – wer das committet, gibt die verschlüsselten Journal-

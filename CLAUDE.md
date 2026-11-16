@@ -3,10 +3,12 @@
 > Projektanweisungen für Claude Code. Arbeitssprache mit dem Nutzer: **Deutsch**. Code-Kommentare und Doku: **Deutsch**. Commit-Messages: **Englisch**.
 > Release-Stand: `<Version>` in `Directory.Build.props`, die Tags `vX.Y.Z` und `CHANGELOG.md`.
 
-Diese Datei lädt in jede Session und enthält nur, was immer gilt. Details stehen in `docs/` – der Ordner ist per `.gitignore` **nicht versioniert** und existiert nur auf dem Rechner des Nutzers.
+Diese Datei lädt in jede Session und enthält nur, was immer gilt. Die Fallen eines Bereichs stehen in `.claude/rules/` und laden, sobald eine passende Datei gelesen oder bearbeitet wird (`paths` im Kopf jeder Regel). Neue Fallen dort eintragen, wo sie gebraucht werden; eine neue Regel nur mit gültigem `paths`-Kopf (ohne lädt sie immer). `docs/` ist bis auf `docs/decisions/` per `.gitignore` **nicht versioniert** und existiert nur auf dem Rechner des Nutzers.
 
 | Datei | Lesen … |
 |---|---|
+| `docs/decisions/` – ADRs (Hosting, Datenhaltung, Verschlüsselung, Kalender, Betrieb, Versionierung) | vor Stack- oder Architekturänderungen; eine neue Entscheidung bekommt eine ADR |
+| `.claude/skills/` – `/release`, `/branch-code-review` (mit `checklist.md`) | beim Release bzw. Code-Review |
 | `docs/deployment-vserver.md` | vor jedem Deployment und vor Änderungen an `scripts/` |
 | `docs/konzept-*.md` (Journal, DPAPI-Umzug, Versionierung, Sport, Zeichnungen, Detail/Notizen/Daily) | bevor der jeweilige Bereich angefasst wird |
 | `README.md` | Docker-Betrieb, Kalender-Sync, Backup |
