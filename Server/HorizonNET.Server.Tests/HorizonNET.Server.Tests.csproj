@@ -27,6 +27,8 @@
          wird, was ein Controller aus der Anfrage macht, bevor er das Repository ruft –
          genau dort saß der Fehler, der Link und "Warten auf" beim Timer-Klick löschte. -->
     <ProjectReference Include="..\HorizonNET.Api\HorizonNET.Api.csproj" />
+    <!-- Spaltenliste des Schlüsselring-Tools gegen das Modell prüfen (KeyMigrationColumnsTests). -->
+    <ProjectReference Include="..\..\Tools\HorizonNET.KeyMigration\HorizonNET.KeyMigration.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -15,4 +15,9 @@
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- KeyMigrationColumnsTests vergleicht EncryptedColumns mit dem AppDbContext. -->
+    <InternalsVisibleTo Include="HorizonNET.Server.Tests" />
+  </ItemGroup>
+
 </Project>

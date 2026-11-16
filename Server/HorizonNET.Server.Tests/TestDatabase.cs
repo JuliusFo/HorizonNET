@@ -22,7 +22,7 @@ public sealed class TestDatabase : IDisposable
     // und der Verschlüsselungs-Konverter hält den Protector aus dem ersten Modellaufbau
     // fest. Ein Provider je TestDatabase würde bedeuten, dass ab dem zweiten Test mit
     // einem Schlüssel entschlüsselt wird, der nicht mehr zum Modell passt.
-    private static readonly IDataProtectionProvider Protection = new EphemeralDataProtectionProvider();
+    internal static readonly IDataProtectionProvider Protection = new EphemeralDataProtectionProvider();
 
     private readonly SqliteConnection _connection;
     private readonly DbContextOptions<AppDbContext> _options;

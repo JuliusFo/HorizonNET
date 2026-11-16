@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.DataProtection;
+using HorizonNET.KeyMigration;
 using Microsoft.Data.Sqlite;
 
 // Schlüsselring-Umzug für die verschlüsselten Spalten (siehe docs/konzept-dpapi-umzug.md).
@@ -7,19 +8,8 @@ using Microsoft.Data.Sqlite;
 //   verify    --db <pfad> --keys <ring>
 //   reprotect --db <pfad> --source-keys <ring> --target-keys <ring> [--target-dpapi]
 //
-// Die Spaltenliste und die Purpose-Strings MÜSSEN mit dem AppDbContext übereinstimmen –
-// ein neuer verschlüsselter Wert im Modell gehört auch hier eingetragen.
-var columns = new[]
-{
-    // Nachsichtig wie EncryptedConverter.Lenient: Der Refresh-Token-Altbestand kann noch
-    // Klartext sein; beim Umschlüsseln wird er dabei gleich mitverschlüsselt.
-    new EncryptedColumn("GoogleConnections", "RefreshToken", "HorizonNET.GoogleConnection.RefreshToken", Strict: false),
-    // Nachsichtig wie im Modell: Nicht entschlüsselbar heißt nur "neu verbinden".
-    new EncryptedColumn("CalDavConnections", "AppPassword",  "HorizonNET.CalDav.Password",               Strict: false),
-    new EncryptedColumn("JournalEntries",    "Content",      "HorizonNET.Journal.Content",               Strict: true),
-    new EncryptedColumn("JournalEntries",    "Title",        "HorizonNET.Journal.Title",                 Strict: true),
-    new EncryptedColumn("MoodEntries",       "Note",         "HorizonNET.Journal.MoodNote",              Strict: true),
-};
+// Die Spaltenliste steht in EncryptedColumns.cs.
+var columns = EncryptedColumns.All;
 
 try
 {
@@ -177,6 +167,3 @@ static string Arg(string[] args, string name)
         throw new ArgumentException($"Parameter {name} fehlt.");
     return args[i + 1];
 }
-
-// Strict spiegelt EncryptedConverter.Strict/Lenient: streng = Abbruch bei unlesbarem Wert.
-internal sealed record EncryptedColumn(string Table, string Column, string Purpose, bool Strict);

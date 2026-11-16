@@ -7,6 +7,9 @@ Abschnitte je Version in dieser Reihenfolge, leere weglassen: **Sicherheit**, **
 
 ## [Unreleased]
 
+### Behoben
+- Schlüsselring-Umzug (`HorizonNET.KeyMigration`): Der Azure-DevOps-PAT wird jetzt mit umgeschlüsselt. Bisher fehlte er in der Spaltenliste und wäre nach einem Umzug (etwa in einen Docker-Container) unlesbar gewesen; die Verbindung hätte neu eingerichtet werden müssen. Ein Test vergleicht die Liste jetzt mit dem Datenmodell.
+
 ### Intern
 - Gemeinsame Compiler-Einstellungen zentral in `Directory.Build.props`, inklusive `TreatWarningsAsErrors`: Jede neue Warnung bricht den Build ab, auch NuGetAudit-Meldungen.
 - SDK per `global.json` gepinnt, repo-lokales `nuget.config` (nur nuget.org, Source Mapping).
