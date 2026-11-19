@@ -50,7 +50,7 @@ docker compose start horizonnet
 
 **Healthcheck:** Das Image prüft sich selbst (`/healthz`), `docker ps` zeigt `healthy`/`unhealthy`.
 
-**Update:** `git pull && docker compose up -d --build`. Migrationen laufen beim Start automatisch.
+**Update:** `git pull && docker compose up -d --build`. Migrationen laufen beim Start automatisch. Neue Versionen meldet die App unter Einstellungen → „Über & Updates“ (`HORIZON_UPDATE_MODE`, Standard `Notify`; sie fragt dafür die GitHub-Releases ab).
 
 **Umzug einer bestehenden Windows-Installation:** Der DPAPI-geschützte Schlüsselring ist unter Linux nicht lesbar. Auf Windows mit `HorizonNET.KeyMigration reprotect` (ohne `--target-dpapi`) einen Transport-Ring erzeugen, dann DB + Transport-Ring ins Volume kopieren (`/data/horizonnet.db`, `/data/keys/`) und im Container prüfen:
 

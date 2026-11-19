@@ -30,6 +30,9 @@ services:
       # Google-Kalender (optional; Nextcloud wird in der App eingerichtet)
       Google__ClientId: "${GOOGLE_CLIENT_ID:-}"
       Google__ClientSecret: "${GOOGLE_CLIENT_SECRET:-}"
+      # Neue Versionen in den Einstellungen melden (Off = nicht prüfen). Installieren kann
+      # der Container sich nicht selbst: git pull && docker compose up -d --build
+      Update__Mode: "${HORIZON_UPDATE_MODE:-Notify}"
       TZ: "${TZ:-Europe/Berlin}"
     volumes:
       - horizonnet-data:/data

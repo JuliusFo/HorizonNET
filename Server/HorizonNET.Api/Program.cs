@@ -1,6 +1,8 @@
 using System.Reflection;
 using HorizonNET.Api.Services;
 using HorizonNET.Api.Services.Calendar;
+using HorizonNET.Api.Services.Update;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.AspNetCore.DataProtection;
 using HorizonNET.Data;
 using HorizonNET.Data.Repositories;
@@ -119,6 +121,18 @@ builder.Services.AddScoped<CalendarSyncService>();
 
 // Azure-DevOps-Import (PAT, REST-API). Typed HttpClient: Handler-Pooling über die Factory.
 builder.Services.AddHttpClient<AzureDevOpsService>(c => c.Timeout = TimeSpan.FromSeconds(30));
+
+// Auto-Update (ADR 0007): Update:Mode Off (Standard) | Notify | Install. Die Prüfung fragt das
+// neueste GitHub-Release ab; installiert wird von der geplanten Aufgabe "HorizonNET Update"
+// (Tools/HorizonNET.Updater, als SYSTEM), die UpdateCoordinator nur anstößt.
+builder.Services.Configure<UpdateOptions>(builder.Configuration.GetSection("Update"));
+builder.Services.AddSingleton(AppVersionInfo.FromAssembly(typeof(Program).Assembly));
+builder.Services.TryAddSingleton(TimeProvider.System);
+builder.Services.AddHttpClient(UpdateCheckService.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddSingleton<UpdateCheckService>();
+builder.Services.AddSingleton<IUpdateTaskStarter, SchtasksUpdateTaskStarter>();
+builder.Services.AddSingleton<UpdateCoordinator>();
+builder.Services.AddHostedService<UpdateCheckHost>();
 
 // Terminserien materialisieren: scoped Generator (DbContext + Kalender-Sync) und der Hosted
 // Service, der ihn beim Start und täglich anstößt.

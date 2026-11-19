@@ -21,10 +21,12 @@ Abschnitte je Version in dieser Reihenfolge, leere weglassen: **Sicherheit**, **
 - Deployment-Paket self-contained (`win-x64`): `scripts/deploy-package.ps1` bringt die Runtime im Patch der Microsoft-Pakete mit, legt `manifest.json` ins Paket und eine `.sha256` daneben und bricht ab, wenn Entwicklungs-Konfiguration im Paket landen würde oder die Runtime nicht passt. Das ZIP heißt jetzt `HorizonNET-X.Y.Z-win-x64.zip`. Vorbereitung für das Auto-Update (ADR 0007, vorgeschlagen).
 - Release-Workflow (`.github/workflows/release.yml`): Baut beim Veröffentlichen eines GitHub-Releases das Deployment-Paket aus dem Tag und hängt ZIP und `.sha256` an das Release; `/release` wartet darauf.
 - Updater `Tools/HorizonNET.Updater` (im Paket unter `updater\`): lädt das Paket des neuesten Releases, prüft die Prüfsumme, stoppt den Dienst, sichert DB und Schlüsselring (die letzten 5 Sicherungen bleiben), tauscht `app\`, `tools\` und `updater\`, startet den Dienst und prüft `/api/version`. Bei einem Fehler rollt er Programm und, falls die neue Version schon lief, DB zurück; ein Journal macht abgebrochene Läufe wiederherstellbar. Das Paket wächst dadurch auf etwa 160 MB.
+- API für das Auto-Update: `UpdateCheckService` fragt das neueste GitHub-Release ab (2 Minuten nach dem Start, dann alle 6 Stunden, ohne Token), `GET /api/update`, `POST /api/update/check` und `POST /api/update/install` (schreibt `updateequestequest.json` und startet die geplante Aufgabe). Einstellung `Update:Mode` (`Off`, `Notify`, `Install`), Standard `Off`.
 
 ### Deployment
 - Das Paket ist self-contained: Beim Einspielen den Inhalt von `app\` und `tools\` ersetzen statt darüberzukopieren. Danach braucht der vServer keine ASP.NET Core Runtime mehr; sie kann bleiben, bis das neue Paket einmal sauber gelaufen ist.
 - Umstieg auf das Auto-Update: nach dem Sichern `server-install.ps1 -SkipService` aus dem entpackten Paket als Administrator ausführen. Das ersetzt `app\`, `tools\` und `updater\`, setzt engere Ordnerrechte (das Dienstkonto schreibt nur noch in `data\`, `keys\` und `update\request\`), die Variablen `Update__Mode`, `Update__Directory`, `Update__TaskName` und legt die geplante Aufgabe „HorizonNET Update“ an. Danach ein Probe-Update mit dem nächsten Patch-Release.
+- Docker: `Update__Mode` steht in `docker-compose.yml` auf `Notify` (`HORIZON_UPDATE_MODE` in `.env`, `Off` schaltet die Prüfung ab).
 
 ## [1.3.0] - 2026-11-15
 
