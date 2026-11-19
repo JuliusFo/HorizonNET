@@ -29,17 +29,22 @@ Vorschlag (nicht bestätigt), Details in `docs/konzept-auto-update.md`:
 - **Prüfung in der API** (`Update:Mode` = `Off` | `Notify` | `Install`): Prüfung beim Start und alle
   6 Stunden gegen `releases/latest` des öffentlichen Repos, ohne Token. Anzeige in den Einstellungen
   mit Release-Notes als Text.
-- **Installation durch `Tools/HorizonNET.Updater`**, gestartet als geplante Aufgabe unter SYSTEM. Das
-  Dienstkonto darf genau diese Aufgabe starten, sonst nichts. Der Updater installiert immer das
-  neueste Release mit Paket aus dem fest eingebauten Repo und nimmt aus der Anfrage keine Pfade,
-  URLs oder Versionen.
+- **Installation durch `Tools/HorizonNET.Updater`**, gestartet als geplante Aufgabe „HorizonNET
+  Update“ unter SYSTEM. Das Dienstkonto darf genau diese Aufgabe starten, sonst nichts; der Start ist
+  der ganze Auftrag, das Dienstkonto schreibt nichts, was der Updater liest. Der Updater installiert
+  immer das neueste Release mit Paket aus dem fest eingebauten Repo. Eine zweite Aufgabe „HorizonNET
+  Recover“ rollt beim Systemstart ein unterbrochenes Update zurück; sie kann das Dienstkonto nicht
+  starten.
 - **Ablauf:** `prepare` (installierte Version) lädt, prüft und entpackt das Paket und übergibt an
   `apply` aus dem neuen Paket. `apply` stoppt den Dienst, sichert DB und Schlüsselring, tauscht
   `app\`/`tools\`/`updater\` (der alte Stand bleibt als `*.previous`), startet den Dienst und prüft
   `/api/version`. Bei einem Fehler rollt es Programm **und DB** zurück. Ein Journal macht einen
-  abgebrochenen Lauf wiederherstellbar.
+  abgebrochenen Lauf wiederherstellbar; während des Tauschs steht der Dienst auf „Deaktiviert“.
 - **Engere Ordnerrechte:** Das Dienstkonto darf Programmordner nur lesen und ausführen, Sicherungen
-  gar nicht sehen.
+  gar nicht sehen. Was es beschreiben kann (`data\`, `keys\`), sichert und spielt der Updater nur
+  dateiweise zurück, ohne Verweisen (Reparse Points) zu folgen. Vorschlag (nicht bestätigt): Ein
+  schmales Zeitfenster zwischen Prüfung und Kopie (TOCTOU) bleibt und wird hingenommen; es ganz zu
+  schließen bräuchte Dateizugriffe über Handles (Review 2026-11-19).
 - Docker bleibt bei `git pull && docker compose up -d --build`, mit Hinweis auf neue Versionen.
 
 ## Konsequenzen
