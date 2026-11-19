@@ -19,6 +19,7 @@ Abschnitte je Version in dieser Reihenfolge, leere weglassen: **Sicherheit**, **
 - `CLAUDE.md` mit Projektanweisungen, dieser Changelog und der Skill `/release`.
 - Skill `/branch-code-review` mit HorizonNET-Checkliste, Regeln je Bereich in `.claude/rules/` und Architekturentscheidungen (ADRs 0001–0006) in `docs/decisions/`.
 - Deployment-Paket self-contained (`win-x64`): `scripts/deploy-package.ps1` bringt die Runtime im Patch der Microsoft-Pakete mit, legt `manifest.json` ins Paket und eine `.sha256` daneben und bricht ab, wenn Entwicklungs-Konfiguration im Paket landen würde oder die Runtime nicht passt. Das ZIP heißt jetzt `HorizonNET-X.Y.Z-win-x64.zip`. Vorbereitung für das Auto-Update (ADR 0007, vorgeschlagen).
+- Release-Workflow (`.github/workflows/release.yml`): Baut beim Veröffentlichen eines GitHub-Releases das Deployment-Paket aus dem Tag und hängt ZIP und `.sha256` an das Release; `/release` wartet darauf.
 
 ### Deployment
 - Das Paket ist self-contained: Beim Einspielen den Inhalt von `app\` und `tools\` ersetzen statt darüberzukopieren. Danach braucht der vServer keine ASP.NET Core Runtime mehr; sie kann bleiben, bis das neue Paket einmal sauber gelaufen ist.

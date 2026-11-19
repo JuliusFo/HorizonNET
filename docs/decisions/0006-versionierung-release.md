@@ -20,3 +20,12 @@ Bis zum Livegang zählte die Minor-Version die abgeschlossenen Phasen (0.9.0 …
 - Die Versionen vor 1.3.0 haben keine Tags; ihre Historie steht nachgetragen im CHANGELOG.
 - Das Deployment auf den vServer bleibt ein manueller Schritt nach dem Release; `/release` listet ihn auf.
 - An das GitHub-Release werden keine Dateien angehängt; das Deployment-Paket entsteht lokal.
+
+## Nachtrag (2026-11-19): Deployment-Paket am Release
+
+Im Rahmen des Auto-Updates (ADR 0007, vorgeschlagen):
+
+- `.github/workflows/release.yml` läuft bei `release: published`, baut aus dem Tag mit `scripts/deploy-package.ps1` das Paket `HorizonNET-X.Y.Z-win-x64.zip` und hängt es samt `.sha256` an das Release. Vorher prüft er, dass Tag, `<Version>` und CHANGELOG-Abschnitt übereinstimmen.
+- Zwei Jobs: Der Build hat nur Leserechte; der Upload-Job hat Schreibrecht, führt aber keinen Code aus dem Repo oder aus Paketen aus. Die Actions sind auf Commits gepinnt.
+- `/release` hängt weiterhin nichts von Hand an, wartet aber auf diesen Workflow und meldet, ob beide Dateien am Release hängen. Die Konsequenz „keine Dateien am Release, das Paket entsteht lokal“ gilt damit nicht mehr; der lokale Bau bleibt als Probe vor dem Tag und als Notfallweg.
+- Releases vor diesem Nachtrag (bis 1.3.0) haben kein Paket.

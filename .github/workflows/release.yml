@@ -1,0 +1,130 @@
+# Deployment-Paket an ein GitHub-Release hängen (ADR 0007, Paket b).
+#
+# Läuft, sobald ein Release veröffentlicht ist (/release legt es mit `gh release create` an), und
+# baut das Paket aus dem Tag dieses Releases: scripts/deploy-package.ps1, also self-contained
+# win-x64 samt manifest.json und .sha256. Der Updater auf dem vServer installiert später nur ein
+# Release, an dem beide Dateien hängen.
+#
+# Von Hand gestartet (workflow_dispatch) baut er das Paket aus dem gewählten Branch nur als
+# Workflow-Artefakt und fasst kein Release an.
+#
+# Zwei Jobs wie in PokeArena: Der Build führt Code aus dem Repo und aus NuGet-Paketen aus (MSBuild-
+# Targets, Analyzer) und bekommt deshalb nur Leserechte. Schreiben darf allein der Upload-Job, und
+# der führt nichts aus dem Repo aus, nur `gh release upload`.
+#
+# Build und Tests laufen hier nicht noch einmal: /release taggt nur einen Commit, dessen CI grün
+# ist. Den Publish samt Runtime-Prüfung macht das Skript.
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Ein zweiter Lauf für dasselbe Release (etwa „Re-run“) wartet, statt den ersten abzubrechen.
+concurrency:
+  group: release-${{ github.event.release.tag_name || github.ref }}
+  cancel-in-progress: false
+
+# Actions auf Commits gepinnt: Was dieser Workflow baut, installiert der Updater als SYSTEM auf dem
+# Server. Ein verschobener Tag soll daran nichts ändern. Dependabot hält die Pins aktuell.
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build:
+    name: Paket bauen
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      # Beim Release-Ereignis ist github.ref der Tag des Releases.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+
+      # Tag, <Version> und CHANGELOG müssen übereinstimmen, sonst trüge das Paket eine andere
+      # Version als das Release, und der Updater käme nie ans Ziel. Prüft vor dem Build.
+      # Werte von außen (der Tag-Name) gelangen nur über env ins Skript, nie in den Skripttext.
+      - name: Version prüfen
+        if: github.event_name == 'release'
+        shell: pwsh
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if ($env:TAG -notmatch '^v(\d+\.\d+\.\d+)$') { throw "Tag '$env:TAG' hat nicht die Form vX.Y.Z." }
+          $version = $Matches[1]
+          $props = [xml](Get-Content Directory.Build.props -Raw -Encoding utf8)
+          $declared = @($props.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ })[0]
+          if ($declared -ne $version) { throw "Tag $env:TAG passt nicht zu <Version>$declared</Version> in Directory.Build.props." }
+          $changelog = Get-Content CHANGELOG.md -Encoding utf8
+          if (-not ($changelog -match "^## \[$([regex]::Escape($version))\]")) { throw "CHANGELOG.md hat keinen Abschnitt für $version." }
+          Write-Host "Version $version passt zu Tag, Directory.Build.props und CHANGELOG."
+
+      - name: Paket bauen
+        shell: pwsh
+        run: ./scripts/deploy-package.ps1 -OutputDirectory package
+
+      # Genau ein ZIP mit Prüfsumme, und beim Release mit der Version des Tags im Namen.
+      - name: Paket prüfen
+        shell: pwsh
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          $zips = @(Get-ChildItem package -File -Filter 'HorizonNET-*-win-x64.zip')
+          if ($zips.Count -ne 1) { throw "Erwartet genau ein Paket, gefunden: $($zips.Count)." }
+          $zip = $zips[0]
+          if ($env:TAG -and $zip.Name -ne "HorizonNET-$($env:TAG.TrimStart('v'))-win-x64.zip") {
+            throw "$($zip.Name) passt nicht zu Tag $env:TAG."
+          }
+          $expected = ((Get-Content "$($zip.FullName).sha256" -Raw) -split '\s+')[0]
+          $actual = (Get-FileHash $zip.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($expected -ne $actual) { throw "Prüfsumme in $($zip.Name).sha256 stimmt nicht." }
+          Get-ChildItem package -File | ForEach-Object { Write-Host "$($_.Name) ($([math]::Round($_.Length / 1MB, 1)) MB)" }
+
+      - name: Paket als Artefakt hochladen
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: package
+          path: package/
+          if-no-files-found: error
+          # Schon komprimiert; ein zweites Mal lohnt nicht.
+          compression-level: 0
+
+  upload:
+    name: An das Release hängen
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Der einzige Job mit Schreibrecht. Er führt keinen Code aus dem Repo oder aus Paketen aus.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: package
+          path: package
+
+      # Erst das ZIP, dann die Prüfsumme: Der Updater zählt ein Release erst, wenn beide da sind,
+      # und findet so nie eine Prüfsumme ohne fertiges ZIP. --clobber, damit ein erneuter Lauf
+      # dieselben Dateien ersetzen kann.
+      - name: Hochladen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          zip=$(ls package/HorizonNET-*-win-x64.zip)
+          gh release upload "$TAG" "$zip" --clobber
+          gh release upload "$TAG" "$zip.sha256" --clobber
+          gh release view "$TAG" --json assets --jq '.assets[] | "\(.name) \(.size)"'

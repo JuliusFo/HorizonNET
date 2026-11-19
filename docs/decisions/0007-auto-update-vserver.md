@@ -44,8 +44,8 @@ Vorschlag (nicht bestätigt), Details in `docs/konzept-auto-update.md`:
 
 ## Konsequenzen
 
-- Nach der Freigabe bekommen ADR 0005 (self-contained, keine Runtime auf dem Server) und ADR 0006
-  (Dateien am Release) je einen Nachtrag.
+- ADR 0005 (self-contained, keine Runtime auf dem Server) und ADR 0006 (Paket am Release) haben je
+  einen Nachtrag.
 - Ein .NET-Sicherheitsupdate erreicht den Server nur über ein HorizonNET-Patch-Release. Das Paket
   bricht ab, wenn seine Runtime nicht zum Patch der Microsoft-Pakete passt.
 - Wer das GitHub-Konto oder den Workflow übernimmt, kann Code auf den Server bringen, der beim
