@@ -41,6 +41,7 @@ Server/HorizonNET.Data/              AppDbContext, Migrationen, Repositories
 Server/HorizonNET.Api/               Controller, Services, Program.cs; liefert den Client aus
 Client/HorizonNET.App/               Blazor WASM (Pages, Components, Services)
 Tools/HorizonNET.KeyMigration/       Schlüsselring-Umzug (DPAPI ↔ Transport-Ring), auch im Deployment-Paket
+Tools/HorizonNET.Updater/            Auto-Update auf dem vServer (geplante Aufgabe unter SYSTEM, ADR 0007)
 scripts/                             Migrationen, Deployment-Paket, Server-Installation, Backup
 ```
 

@@ -7,10 +7,11 @@
       - app\           Release-Publish der API (liefert auch den Blazor-Client aus)
       - tools\         HorizonNET.KeyMigration (für den Schlüsselring-Umzug, siehe
                        docs\konzept-dpapi-umzug.md)
+      - updater\       HorizonNET.Updater als eine Datei (Auto-Update, ADR 0007)
       - server-install.ps1 (Einrichtung auf dem Server, einmalig)
       - manifest.json  Version, Commit, Build-Zeit, Runtime-ID und mitgelieferte Runtime
 
-    API und Tool sind self-contained (win-x64) veröffentlicht: Das Paket bringt die
+    API, Tool und Updater sind self-contained (win-x64) veröffentlicht: Das Paket bringt die
     .NET- und ASP.NET-Core-Runtime mit, auf dem Server muss keine installiert sein
     (ADR 0005, Nachtrag 2026-11-19). Das Dockerfile veröffentlicht weiterhin
     framework-abhängig; die Einstellung steckt bewusst nur hier, nicht in den .csproj.
@@ -81,6 +82,12 @@ if ($LASTEXITCODE -ne 0) { throw 'Publish der API fehlgeschlagen.' }
 Write-Host 'Publish des Umzugs-Tools (self-contained)…'
 dotnet publish (Join-Path $repoRoot 'Tools\HorizonNET.KeyMigration') @publishArgs -o (Join-Path $staging 'tools')
 if ($LASTEXITCODE -ne 0) { throw 'Publish des Tools fehlgeschlagen.' }
+
+Write-Host 'Publish des Updaters (self-contained, eine Datei)…'
+dotnet publish (Join-Path $repoRoot 'Tools\HorizonNET.Updater') @publishArgs -o (Join-Path $staging 'updater')
+if ($LASTEXITCODE -ne 0) { throw 'Publish des Updaters fehlgeschlagen.' }
+# Die .pdb braucht auf dem Server niemand; das Log nennt Fehler ohne Zeilennummern.
+Get-ChildItem (Join-Path $staging 'updater') -Filter '*.pdb' | Remove-Item
 
 Copy-Item (Join-Path $PSScriptRoot 'server-install.ps1') $staging
 

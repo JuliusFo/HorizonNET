@@ -29,6 +29,8 @@
     <ProjectReference Include="..\HorizonNET.Api\HorizonNET.Api.csproj" />
     <!-- Spaltenliste des Schlüsselring-Tools gegen das Modell prüfen (KeyMigrationColumnsTests). -->
     <ProjectReference Include="..\..\Tools\HorizonNET.KeyMigration\HorizonNET.KeyMigration.csproj" />
+    <!-- Abläufe des Updaters (Updater/*Tests) mit Attrappen für Dienst, Netz und Rechte. -->
+    <ProjectReference Include="..\..\Tools\HorizonNET.Updater\HorizonNET.Updater.csproj" />
   </ItemGroup>
 
   <ItemGroup>

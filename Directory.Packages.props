@@ -32,6 +32,8 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.15" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.15" />
     <PackageVersion Include="Microsoft.Extensions.Localization" Version="10.0.15" />
+    <!-- Dienst stoppen und starten im Updater (Tools/HorizonNET.Updater). -->
+    <PackageVersion Include="System.ServiceProcess.ServiceController" Version="10.0.15" />
   </ItemGroup>
 
   <ItemGroup Label="Drittanbieter">
