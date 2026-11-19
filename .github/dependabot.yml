@@ -3,8 +3,8 @@
 # - GitHub Actions: wöchentliche Versions-Updates, alle in einem PR.
 # - NuGet: nur Sicherheitsupdates, keine regelmäßigen Versions-Updates
 #   (open-pull-requests-limit: 0). Die Microsoft-Pakete kommen gemeinsam in einem PR, weil
-#   sie auf denselben Patch gehören wie die ASP.NET Core Runtime auf dem vServer – nach dem
-#   Merge also dort die Runtime und im Dockerfile ASPNET_VERSION nachziehen.
+#   sie auf denselben Patch gehören: Das self-contained Deployment-Paket nimmt ihn als
+#   Runtime. Nach dem Merge im Dockerfile ASPNET_VERSION nachziehen.
 #   Versionen stehen zentral in Directory.Packages.props (Central Package Management).
 #   Sicherheitsupdates brauchen in den Repo-Einstellungen „Dependabot alerts“ und
 #   „Dependabot security updates“.

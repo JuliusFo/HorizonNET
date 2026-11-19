@@ -7,6 +7,8 @@
 @inject ToastService Toast
 @inject ConfirmService Confirm
 @inject AuthState Auth
+@inject UpdateState Updates
+@implements IDisposable
 
 <PageTitle>Einstellungen – HorizonNET</PageTitle>
 
@@ -412,14 +414,14 @@
 </div>
 
 <div class="card settings-card">
-    <div class="card-header fw-semibold">Über</div>
+    <div class="card-header fw-semibold">Über &amp; Updates</div>
     <div class="card-body">
         <dl class="row mb-0">
             <dt class="col-sm-4 fw-normal text-muted">Client-Version</dt>
             <dd class="col-sm-8">@Version.ClientVersionShort</dd>
 
             <dt class="col-sm-4 fw-normal text-muted">API-Version</dt>
-            <dd class="col-sm-8 mb-0">
+            <dd class="col-sm-8">
                 @if (Version.ApiVersionShort is { } v)
                 {
                     <span>@v</span>
@@ -431,6 +433,100 @@
                 else
                 {
                     <span class="text-muted">nicht erreichbar</span>
+                }
+            </dd>
+
+            <dt class="col-sm-4 fw-normal text-muted">Updates</dt>
+            <dd class="col-sm-8 mb-0">
+                @if (Updates.Info is not { } update)
+                {
+                    <span class="text-muted">Stand nicht abrufbar</span>
+                }
+                else if (update.Mode == UpdateMode.Off)
+                {
+                    <span class="text-muted">Prüfung ausgeschaltet (Update:Mode)</span>
+                }
+                else
+                {
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <span class="text-muted">
+                            @(update.LastCheckUtc is { } checkedAt
+                                ? $"Zuletzt geprüft {checkedAt.ToLocalTime():dd.MM.yyyy HH:mm}"
+                                : "Noch nicht geprüft")
+                        </span>
+                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                                disabled="@(updateBusy || update.IsInstalling)" @onclick="CheckUpdateAsync">
+                            @(updateBusy ? "Prüfe…" : "Jetzt prüfen")
+                        </button>
+                    </div>
+
+                    @if (update.CheckError is { } checkError)
+                    {
+                        <div class="small text-warning-emphasis mt-1">@checkError</div>
+                    }
+
+                    @if (update.IsInstalling || Updates.Watching)
+                    {
+                        <div class="mt-2 d-flex align-items-center gap-2">
+                            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                            <span>@(update.LastRun?.Message ?? "Update läuft…")</span>
+                        </div>
+                        <div class="small text-muted">Der Dienst ist dabei etwa eine Minute nicht erreichbar.</div>
+                    }
+                    else if (update.Available is { } available)
+                    {
+                        <div class="mt-2">
+                            <div class="fw-semibold">
+                                Version @available.Version verfügbar
+                                @if (available.PublishedAt is { } published)
+                                {
+                                    <span class="fw-normal text-muted small"> · @published.ToLocalTime().ToString("dd.MM.yyyy")</span>
+                                }
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(available.Notes))
+                            {
+                                @* Release-Notes kommen von GitHub: nur als Text, nie als HTML. *@
+                                <pre class="update-notes">@available.Notes</pre>
+                            }
+                            <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                                @if (update.Mode == UpdateMode.Install)
+                                {
+                                    <button type="button" class="btn btn-primary btn-sm"
+                                            disabled="@(!update.CanInstall || updateBusy)" @onclick="InstallUpdateAsync">
+                                        Jetzt aktualisieren
+                                    </button>
+                                }
+                                else
+                                {
+                                    <span class="small">Auf dem Server: <code>git pull &amp;&amp; docker compose up -d --build</code></span>
+                                }
+                                @if (available.Url is { } releaseUrl)
+                                {
+                                    <a class="small" href="@releaseUrl" target="_blank" rel="noopener noreferrer">Release auf GitHub</a>
+                                }
+                            </div>
+                        </div>
+                    }
+                    else if (update.LastCheckUtc is not null && update.CheckError is null)
+                    {
+                        <div class="small text-success mt-1">HorizonNET ist aktuell.</div>
+                    }
+
+                    @if (update.LastRun is { } run && !update.IsInstalling && run.Phase != UpdatePhase.NoUpdate)
+                    {
+                        <div class="small mt-2">
+                            <span class="text-muted">Letztes Update@(run.TargetVersion is { } target ? $" auf {target}" : ""):</span>
+                            <span class="@UpdateTexts.PhaseCss(run.Phase)">@UpdateTexts.Phase(run.Phase)</span>
+                            @if (run.FinishedUtc is { } finished)
+                            {
+                                <span class="text-muted"> · @finished.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
+                            }
+                            @if (run.Phase != UpdatePhase.Succeeded)
+                            {
+                                <div class="text-muted">@run.Message</div>
+                            }
+                        </div>
+                    }
                 }
             </dd>
         </dl>
@@ -493,10 +589,49 @@
         await AppSettings.EnsureLoadedAsync();
         await JournalLock.EnsureLoadedAsync();
         await Version.EnsureApiLoadedAsync();
+        Updates.OnChange += OnUpdatesChanged;
+        await Updates.RefreshAsync();
         await LoadCalendarStatusAsync();
         azureStatus = await Api.GetAzureDevOpsStatusAsync() ?? new AzureDevOpsStatusDto(false, null, null);
 
     }
+
+    // ── Über & Updates ───────────────────────────────────────────────────────────
+
+    private bool updateBusy;
+
+    private void OnUpdatesChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private async Task CheckUpdateAsync()
+    {
+        updateBusy = true;
+        await Updates.CheckNowAsync();
+        updateBusy = false;
+    }
+
+    private async Task InstallUpdateAsync()
+    {
+        var target = Updates.Info?.Available?.Version;
+        if (target is null) return;
+
+        var confirmed = await Confirm.ShowAsync(
+            $"Auf {target} aktualisieren?",
+            "Der Dienst ist etwa eine Minute nicht erreichbar. Datenbank und Schlüsselring werden vorher " +
+            "gesichert; scheitert das Update, stellt der Updater den alten Stand wieder her.",
+            confirmLabel: "Jetzt aktualisieren", danger: false);
+        if (!confirmed) return;
+
+        updateBusy = true;
+        var error = await Updates.InstallAsync();
+        updateBusy = false;
+
+        if (error is not null)
+            Toast.ShowError(error);
+        else
+            Toast.ShowInfo($"Update auf {target} gestartet.");
+    }
+
+    public void Dispose() => Updates.OnChange -= OnUpdatesChanged;
 
     private async Task OnReminderChanged(ChangeEventArgs e)
     {

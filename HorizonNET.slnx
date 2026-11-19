@@ -14,5 +14,6 @@
   </Folder>
   <Folder Name="/Tools/">
     <Project Path="Tools/HorizonNET.KeyMigration/HorizonNET.KeyMigration.csproj" />
+    <Project Path="Tools/HorizonNET.Updater/HorizonNET.Updater.csproj" />
   </Folder>
 </Solution>

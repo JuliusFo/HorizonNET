@@ -61,7 +61,7 @@ Ein Sicherheitsbefund nennt den konkreten Weg von der Quelle zur Senke, die fehl
 
 - `CHANGELOG.md` unter `[Unreleased]` eingetragen, bei Migrationen oder neuen Einstellungen auch im Abschnitt **Deployment**.
 - `README.md` (Docker), `docs/deployment-vserver.md`, `.env.example` und `CLAUDE.md` nach der Änderung noch richtig.
-- Neue Dateien, die der Restore braucht, im `Dockerfile` vor `dotnet restore`; Microsoft-Pakete gemeinsam auf einem Patch, passend zu `ASPNET_VERSION` und der Runtime auf dem vServer.
+- Neue Dateien, die der Restore braucht, im `Dockerfile` vor `dotnet restore`; Microsoft-Pakete gemeinsam auf einem Patch, passend zu `ASPNET_VERSION` (das self-contained Deployment-Paket nimmt diesen Patch als Runtime).
 - PowerShell-Skripte als UTF-8 mit BOM.
 
 ## Kein Befund

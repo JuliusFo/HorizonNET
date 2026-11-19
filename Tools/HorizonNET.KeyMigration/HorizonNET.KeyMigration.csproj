@@ -5,6 +5,11 @@
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
 
+  <!-- Self-contained Deployment-Paket: Runtime-Patch wie die API (Erklärung in HorizonNET.Api.csproj). -->
+  <PropertyGroup Condition="'$(HorizonRuntimeVersion)' != ''">
+    <RuntimeFrameworkVersion>$(HorizonRuntimeVersion)</RuntimeFrameworkVersion>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- DataProtectionProvider.Create für eigenständige Provider je Schlüsselring-Ordner -->
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.Extensions" />

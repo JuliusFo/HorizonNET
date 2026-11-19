@@ -4,6 +4,15 @@
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
 
+  <!-- Self-contained Deployment-Paket (scripts/deploy-package.ps1): Die mitgelieferte Runtime
+       ist der Patch der Microsoft-Pakete, nicht die des installierten SDK. Bewusst eine eigene
+       Eigenschaft statt -p:RuntimeFrameworkVersion: Globale Eigenschaften gelten auch für den
+       referenzierten WASM-Client, und dessen Trimmer läuft dann auf einer Runtime, die lokal
+       fehlen kann. Ohne die Eigenschaft (Docker, Visual Studio) ändert sich nichts. -->
+  <PropertyGroup Condition="'$(HorizonRuntimeVersion)' != ''">
+    <RuntimeFrameworkVersion>$(HorizonRuntimeVersion)</RuntimeFrameworkVersion>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Google.Apis.Auth" />
     <PackageReference Include="Google.Apis.Calendar.v3" />

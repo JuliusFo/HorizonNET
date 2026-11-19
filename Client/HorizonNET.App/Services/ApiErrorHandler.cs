@@ -19,10 +19,24 @@ namespace HorizonNET.App.Services;
 // späte Auflösung durchbricht diesen Kreis.
 public class ApiErrorHandler(ToastService toast, Func<AuthState> auth) : DelegatingHandler
 {
+    // Leise Anfragen melden Fehler nicht per Toast, sondern liefern sie dem Aufrufer wie sonst
+    // auch (GET → null, sonst Statuscode). Für das Abfragen während eines Updates, wenn der
+    // Server absichtlich kurz weg ist, und für Aufrufe, die ihre Fehlermeldung selbst zeigen.
+    public static readonly HttpRequestOptionsKey<bool> Quiet = new("HorizonNET.Quiet");
+
+    public static HttpRequestMessage QuietRequest(HttpMethod method, string url)
+    {
+        var request = new HttpRequestMessage(method, url);
+        request.Options.Set(Quiet, true);
+        return request;
+    }
+
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var isGet = request.Method == HttpMethod.Get;
+        if (request.Options.TryGetValue(Quiet, out var quiet) && quiet)
+            return await SendQuietAsync(request, isGet, cancellationToken);
 
         // Die Auth-Endpunkte werten ihre Statuscodes selbst aus (401 heißt dort
         // "falsches Passwort" bzw. "keine Sitzung", nicht "Fehler") – nichts anfassen.
@@ -74,6 +88,24 @@ public class ApiErrorHandler(ToastService toast, Func<AuthState> auth) : Delegat
 
         toast.ShowError("Änderung konnte nicht gespeichert werden.");
         return response;
+    }
+
+    private async Task<HttpResponseMessage> SendQuietAsync(
+        HttpRequestMessage request, bool isGet, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await base.SendAsync(request, cancellationToken);
+            if (response.IsSuccessStatusCode || !isGet) return response;
+            response.Dispose();
+            return EmptyJson(request);
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            return isGet
+                ? EmptyJson(request)
+                : new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) { RequestMessage = request };
+        }
     }
 
     // Synthetische 200-Antwort mit JSON-null, damit GetFromJsonAsync null liefert.

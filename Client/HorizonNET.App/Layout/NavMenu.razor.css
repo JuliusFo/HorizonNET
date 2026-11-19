@@ -227,3 +227,13 @@
     }
 }
 
+/* Hinweis-Punkt: Update verfügbar (ADR 0007) */
+.nav-update-dot {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    margin-left: 0.4rem;
+    border-radius: 50%;
+    background-color: #ffc107;
+    vertical-align: middle;
+}

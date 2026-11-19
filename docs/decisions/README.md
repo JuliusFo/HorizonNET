@@ -12,6 +12,7 @@ Dieser Ordner ist versioniert; der Rest von `docs/` (Konzepte, Planung) bleibt l
 | [0004](0004-kalender-provider.md) | Kalender-Sync: Google oder CalDAV, nur in eine Richtung | akzeptiert |
 | [0005](0005-betrieb-vserver.md) | Betrieb als Windows-Dienst hinter Cloudflare Tunnel, Docker als Alternative | akzeptiert |
 | [0006](0006-versionierung-release.md) | Versionierung und Release: SemVer, CHANGELOG, Tags, `/release` | akzeptiert |
+| [0007](0007-auto-update-vserver.md) | Auto-Update auf dem vServer: eigener Updater als geplante Aufgabe, Paket am Release, self-contained | vorgeschlagen |
 
 Die ADRs 0001–0006 sind am 2026-11-16 nachträglich aufgeschrieben worden; sie halten Entscheidungen fest, die vorher schon getroffen und umgesetzt waren.
 
