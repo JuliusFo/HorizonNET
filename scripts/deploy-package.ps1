@@ -56,17 +56,16 @@ $runtimeId = 'win-x64'
 if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
 New-Item -ItemType Directory -Force $staging | Out-Null
 
-# Runtime-Version = Patch der Microsoft-Pakete (ASP.NET Core und Extensions erscheinen im
-# Gleichschritt mit der Runtime). Ohne Vorgabe nähme der Publish die Runtime, die das gerade
-# installierte SDK kennt – die kann hinter den Paketen liegen (SDK 10.0.401: Runtime 10.0.12
-# bei Paketen auf 10.0.15). So bestimmt allein Directory.Packages.props, was ins Paket kommt.
+# Runtime-Version = Patch der Microsoft-Pakete. Ohne Vorgabe nähme der Publish die Runtime, die
+# das gerade installierte SDK kennt – die kann hinter den Paketen liegen (SDK 10.0.401: Runtime
+# 10.0.12 bei Paketen auf 10.0.15). So bestimmt allein Directory.Packages.props, was ins Paket kommt.
+# Maßgeblich ist ein festes Referenzpaket: ASP.NET Core erscheint mit jedem Runtime-Patch neu,
+# Pakete aus dotnet/runtime (Microsoft.Extensions.*) nur, wenn sie sich geändert haben.
+$runtimeReference = 'Microsoft.AspNetCore.Components.WebAssembly.Server'
 [xml]$packagesProps = Get-Content (Join-Path $repoRoot 'Directory.Packages.props') -Raw
-$runtimeVersion = $packagesProps.Project.ItemGroup.PackageVersion |
-    Where-Object { $_.Include -match '^Microsoft\.(AspNetCore|Extensions)\.' } |
-    ForEach-Object { [version]$_.Version } |
-    Sort-Object -Descending |
-    Select-Object -First 1
-if (-not $runtimeVersion) { throw 'Keine Microsoft.AspNetCore.*-/Microsoft.Extensions.*-Pakete in Directory.Packages.props gefunden.' }
+$referenceEntry = @($packagesProps.Project.ItemGroup.PackageVersion | Where-Object { $_.Include -eq $runtimeReference })
+if ($referenceEntry.Count -ne 1) { throw "$runtimeReference fehlt in Directory.Packages.props (Referenz für die Runtime-Version)." }
+$runtimeVersion = [version]$referenceEntry[0].Version
 
 # Self-contained, aber kein Single-File: Die API liefert den Client als statische Dateien
 # aus, und /api/version liest die Build-Zeit aus dem Pfad der Assembly.
@@ -113,6 +112,12 @@ function Get-IncludedFrameworks([string]$runtimeConfig) {
 
 $apiFrameworks = Get-IncludedFrameworks (Join-Path $staging 'app\HorizonNET.Api.runtimeconfig.json')
 $toolFrameworks = Get-IncludedFrameworks (Join-Path $staging 'tools\HorizonNET.KeyMigration.runtimeconfig.json')
+# Der Updater ist eine einzelne Datei; seine runtimeconfig.json steckt darin. Geprüft wird die aus
+# dem Build-Ordner des gerade gelaufenen Publish.
+$updaterConfig = Get-ChildItem (Join-Path $repoRoot "Tools\HorizonNET.Updater\bin\Release\*\$runtimeId\HorizonNET.Updater.runtimeconfig.json") |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if (-not $updaterConfig) { throw 'runtimeconfig.json des Updaters nicht gefunden.' }
+$updaterFrameworks = Get-IncludedFrameworks $updaterConfig.FullName
 $aspNetRuntime = $apiFrameworks['Microsoft.AspNetCore.App']
 if (-not $aspNetRuntime) { throw 'Die API bringt keine ASP.NET Core Runtime mit.' }
 
@@ -121,6 +126,7 @@ $included = @{
     'API: Microsoft.NETCore.App'     = $apiFrameworks['Microsoft.NETCore.App']
     'API: Microsoft.AspNetCore.App'  = $aspNetRuntime
     'Tool: Microsoft.NETCore.App'    = $toolFrameworks['Microsoft.NETCore.App']
+    'Updater: Microsoft.NETCore.App' = $updaterFrameworks['Microsoft.NETCore.App']
 }
 foreach ($entry in $included.GetEnumerator()) {
     if ($entry.Value -ne $runtimeVersion) {
