@@ -4,7 +4,8 @@ using HorizonNET.Shared.Transfer.Update;
 
 namespace HorizonNET.Updater;
 
-// Quellgenerierte Serialisierung: Der Updater ist getrimmt, Reflection-JSON ginge dort kaputt.
+// Quellgenerierte Serialisierung: schneller Start und bereit fürs Trimmen. Getrimmt wird der
+// Updater derzeit nicht (.claude/rules/updater.md).
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     PropertyNameCaseInsensitive = true,
@@ -12,7 +13,6 @@ namespace HorizonNET.Updater;
     WriteIndented = true)]
 [JsonSerializable(typeof(GitHubRelease))]
 [JsonSerializable(typeof(UpdateRunStatus))]
-[JsonSerializable(typeof(UpdateRequest))]
 [JsonSerializable(typeof(UpdateJournal))]
 [JsonSerializable(typeof(PackageManifest))]
 [JsonSerializable(typeof(AppVersionDto))]
@@ -25,6 +25,12 @@ internal sealed class UpdateJournal
     public string TargetVersion { get; set; } = "";
     public string? FromVersion { get; set; }
     public DateTime StartedUtc { get; set; }
+
+    // Starttyp des Dienstes vor dem Update. Während apply steht er auf „Deaktiviert“: Ein Neustart
+    // mitten im Tausch darf die neue Version nicht unbeobachtet starten (Migrationen!), bevor die
+    // Aufgabe „HorizonNET Recover“ zurückgerollt hat. Das Zurückrollen setzt ihn wieder.
+    public ServiceStartType? OriginalStartType { get; set; }
+
     public bool ServiceStopped { get; set; }
     public string? BackupDirectory { get; set; }
 

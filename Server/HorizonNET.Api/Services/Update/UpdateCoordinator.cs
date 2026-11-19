@@ -8,8 +8,9 @@ using Microsoft.Extensions.Options;
 namespace HorizonNET.Api.Services.Update;
 
 // Stand für die Einstellungen und das Auslösen der Installation. Installiert wird nicht hier:
-// Die API schreibt update\request\request.json und startet die geplante Aufgabe; den Rest macht
-// der Updater als SYSTEM (Tools/HorizonNET.Updater). Der Dienst selbst hat keine Admin-Rechte.
+// Die API startet die geplante Aufgabe „HorizonNET Update“; den Rest macht der Updater als SYSTEM
+// (Tools/HorizonNET.Updater). Der Dienst selbst hat keine Admin-Rechte und schreibt nichts, was
+// der Updater liest – der Start der Aufgabe ist der ganze Auftrag.
 public sealed class UpdateCoordinator(
     UpdateCheckService checker,
     IUpdateTaskStarter taskStarter,
@@ -63,18 +64,10 @@ public sealed class UpdateCoordinator(
             if (info.IsInstalling) return InstallRequestResult.Rejected("Ein Update läuft bereits.");
             if (info.Available is null) return InstallRequestResult.Rejected("Kein Update verfügbar.");
 
-            // Nur der Wunsch, keine Version: Der Updater holt selbst das neueste Release.
-            var requestDir = Path.Combine(settings.Directory, "request");
-            var requestFile = Path.Combine(requestDir, "request.json");
-            var tmp = requestFile + ".tmp";
-            await File.WriteAllBytesAsync(tmp, JsonSerializer.SerializeToUtf8Bytes(
-                new UpdateRequest(UpdateRequest.Install, time.GetUtcNow().UtcDateTime), StatusJson), ct);
-            File.Move(tmp, requestFile, overwrite: true);
-
+            // Nur der Start, keine Version: Der Updater holt selbst das neueste Release.
             var started = await taskStarter.StartAsync(settings.TaskName, ct);
             if (!started.Success)
             {
-                TryDelete(requestFile);
                 logger.LogWarning("Update-Aufgabe ließ sich nicht starten: {Message}", started.Message);
                 return InstallRequestResult.Failed($"Die Update-Aufgabe ließ sich nicht starten: {started.Message}");
             }
@@ -104,12 +97,6 @@ public sealed class UpdateCoordinator(
             logger.LogWarning("status.json nicht lesbar: {Message}", ex.Message);
             return null;
         }
-    }
-
-    private static void TryDelete(string path)
-    {
-        try { File.Delete(path); }
-        catch (IOException) { /* Der Updater verwirft sie beim nächsten Lauf ohnehin. */ }
     }
 }
 
@@ -151,8 +138,19 @@ public sealed class SchtasksUpdateTaskStarter : IUpdateTaskStarter
         if (process is null) return (false, "schtasks.exe ließ sich nicht starten");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(15));
-        var stderr = process.StandardError.ReadToEndAsync(timeout.Token);
-        await process.WaitForExitAsync(timeout.Token);
-        return process.ExitCode == 0 ? (true, "") : (false, (await stderr).Trim());
+        try
+        {
+            var stdout = process.StandardOutput.ReadToEndAsync(timeout.Token);
+            var stderr = process.StandardError.ReadToEndAsync(timeout.Token);
+            await process.WaitForExitAsync(timeout.Token);
+            await stdout;
+            return process.ExitCode == 0 ? (true, "") : (false, (await stderr).Trim());
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            try { process.Kill(); }
+            catch (InvalidOperationException) { /* schon beendet */ }
+            return (false, "schtasks.exe antwortet nicht");
+        }
     }
 }

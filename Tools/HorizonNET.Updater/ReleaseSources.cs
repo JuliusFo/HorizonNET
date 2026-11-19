@@ -8,7 +8,8 @@ namespace HorizonNET.Updater;
 // Das neueste Release des fest eingebauten Repos, ohne Token (öffentliches Repo, 60 Anfragen je
 // Stunde reichen weit). Download-Adressen baut UpdatePackage aus der Version; Links aus der
 // Antwort werden nicht benutzt.
-internal sealed class GitHubReleaseSource(HttpClient http) : IReleaseSource
+// api: kurzes Zeitlimit (Release-Abfrage, Prüfsumme), download: langes Zeitlimit (ZIP).
+internal sealed class GitHubReleaseSource(HttpClient api, HttpClient download) : IReleaseSource
 {
     private const long MaxApiBytes = 2 * 1024 * 1024;
     private const long MaxChecksumBytes = 4 * 1024;
@@ -19,7 +20,7 @@ internal sealed class GitHubReleaseSource(HttpClient http) : IReleaseSource
         request.Headers.Accept.ParseAdd("application/vnd.github+json");
         request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
 
-        using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+        using var response = await api.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
         if (response.StatusCode == HttpStatusCode.NotFound) return null; // noch kein Release
         response.EnsureSuccessStatusCode();
 
@@ -31,13 +32,13 @@ internal sealed class GitHubReleaseSource(HttpClient http) : IReleaseSource
 
     public async Task DownloadAsync(ReleaseCandidate release, string zipPath, string checksumPath, CancellationToken ct)
     {
-        await DownloadFileAsync(UpdatePackage.DownloadUri(release.Version, UpdatePackage.ChecksumName(release.Version)),
+        await DownloadFileAsync(api, UpdatePackage.DownloadUri(release.Version, UpdatePackage.ChecksumName(release.Version)),
             checksumPath, MaxChecksumBytes, ct);
-        await DownloadFileAsync(UpdatePackage.DownloadUri(release.Version, UpdatePackage.ZipName(release.Version)),
+        await DownloadFileAsync(download, UpdatePackage.DownloadUri(release.Version, UpdatePackage.ZipName(release.Version)),
             zipPath, PackageFiles.MaxZipBytes, ct);
     }
 
-    private async Task DownloadFileAsync(Uri uri, string path, long maxBytes, CancellationToken ct)
+    private static async Task DownloadFileAsync(HttpClient http, Uri uri, string path, long maxBytes, CancellationToken ct)
     {
         using var response = await http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, ct);
         response.EnsureSuccessStatusCode();

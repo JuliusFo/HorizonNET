@@ -33,8 +33,6 @@ internal sealed class UpdaterLayout
     public string Downloads => Path.Combine(UpdateDir, "downloads");
     public string Staging => Path.Combine(UpdateDir, "staging");
     public string Logs => Path.Combine(UpdateDir, "logs");
-    public string RequestDir => Path.Combine(UpdateDir, "request");
-    public string RequestFile => Path.Combine(RequestDir, "request.json");
     public string StatusFile => Path.Combine(UpdateDir, "status.json");
     public string JournalFile => Path.Combine(UpdateDir, "journal.json");
     public string LockFile => Path.Combine(UpdateDir, "update.lock");
@@ -43,9 +41,11 @@ internal sealed class UpdaterLayout
 
     public string StagingFor(Version version) => Path.Combine(Staging, Shared.Transfer.Update.UpdatePackage.Format(version));
 
+    // backups\ legt nur server-install.ps1 an: Es braucht eigene Rechte (nur SYSTEM und Admins,
+    // enthält den Schlüsselring). Fehlt es, bricht apply ab, statt es mit geerbten Rechten anzulegen.
     public void EnsureWorkDirectories()
     {
-        foreach (var dir in new[] { UpdateDir, Downloads, Staging, Logs, RequestDir, Backups })
+        foreach (var dir in new[] { UpdateDir, Downloads, Staging, Logs })
             Directory.CreateDirectory(dir);
     }
 }

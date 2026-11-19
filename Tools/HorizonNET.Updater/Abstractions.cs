@@ -10,6 +10,9 @@ internal interface IServiceHost
     void Stop(TimeSpan timeout);
     void Start(TimeSpan timeout);
 
+    ServiceStartType GetStartType();
+    void SetStartType(ServiceStartType startType);
+
     // Basisadresse des Dienstes auf diesem Rechner, aus ASPNETCORE_URLS der Dienst-Umgebung.
     Uri GetLocalBaseUri();
 }
@@ -37,11 +40,22 @@ internal interface IPermissions
     // Nach dem Verschieben aus update\staging\ soll ein Ordner die Rechte seines neuen
     // Elternordners tragen, nicht die von staging.
     void ResetToInherited(string directory);
+
+    // Gibt target dieselben Rechte wie source (explizite Einträge und Vererbungsschutz) und
+    // vererbt sie an den Inhalt. Für die Rücksicherung von data\ und keys\.
+    void CopyAccess(string source, string target);
 }
 
 internal interface IInstalledVersion
 {
     Version? Read(UpdaterLayout layout);
+}
+
+internal enum ServiceStartType
+{
+    Automatic,
+    Manual,
+    Disabled,
 }
 
 internal sealed record UpdaterTimings(

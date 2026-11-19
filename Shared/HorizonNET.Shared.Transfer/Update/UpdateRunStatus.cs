@@ -31,10 +31,3 @@ public static class UpdatePhases
     public static bool IsRunning(UpdatePhase phase) =>
         phase is UpdatePhase.Preparing or UpdatePhase.Downloading or UpdatePhase.Installing;
 }
-
-// Inhalt von update\request\request.json, geschrieben von der API. Mehr als den Wunsch
-// „installieren“ nimmt der Updater daraus nicht: keine Version, keine Pfade, keine URLs.
-public record UpdateRequest(string Mode, DateTime RequestedUtc)
-{
-    public const string Install = "install";
-}

@@ -4,11 +4,16 @@ using HorizonNET.Shared.Transfer.Update;
 namespace HorizonNET.Updater;
 
 // apply: läuft aus dem NEUEN Paket (update\staging\X.Y.Z\updater\), damit die Installationslogik
-// der neuen Version gilt und updater\ ersetzt werden kann. Schritte (Journal nach jedem):
-//   Dienst stoppen → data\ und keys\ sichern → app\, tools\, updater\ tauschen (alter Stand nach
-//   *.previous) → Dienst starten → /api/version == neue Version?
+// der neuen Version gilt und updater\ ersetzt werden kann. Schritte (Journal vor jedem):
+//   Starttyp merken und auf „Deaktiviert“ → Dienst stoppen → DB und Schlüsselring sichern →
+//   app\, tools\, updater\ tauschen (alter Stand nach *.previous) → Starttyp zurück, Dienst
+//   starten → /api/version == neue Version?
 // Scheitert etwas nach dem Stoppen, rollt es zurück: Ordner aus *.previous, und wenn die neue
-// Version schon gestartet war (Migrationen!), auch data\ und keys\ aus der Sicherung.
+// Version schon gestartet sein kann (Migrationen!), auch DB und Schlüsselring aus der Sicherung.
+//
+// data\ und keys\ kann das Dienstkonto beschreiben, der Updater läuft als SYSTEM: Gesichert und
+// zurückgespielt werden nur bekannte Dateien, flach und ohne Verweisen (Reparse Points) zu folgen,
+// und zurückgespielt wird in einen neuen Ordner, den nur SYSTEM beschreiben kann (Review 2026-11-19, S2).
 internal sealed class Installer(
     UpdaterLayout layout,
     StateFiles state,
@@ -21,6 +26,9 @@ internal sealed class Installer(
     UpdateLog log)
 {
     public const int KeepBackups = 5;
+
+    // ConnectionStrings__DefaultConnection aus server-install.ps1: data\horizonnet.db im WAL-Modus.
+    internal static readonly string[] DataFiles = ["horizonnet.db", "horizonnet.db-wal", "horizonnet.db-shm"];
 
     private readonly FileOps _files = new(timings);
 
@@ -38,6 +46,10 @@ internal sealed class Installer(
         try
         {
             target = PackageFiles.Validate(packageDirectory, expected: null);
+            // backups\ trägt eigene Rechte (nur SYSTEM und Admins); mit geerbten könnte das
+            // Dienstkonto die Sicherungen samt Schlüsselring lesen.
+            if (!Directory.Exists(layout.Backups))
+                throw new UpdateException($"{layout.Backups} fehlt – server-install.ps1 ausführen.");
         }
         catch (UpdateException ex)
         {
@@ -49,24 +61,47 @@ internal sealed class Installer(
         status.FromVersion = from is null ? null : UpdatePackage.Format(from);
         status.TargetVersion = UpdatePackage.Format(target);
 
+        // Vor dem Journal: Hier ist noch nichts geändert, ein Abbruch lässt nichts zurück.
+        ServiceStartType startType;
+        try
+        {
+            startType = service.GetStartType();
+        }
+        catch (Exception ex)
+        {
+            status.Report(UpdatePhase.Failed, $"Der Starttyp des Dienstes ist nicht lesbar ({ex.Message}). Nichts geändert.");
+            return 1;
+        }
+        if (startType == ServiceStartType.Disabled)
+        {
+            // Etwa nach einem gescheiterten Zurückrollen: Erst muss jemand nachsehen.
+            status.Report(UpdatePhase.Failed,
+                "Der Dienst ist deaktiviert (etwa nach einem gescheiterten Zurückrollen). Erst von Hand prüfen " +
+                "und den Starttyp zurücksetzen. Nichts geändert.");
+            return 1;
+        }
+
         var journal = new UpdateJournal
         {
             TargetVersion = status.TargetVersion,
             FromVersion = status.FromVersion,
             StartedUtc = time.GetUtcNow().UtcDateTime,
+            OriginalStartType = startType,
         };
         state.WriteJournal(journal);
         status.Report(UpdatePhase.Installing, $"Installiere {status.TargetVersion}: Dienst wird gestoppt.");
 
         try
         {
+            service.SetStartType(ServiceStartType.Disabled);
             service.Stop(timings.ServiceTimeout);
         }
         catch (Exception ex)
         {
-            // Noch nichts geändert: Journal weg, Dienst möglichst wieder an.
-            state.DeleteJournal();
+            // Noch nichts getauscht: Starttyp zurück, Dienst möglichst wieder an, Journal weg.
+            var restored = TryRestoreStartType(journal);
             TryStartService();
+            if (restored) state.DeleteJournal();
             status.Report(UpdatePhase.Failed, $"Der Dienst ließ sich nicht stoppen ({ex.Message}). Nichts geändert.");
             return 1;
         }
@@ -86,6 +121,7 @@ internal sealed class Installer(
             journal.NewVersionStarted = true;
             state.WriteJournal(journal);
             status.Report(UpdatePhase.Installing, $"Starte {status.TargetVersion}.");
+            service.SetStartType(startType);
             service.Start(timings.ServiceTimeout);
 
             if (!await WaitForVersionAsync(target, ct))
@@ -124,6 +160,21 @@ internal sealed class Installer(
         status.Report(UpdatePhase.Installing, $"{reason} Rolle zurück auf {journal.FromVersion ?? "den alten Stand"}.");
         try
         {
+            // Erst deaktivieren, dann stoppen: Stürzt die neue Version beim Start ab, startet der
+            // Dienststeuerungs-Manager sie per Fehleraktion neu (server-install.ps1: restart/5000) –
+            // auch mitten im Zurücktauschen. Nur ein Zusatzschutz: Scheitert er, wird trotzdem
+            // zurückgerollt.
+            if (journal.OriginalStartType is not null)
+            {
+                try
+                {
+                    service.SetStartType(ServiceStartType.Disabled);
+                }
+                catch (Exception ex)
+                {
+                    log.Warn($"Dienst ließ sich vor dem Zurückrollen nicht deaktivieren: {ex.Message}");
+                }
+            }
             service.Stop(timings.ServiceTimeout);
 
             for (var i = journal.Swapped.Count - 1; i >= 0; i--)
@@ -140,15 +191,16 @@ internal sealed class Installer(
             if (journal.NewVersionStarted && journal.BackupDirectory is not null)
             {
                 RestoreData(journal.BackupDirectory);
-                log.Info($"data\\ und keys\\ aus {journal.BackupDirectory} zurückgespielt.");
+                log.Info($"DB und Schlüsselring aus {journal.BackupDirectory} zurückgespielt.");
             }
 
-            if (journal.ServiceStopped)
-            {
-                service.Start(timings.ServiceTimeout);
-                if (UpdatePackage.TryParseTag("v" + journal.FromVersion, out var from) && !await WaitForVersionAsync(from, ct))
-                    throw new UpdateException($"Die alte Version {journal.FromVersion} meldet sich nicht unter /api/version.");
-            }
+            if (journal.OriginalStartType is { } startType) service.SetStartType(startType);
+
+            // Immer starten, auch wenn das Stoppen beim Update nicht mehr im Journal stand: Vor dem
+            // Update lief der Dienst (oder apply hätte ihn am Ende ohnehin gestartet).
+            service.Start(timings.ServiceTimeout);
+            if (UpdatePackage.TryParseTag("v" + journal.FromVersion, out var from) && !await WaitForVersionAsync(from, ct))
+                throw new UpdateException($"Die alte Version {journal.FromVersion} meldet sich nicht unter /api/version.");
 
             state.DeleteJournal();
             status.Report(UpdatePhase.RolledBack, $"{reason} Der alte Stand ({journal.FromVersion ?? "?"}) läuft wieder.");
@@ -163,7 +215,8 @@ internal sealed class Installer(
             status.Report(UpdatePhase.RollbackFailed,
                 $"{reason} Auch das Zurückrollen ist gescheitert ({ex.Message}). Handarbeit nötig: " +
                 $"Dienst stoppen, *.previous-Ordner nach app\\, tools\\, updater\\ zurück, " +
-                $"data\\ und keys\\ aus {journal.BackupDirectory ?? "backups\\"} zurückspielen, Dienst starten. " +
+                $"DB und Schlüsselring aus {journal.BackupDirectory ?? "backups\\"} zurückspielen, " +
+                $"Starttyp des Dienstes auf {journal.OriginalStartType?.ToString() ?? "Automatic"} setzen, Dienst starten. " +
                 "Log unter update\\logs\\.");
             return false;
         }
@@ -177,11 +230,39 @@ internal sealed class Installer(
         Directory.CreateDirectory(backup);
 
         // Der Dienst ist gestoppt, die WAL also eingespielt; -wal/-shm kommen trotzdem mit.
-        if (Directory.Exists(layout.Data)) _files.CopyDirectory(layout.Data, Path.Combine(backup, "data"));
-        if (Directory.Exists(layout.Keys)) _files.CopyDirectory(layout.Keys, Path.Combine(backup, "keys"));
+        CopyKnownFiles(layout.Data, Path.Combine(backup, "data"), IsDataFile);
+        CopyKnownFiles(layout.Keys, Path.Combine(backup, "keys"), IsKeyFile);
 
         PruneBackups(keepPath: backup);
         return backup;
+    }
+
+    private static bool IsDataFile(string name) => DataFiles.Contains(name, StringComparer.OrdinalIgnoreCase);
+
+    // DataProtection legt den Ring als key-<guid>.xml ab.
+    private static bool IsKeyFile(string name) => string.Equals(Path.GetExtension(name), ".xml", StringComparison.OrdinalIgnoreCase);
+
+    // Kopiert nur Dateien direkt in source, die include zulässt; Unterordner bleiben liegen. Ist
+    // source selbst oder eine der Dateien ein Verweis, bricht es ab: Als SYSTEM einem Verweis zu
+    // folgen, den das Dienstkonto gesetzt hat, hieße für es fremde Dateien zu lesen.
+    private void CopyKnownFiles(string source, string destination, Func<string, bool> include)
+    {
+        if (!Directory.Exists(source)) return;
+        RejectReparsePoint(source);
+        Directory.CreateDirectory(destination);
+        foreach (var file in Directory.GetFiles(source))
+        {
+            var name = Path.GetFileName(file);
+            if (!include(name)) continue;
+            RejectReparsePoint(file);
+            _files.CopyFile(file, Path.Combine(destination, name));
+        }
+    }
+
+    private static void RejectReparsePoint(string path)
+    {
+        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+            throw new UpdateException($"{path} ist ein Verweis (Reparse Point) – abgebrochen.");
     }
 
     private void PruneBackups(string keepPath)
@@ -198,17 +279,60 @@ internal sealed class Installer(
         }
     }
 
+    // Nicht in den bestehenden Ordner schreiben: Den kann das Dienstkonto während der Rücksicherung
+    // in einen Verweis verwandeln. Stattdessen <ordner>.restore anlegen (erbt von Root, also für das
+    // Dienstkonto nur lesbar), füllen, die Rechte des alten Ordners übernehmen und tauschen. Der
+    // alte Stand bleibt als <ordner>.failed-<zeit> liegen (DB der gescheiterten Version, zur Diagnose).
+    //
+    // .failed- und .restore-Ordner löscht der Updater nie: Sie tragen die Rechte des Dienstkontos,
+    // und rekursives Löschen als SYSTEM ließe sich per Junction auf beliebige Ordner umlenken
+    // (Review 2026-11-19, zweiter Durchgang). Eindeutige Namen statt Löschen; aufräumen von Hand.
     private void RestoreData(string backup)
     {
-        foreach (var (name, target) in new[] { ("data", layout.Data), ("keys", layout.Keys) })
+        var stamp = time.GetUtcNow().UtcDateTime.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)
+                    + "-" + Guid.NewGuid().ToString("N")[..6];
+        foreach (var (name, target, include) in new (string, string, Func<string, bool>)[]
+                 {
+                     ("data", layout.Data, IsDataFile),
+                     ("keys", layout.Keys, IsKeyFile),
+                 })
         {
             var source = Path.Combine(backup, name);
             if (!Directory.Exists(source)) continue;
-            // In den bestehenden Ordner zurückkopieren, damit seine Rechte bleiben.
-            Directory.CreateDirectory(target);
-            _files.ClearDirectory(target);
-            _files.CopyDirectory(source, target);
+
+            var restore = $"{target}.restore-{stamp}";
+            var failed = $"{target}.failed-{stamp}";
+            CopyKnownFiles(source, restore, include);
+
+            if (Directory.Exists(target))
+            {
+                permissions.CopyAccess(target, restore);
+                _files.MoveDirectory(target, failed);
+                log.Warn($"Stand vor der Rücksicherung liegt in {Path.GetFileName(failed)}\\ – nach Prüfung von Hand löschen.");
+            }
+            else if (LatestFailed(target) is { } earlier)
+            {
+                // Absturz zwischen den beiden Umbenennungen eines früheren Laufs: Der alte Ordner liegt
+                // schon als .failed-… da und trägt die richtigen Rechte.
+                permissions.CopyAccess(earlier, restore);
+                log.Warn($"{name}\\ fehlte; Rechte von {Path.GetFileName(earlier)}\\ übernommen.");
+            }
+            else
+            {
+                log.Warn($"{name}\\ fehlte; die Rücksicherung trägt die Rechte von {layout.Root}. Rechte prüfen.");
+            }
+            _files.MoveDirectory(restore, target);
         }
+    }
+
+    // Jüngster <ordner>.failed-yyyyMMdd-HHmmss-… (der Zeitstempel im Namen sortiert).
+    private static string? LatestFailed(string target)
+    {
+        var parent = Path.GetDirectoryName(target)!;
+        var prefix = Path.GetFileName(target) + ".failed-";
+        return Directory.GetDirectories(parent, prefix + "*")
+            .OrderByDescending(Path.GetFileName, StringComparer.Ordinal)
+            .FirstOrDefault();
     }
 
     private void Swap(string name, string packageDirectory, UpdateJournal journal)
@@ -217,6 +341,17 @@ internal sealed class Installer(
         var previous = layout.Previous(name);
         var source = Path.Combine(packageDirectory, name);
 
+        // updater\ wird kopiert, nicht verschoben: Aus dem Paket läuft apply gerade selbst. Erst in
+        // updater.new, dann umbenennen – bricht das Kopieren ab, bleibt updater\ heil, und die
+        // Aufgabe „HorizonNET Recover“ findet beim nächsten Start ihr Programm.
+        if (name == UpdaterLayout.UpdaterComponent)
+        {
+            var copy = target + ".new";
+            _files.DeleteDirectory(copy);
+            _files.CopyDirectory(source, copy);
+            source = copy;
+        }
+
         // Den Stand vor dem vorigen Update braucht niemand mehr.
         _files.DeleteDirectory(previous);
 
@@ -224,12 +359,7 @@ internal sealed class Installer(
         state.WriteJournal(journal);
 
         if (Directory.Exists(target)) _files.MoveDirectory(target, previous);
-
-        // updater\ wird kopiert, nicht verschoben: Aus diesem Ordner läuft apply gerade selbst.
-        if (name == UpdaterLayout.UpdaterComponent)
-            _files.CopyDirectory(source, target);
-        else
-            _files.MoveDirectory(source, target);
+        _files.MoveDirectory(source, target);
 
         permissions.ResetToInherited(target);
         log.Info($"{name}\\ getauscht.");
@@ -265,6 +395,23 @@ internal sealed class Installer(
                 return true;
             if (time.GetUtcNow() >= deadline) return false;
             await Task.Delay(timings.PollInterval, time, ct);
+        }
+    }
+
+    // false: Der Starttyp steht womöglich noch auf „Deaktiviert“ – dann bleibt das Journal liegen,
+    // und der nächste Lauf (spätestens „HorizonNET Recover“ beim Systemstart) setzt ihn zurück.
+    private bool TryRestoreStartType(UpdateJournal journal)
+    {
+        if (journal.OriginalStartType is not { } startType) return true;
+        try
+        {
+            service.SetStartType(startType);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            log.Warn($"Starttyp des Dienstes ließ sich nicht zurücksetzen: {ex.Message}");
+            return false;
         }
     }
 

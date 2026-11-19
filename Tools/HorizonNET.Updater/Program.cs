@@ -5,10 +5,11 @@ using HorizonNET.Updater;
 
 // Updater für den vServer (ADR 0007, docs/konzept-auto-update.md).
 //
-//   run      [--root <dir>]                      geplante Aufgabe „HorizonNET Update“: unterbrochenes
-//                                                Update zurückrollen, Auftrag der API ausführen
-//   install  [--root <dir>] [--source <ordner>]  von Hand (Administrator): neuestes Release installieren,
-//                                                mit --source aus einem lokalen Ordner
+//   run      [--root <dir>]                      geplante Aufgabe „HorizonNET Recover“ (Systemstart):
+//                                                nur ein unterbrochenes Update zurückrollen
+//   install  [--root <dir>] [--source <ordner>]  geplante Aufgabe „HorizonNET Update“ (startet die App)
+//                                                oder von Hand: zurückrollen falls nötig, dann neuestes
+//                                                Release installieren; --source nur von Hand
 //   status   [--root <dir>]                      status.json ausgeben
 //   apply    --root <dir> --package <dir> [--wait-pid <pid>]   intern, startet run/install
 //
@@ -54,8 +55,11 @@ Console.CancelKeyPress += (_, e) =>
     cts.Cancel();
 };
 
-using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+// Kurzes Zeitlimit für die GitHub-API und /api/version, langes nur für den Download des Pakets.
+using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
 http.DefaultRequestHeaders.UserAgent.ParseAdd(UpdatePackage.UserAgent);
+using var downloadHttp = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+downloadHttp.DefaultRequestHeaders.UserAgent.ParseAdd(UpdatePackage.UserAgent);
 
 var state = new StateFiles(layout);
 var serviceName = Option("--service") ?? "HorizonNET";
@@ -80,9 +84,9 @@ try
         default:
         {
             var sourceDir = command == "install" ? Option("--source") : null;
-            IReleaseSource source = sourceDir is null ? new GitHubReleaseSource(http) : new LocalReleaseSource(Path.GetFullPath(sourceDir));
+            IReleaseSource source = sourceDir is null ? new GitHubReleaseSource(http, downloadHttp) : new LocalReleaseSource(Path.GetFullPath(sourceDir));
             var preparer = new Preparer(layout, state, source, installed, new ProcessApplyLauncher(serviceName), installer, timings, time, log);
-            return await preparer.RunAsync(installRequested: command == "install", cts.Token);
+            return await preparer.RunAsync(install: command == "install", cts.Token);
         }
     }
 }
@@ -127,8 +131,8 @@ static int Usage()
     Console.Error.WriteLine("""
         HorizonNET.Updater – Auto-Update für den vServer (ADR 0007)
 
-          run      [--root <dir>]                     geplante Aufgabe: Auftrag der API ausführen
-          install  [--root <dir>] [--source <ordner>] von Hand: neuestes Release installieren
+          run      [--root <dir>]                     unterbrochenes Update zurückrollen (Systemstart)
+          install  [--root <dir>] [--source <ordner>] neuestes Release installieren
           status   [--root <dir>]                     letzten Status zeigen
 
           --service <name>  Name des Windows-Dienstes (Standard: HorizonNET)

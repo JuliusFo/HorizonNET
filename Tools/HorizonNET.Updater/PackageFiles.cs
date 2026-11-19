@@ -98,6 +98,11 @@ internal sealed class FileOps(UpdaterTimings timings)
             if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
         });
 
+    public void CopyFile(string source, string destination) =>
+        Retry(() => File.Copy(source, destination, overwrite: true));
+
+    // Nur für Ordner, die das Dienstkonto nicht beschreiben kann (Paket in update\staging\):
+    // Folgt Verweisen. data\ und keys\ kopiert Installer.CopyKnownFiles.
     public void CopyDirectory(string source, string destination)
     {
         Directory.CreateDirectory(destination);
@@ -110,7 +115,7 @@ internal sealed class FileOps(UpdaterTimings timings)
         }
     }
 
-    // Leert einen Ordner, ohne ihn selbst zu löschen: Seine Rechte (keys\!) bleiben so erhalten.
+    // Leert einen Ordner, ohne ihn selbst zu löschen (update\staging\, update\downloads\).
     public void ClearDirectory(string path)
     {
         if (!Directory.Exists(path)) return;

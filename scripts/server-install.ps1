@@ -8,12 +8,14 @@
       2. Dediziertes lokales Dienstkonto "horizonnet" (DPAPI bindet den Schlüsselring
          an genau dieses Konto – deshalb kein LocalSystem)
       3. Ordnerrechte (ADR 0007): Das Dienstkonto liest und führt aus, schreiben darf es nur
-         in data\, keys\ und update\request\. Programmordner kann es also nicht tauschen –
-         wichtig, weil der Updater sie als SYSTEM startet.
+         in data\ und keys\. Programmordner kann es also nicht tauschen – wichtig, weil der
+         Updater sie als SYSTEM startet.
       4. App, Tools und Updater aus dem entpackten Deployment-Paket kopieren (Inhalt ersetzen)
       5. Windows-Dienst inkl. Umgebungsvariablen (Secrets werden abgefragt, nie geloggt)
-      6. Geplante Aufgabe "HorizonNET Update" (SYSTEM, beim Systemstart und auf Anforderung
-         der App); das Dienstkonto darf genau diese Aufgabe starten, sonst nichts.
+      6. Geplante Aufgaben (beide als SYSTEM):
+         "HorizonNET Update" installiert das neueste Release; das Dienstkonto darf genau diese
+         Aufgabe starten ("Jetzt aktualisieren"), sonst nichts.
+         "HorizonNET Recover" rollt beim Systemstart ein unterbrochenes Update zurück.
 
     Bei der Ersteinrichtung bleibt der Dienst GESTOPPT: Erst müssen DB + Schlüsselring per
     Umzugs-Tool ankommen (docs\konzept-dpapi-umzug.md). Lief der Dienst schon, wird er für das
@@ -54,6 +56,7 @@ param(
     [string]$ServiceName = 'HorizonNET',
     [string]$ServiceUser = 'horizonnet',
     [string]$UpdateTaskName = 'HorizonNET Update',
+    [string]$RecoverTaskName = 'HorizonNET Recover',
     [ValidateSet('Install', 'Notify', 'Off')][string]$UpdateMode = 'Install',
     [switch]$SkipService
 )
@@ -96,7 +99,7 @@ function Invoke-Icacls {
 
 # ── 1) Ordner ────────────────────────────────────────────────────────────────
 foreach ($dir in 'app', 'tools', 'updater', 'data', 'keys', 'backups',
-                 'update', 'update\downloads', 'update\staging', 'update\logs', 'update\request') {
+                 'update', 'update\downloads', 'update\staging', 'update\logs') {
     New-Item -ItemType Directory -Force (Join-Path $Root $dir) | Out-Null
 }
 
@@ -165,7 +168,9 @@ if ($wasRunning) {
 # Frühere Einrichtungen gaben dem Dienstkonto "Ändern" auf alles (auch als explizite Einträge
 # an jeder Datei). Die fallen zuerst weg, dann gilt die Tabelle aus docs\konzept-auto-update.md:
 #   Root (und damit app, tools, updater, update): SYSTEM/Admins voll, Dienstkonto Lesen/Ausführen
-#   data, update\request: Dienstkonto zusätzlich Ändern
+#   data: Dienstkonto zusätzlich Ändern
+# Keinen weiteren Ordner beschreibbar machen, aus dem der Updater (SYSTEM) liest: Das Dienstkonto
+# könnte darin Verweise anlegen und SYSTEM auf beliebige Dateien lenken (Review 2026-11-19).
 #   keys: nur Dienstkonto, SYSTEM (für die Sicherung) und Admins
 #   backups: nur SYSTEM und Admins (enthält den Schlüsselring)
 Write-Host 'Setze Ordnerrechte…'
@@ -173,7 +178,6 @@ Invoke-Icacls @($Root, '/remove:g', $ServiceUser, '/T', '/C', '/Q')
 Invoke-Icacls @($Root, '/inheritance:r', '/grant:r', "${system}:(OI)(CI)F", "${admins}:(OI)(CI)F",
     "${ServiceUser}:(OI)(CI)RX", '/Q')
 Invoke-Icacls @((Join-Path $Root 'data'), '/grant:r', "${ServiceUser}:(OI)(CI)M", '/Q')
-Invoke-Icacls @((Join-Path $Root 'update\request'), '/grant:r', "${ServiceUser}:(OI)(CI)M", '/Q')
 Invoke-Icacls @((Join-Path $Root 'keys'), '/inheritance:r', '/grant:r', "${ServiceUser}:(OI)(CI)F",
     "${system}:(OI)(CI)F", "${admins}:(OI)(CI)F", '/Q')
 Invoke-Icacls @((Join-Path $Root 'backups'), '/inheritance:r', '/grant:r', "${system}:(OI)(CI)F",
@@ -237,22 +241,33 @@ else {
 # Env-Vars gelten NUR für diesen Dienst (Registry Multi-String "Environment")
 Set-ItemProperty -Path $registryPath -Name 'Environment' -Value $envVars -Type MultiString
 
-# ── 7) Geplante Aufgabe für den Updater ─────────────────────────────────────
-# Läuft als SYSTEM. Beim Systemstart rollt sie nur ein unterbrochenes Update zurück; installiert
-# wird erst, wenn die App update\request\request.json schreibt und die Aufgabe startet.
-Write-Host "Richte geplante Aufgabe '$UpdateTaskName' ein…"
+# ── 7) Geplante Aufgaben für den Updater ────────────────────────────────────
+# Zwei Aufgaben, beide als SYSTEM. Den Wunsch "installieren" übermittelt allein der Start von
+# "HorizonNET Update" – keine Datei, die das Dienstkonto schreibt und SYSTEM liest.
+#   Update:  install – zurückrollen falls nötig, neuestes Release installieren. Kein Trigger, die
+#            App startet sie; das Dienstkonto bekommt unten das Startrecht.
+#   Recover: run – beim Systemstart nur ein unterbrochenes Update zurückrollen (und den während
+#            des Updates deaktivierten Dienst wieder einschalten). Startrecht nur für Admins.
 $updaterExe = Join-Path $Root 'updater\HorizonNET.Updater.exe'
-$action = New-ScheduledTaskAction -Execute $updaterExe `
-    -Argument "run --root `"$Root`" --service `"$ServiceName`"" -WorkingDirectory (Join-Path $Root 'update')
-$trigger = New-ScheduledTaskTrigger -AtStartup
+$updaterArgs = "--root `"$Root`" --service `"$ServiceName`""
 $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
 $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 1) -MultipleInstances IgnoreNew `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-Register-ScheduledTask -TaskName $UpdateTaskName -Action $action -Trigger $trigger -Principal $principal `
-    -Settings $settings -Description 'HorizonNET: Update installieren (ADR 0007)' -Force | Out-Null
 
-# Startrecht für das Dienstkonto: Lesen + Ausführen (GRGX) auf genau diese Aufgabe. Mehr kann es
-# damit nicht tun – der Updater nimmt aus der Anfrage weder Pfade noch Versionen.
+Write-Host "Richte geplante Aufgaben '$UpdateTaskName' und '$RecoverTaskName' ein…"
+$action = New-ScheduledTaskAction -Execute $updaterExe -Argument "install $updaterArgs" `
+    -WorkingDirectory (Join-Path $Root 'update')
+Register-ScheduledTask -TaskName $UpdateTaskName -Action $action -Principal $principal `
+    -Settings $settings -Description 'HorizonNET: neueste Version installieren (ADR 0007)' -Force | Out-Null
+
+$action = New-ScheduledTaskAction -Execute $updaterExe -Argument "run $updaterArgs" `
+    -WorkingDirectory (Join-Path $Root 'update')
+$trigger = New-ScheduledTaskTrigger -AtStartup
+Register-ScheduledTask -TaskName $RecoverTaskName -Action $action -Trigger $trigger -Principal $principal `
+    -Settings $settings -Description 'HorizonNET: unterbrochenes Update zurückrollen (ADR 0007)' -Force | Out-Null
+
+# Startrecht für das Dienstkonto: Lesen + Ausführen (GRGX) auf genau "HorizonNET Update". Mehr
+# kann es damit nicht tun – die Aufgabe nimmt keine Parameter, der Updater holt das neueste Release.
 $scheduler = New-Object -ComObject 'Schedule.Service'
 $scheduler.Connect()
 $task = $scheduler.GetFolder('\').GetTask($UpdateTaskName)

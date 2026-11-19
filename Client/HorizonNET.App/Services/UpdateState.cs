@@ -36,7 +36,7 @@ public sealed class UpdateState(ApiService api, VersionState version, ToastServi
     {
         Info = await api.GetUpdateInfoAsync();
         OnChange?.Invoke();
-        if (Info?.IsInstalling == true) StartWatching();
+        if (Info?.IsInstalling == true) StartWatching(Info.LastRun?.StartedUtc);
     }
 
     public async Task CheckNowAsync()
@@ -49,22 +49,24 @@ public sealed class UpdateState(ApiService api, VersionState version, ToastServi
     // null = angefordert, sonst die Meldung des Servers.
     public async Task<string?> InstallAsync()
     {
+        // Der Lauf vor der Anforderung: Jeder spätere hat einen anderen Startzeitpunkt.
+        var before = Info?.LastRun?.StartedUtc;
         var (info, error) = await api.RequestUpdateInstallAsync();
         if (error is not null) return error;
         if (info is not null) Info = info;
         OnChange?.Invoke();
-        StartWatching();
+        StartWatching(before);
         return null;
     }
 
-    private void StartWatching()
+    private void StartWatching(DateTime? runBefore)
     {
         if (_watch is not null) return;
         _watch = new CancellationTokenSource(WatchLimit);
-        _ = WatchAsync(_watch.Token);
+        _ = WatchAsync(runBefore, _watch.Token);
     }
 
-    private async Task WatchAsync(CancellationToken ct)
+    private async Task WatchAsync(DateTime? runBefore, CancellationToken ct)
     {
         var sawRunning = Info?.IsInstalling == true;
         try
@@ -99,7 +101,7 @@ public sealed class UpdateState(ApiService api, VersionState version, ToastServi
                 }
 
                 // Der Updater ist fertig, die Version hat sich aber nicht geändert.
-                if (sawRunning && info.LastRun is { } run && run.Phase != UpdatePhase.Succeeded)
+                if (UpdateTexts.FinishedWithoutUpdate(info, runBefore, sawRunning) is { } run)
                 {
                     toast.ShowError($"Update nicht installiert: {UpdateTexts.Phase(run.Phase)}. {run.Message}");
                     return;
@@ -139,6 +141,16 @@ public static class UpdateTexts
         UpdatePhase.RollbackFailed => "Fehlgeschlagen, Handarbeit nötig",
         _ => phase.ToString(),
     };
+
+    // Lauf, der nach der Anforderung begonnen hat und ohne neue Version zu Ende ist (gescheitert,
+    // zurückgerollt, kein Update nötig) – null, solange keiner fertig ist. Ein schneller Lauf (etwa
+    // „kein Update“) kann zwischen zwei Abfragen beginnen und enden; er zählt trotzdem, weil sein
+    // Startzeitpunkt nicht der des Laufs vor der Anforderung ist.
+    public static UpdateRunStatus? FinishedWithoutUpdate(UpdateInfoDto info, DateTime? runBefore, bool sawRunning)
+    {
+        if (info.IsInstalling || info.LastRun is not { } run || run.Phase == UpdatePhase.Succeeded) return null;
+        return sawRunning || run.StartedUtc != runBefore ? run : null;
+    }
 
     // Bootstrap-Textfarbe für das Ergebnis des letzten Laufs.
     public static string PhaseCss(UpdatePhase phase) => phase switch

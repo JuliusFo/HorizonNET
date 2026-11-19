@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.Versioning;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.ServiceProcess;
 using System.Text.Json;
 using HorizonNET.Shared.Transfer.Update;
@@ -14,10 +16,45 @@ internal sealed class WindowsServiceHost(string serviceName) : IServiceHost
     public void Stop(TimeSpan timeout)
     {
         using var controller = new ServiceController(serviceName);
-        controller.Refresh();
-        if (controller.Status == ServiceControllerStatus.Stopped) return;
-        if (controller.Status != ServiceControllerStatus.StopPending) controller.Stop();
-        controller.WaitForStatus(ServiceControllerStatus.Stopped, timeout);
+        var deadline = DateTime.UtcNow + timeout;
+        while (true)
+        {
+            controller.Refresh();
+            switch (controller.Status)
+            {
+                case ServiceControllerStatus.Stopped:
+                    return;
+                case ServiceControllerStatus.Running or ServiceControllerStatus.Paused:
+                    try
+                    {
+                        controller.Stop();
+                    }
+                    catch (InvalidOperationException) when (DateTime.UtcNow < deadline)
+                    {
+                        // Zustand hat sich seit Refresh geändert (etwa abgestürzt): neu lesen.
+                        Thread.Sleep(500);
+                        break;
+                    }
+                    controller.WaitForStatus(ServiceControllerStatus.Stopped, Remaining(deadline));
+                    return;
+                case ServiceControllerStatus.StopPending:
+                    controller.WaitForStatus(ServiceControllerStatus.Stopped, Remaining(deadline));
+                    return;
+                default:
+                    // Startet gerade (etwa per Fehleraktion nach einem Absturz) und nimmt noch kein
+                    // Stop an: abwarten, ob er läuft oder wieder stehen bleibt.
+                    if (DateTime.UtcNow >= deadline)
+                        throw new System.ServiceProcess.TimeoutException($"Dienst {serviceName} bleibt im Zustand {controller.Status}.");
+                    Thread.Sleep(500);
+                    break;
+            }
+        }
+    }
+
+    private static TimeSpan Remaining(DateTime deadline)
+    {
+        var left = deadline - DateTime.UtcNow;
+        return left > TimeSpan.FromSeconds(1) ? left : TimeSpan.FromSeconds(1);
     }
 
     public void Start(TimeSpan timeout)
@@ -27,6 +64,47 @@ internal sealed class WindowsServiceHost(string serviceName) : IServiceHost
         if (controller.Status == ServiceControllerStatus.Running) return;
         if (controller.Status != ServiceControllerStatus.StartPending) controller.Start();
         controller.WaitForStatus(ServiceControllerStatus.Running, timeout);
+    }
+
+    // „Automatisch (verzögert)“ meldet ServiceController als Automatic; zurückgesetzt wird dann auf
+    // „Automatisch“. server-install.ps1 richtet den Dienst ohnehin so ein.
+    public ServiceStartType GetStartType()
+    {
+        using var controller = new ServiceController(serviceName);
+        return controller.StartType switch
+        {
+            ServiceStartMode.Automatic or ServiceStartMode.Boot or ServiceStartMode.System => ServiceStartType.Automatic,
+            ServiceStartMode.Manual => ServiceStartType.Manual,
+            _ => ServiceStartType.Disabled,
+        };
+    }
+
+    // ServiceController kann den Starttyp nicht setzen; sc.exe gehört zu Windows.
+    public void SetStartType(ServiceStartType startType)
+    {
+        var value = startType switch
+        {
+            ServiceStartType.Automatic => "auto",
+            ServiceStartType.Manual => "demand",
+            _ => "disabled",
+        };
+        var info = new ProcessStartInfo("sc.exe")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+        };
+        foreach (var arg in new[] { "config", serviceName, "start=", value }) info.ArgumentList.Add(arg);
+        using var process = Process.Start(info) ?? throw new UpdateException("sc.exe ließ sich nicht starten.");
+        // Asynchron lesen: Ein blockierendes ReadToEnd vor WaitForExit hebelte das Zeitlimit aus.
+        _ = process.StandardOutput.ReadToEndAsync();
+        if (!process.WaitForExit(TimeSpan.FromSeconds(30)))
+        {
+            process.Kill();
+            throw new UpdateException("sc.exe config hängt.");
+        }
+        if (process.ExitCode != 0)
+            throw new UpdateException($"Starttyp {value} ließ sich nicht setzen (sc.exe meldet {process.ExitCode}).");
     }
 
     // server-install.ps1 legt die Umgebung des Dienstes als Multi-String "Environment" in
@@ -96,6 +174,18 @@ internal sealed class IcaclsPermissions : IPermissions
             throw new UpdateException($"icacls /reset für {directory} hängt.");
         }
         if (process.ExitCode != 0) throw new UpdateException($"icacls /reset für {directory} meldet {process.ExitCode}.");
+    }
+
+    // Explizite Einträge und Vererbungsschutz übernehmen; geerbte ergeben sich aus dem Elternordner
+    // (beide liegen unter Root). Windows vererbt die neue DACL an die Dateien darin.
+    public void CopyAccess(string source, string target)
+    {
+        var from = new DirectoryInfo(source).GetAccessControl(AccessControlSections.Access);
+        var to = new DirectorySecurity();
+        to.SetAccessRuleProtection(from.AreAccessRulesProtected, preserveInheritance: false);
+        foreach (FileSystemAccessRule rule in from.GetAccessRules(includeExplicit: true, includeInherited: false, typeof(SecurityIdentifier)))
+            to.AddAccessRule(rule);
+        new DirectoryInfo(target).SetAccessControl(to);
     }
 }
 

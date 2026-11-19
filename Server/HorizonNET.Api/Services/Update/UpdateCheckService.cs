@@ -83,7 +83,9 @@ public sealed class UpdateCheckService(
             logger.LogInformation("Update verfügbar: {Version}", dto.Version);
             return new UpdateCheckResult(now, dto, null);
         }
-        catch (Exception ex) when (ex is HttpRequestException or JsonException
+        // IOException: Bricht die Verbindung beim Lesen des Bodys ab, kommt HttpIOException und
+        // keine HttpRequestException.
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or IOException
                                        || (ex is OperationCanceledException && !ct.IsCancellationRequested))
         {
             logger.LogWarning("Update-Prüfung fehlgeschlagen: {Message}", ex.Message);
@@ -121,8 +123,13 @@ public sealed record UpdateCheckResult(DateTime? CheckedUtc, UpdateReleaseDto? A
     public static UpdateCheckResult Never { get; } = new(null, null, null);
 }
 
-// Stößt die Prüfung beim Start und danach regelmäßig an.
-public sealed class UpdateCheckHost(UpdateCheckService checker, IOptions<UpdateOptions> options, TimeProvider time)
+// Stößt die Prüfung beim Start und danach regelmäßig an. Eine Ausnahme aus ExecuteAsync beendet
+// den ganzen Host (BackgroundServiceExceptionBehavior.StopHost): Jede Runde ist deshalb abgesichert.
+public sealed class UpdateCheckHost(
+    UpdateCheckService checker,
+    IOptions<UpdateOptions> options,
+    TimeProvider time,
+    ILogger<UpdateCheckHost> logger)
     : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -133,7 +140,14 @@ public sealed class UpdateCheckHost(UpdateCheckService checker, IOptions<UpdateO
             await Task.Delay(options.Value.InitialDelay, time, stoppingToken);
             while (!stoppingToken.IsCancellationRequested)
             {
-                await checker.CheckAsync(manual: false, stoppingToken);
+                try
+                {
+                    await checker.CheckAsync(manual: false, stoppingToken);
+                }
+                catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+                {
+                    logger.LogError(ex, "Update-Prüfung mit unerwartetem Fehler abgebrochen.");
+                }
                 await Task.Delay(options.Value.Interval, time, stoppingToken);
             }
         }

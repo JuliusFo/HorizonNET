@@ -3,10 +3,11 @@ using HorizonNET.Shared.Transfer.Update;
 namespace HorizonNET.Updater;
 
 // run / install: läuft aus dem installierten updater\.
-//   1. Liegt ein Journal (apply wurde unterbrochen), zuerst zurückrollen.
-//   2. Ohne Auftrag (run ohne request.json mit "install") endet der Lauf hier – so kann die
-//      geplante Aufgabe auch beim Systemstart laufen und nur aufräumen.
-//   3. Neuestes Release mit Paket holen, ZIP und Prüfsumme laden, prüfen, entpacken.
+//   1. Liegt ein Journal (apply wurde unterbrochen), zuerst zurückrollen. Scheitert das, endet der
+//      Lauf (Exit 2): Auf einem halb zurückgerollten Stand wird nichts installiert.
+//   2. run (Aufgabe „HorizonNET Recover“ beim Systemstart) endet hier.
+//   3. install (Aufgabe „HorizonNET Update“, vom Dienstkonto gestartet, oder von Hand):
+//      neuestes Release mit Paket holen, ZIP und Prüfsumme laden, prüfen, entpacken.
 //   4. apply aus dem neuen Paket starten und sich beenden.
 internal sealed class Preparer(
     UpdaterLayout layout,
@@ -19,7 +20,7 @@ internal sealed class Preparer(
     TimeProvider time,
     UpdateLog log)
 {
-    public async Task<int> RunAsync(bool installRequested, CancellationToken ct)
+    public async Task<int> RunAsync(bool install, CancellationToken ct)
     {
         layout.EnsureWorkDirectories();
 
@@ -36,13 +37,12 @@ internal sealed class Preparer(
             if (journal is not null)
             {
                 log.Warn($"Unterbrochenes Update auf {journal.TargetVersion} gefunden – rolle zurück.");
-                await installer.RecoverAsync(journal, ct);
+                if (!await installer.RecoverAsync(journal, ct)) return 2;
             }
 
-            var request = state.TakeRequest(log);
-            if (!installRequested && request?.Mode != UpdateRequest.Install)
+            if (!install)
             {
-                log.Info("Kein Installationsauftrag.");
+                log.Info("run: fertig (installiert wird nur mit install).");
                 return 0;
             }
 

@@ -4,13 +4,15 @@ using HorizonNET.Shared.Transfer.Update;
 
 namespace HorizonNET.Updater;
 
-// status.json, journal.json und request.json. Geschrieben wird über eine Temp-Datei und Move, damit
-// die API (status.json) und ein späterer Lauf (journal.json) nie eine halbe Datei lesen.
+// status.json und journal.json. Geschrieben wird über eine Temp-Datei und Move, damit die API
+// (status.json) und ein späterer Lauf (journal.json) nie eine halbe Datei lesen.
+//
+// Bewusst keine Datei, die das Dienstkonto schreibt und SYSTEM liest oder löscht: In einem für
+// das Dienstkonto beschreibbaren Ordner könnte es Verweise (Junction, Objekt-Manager-Link)
+// anlegen und SYSTEM so auf beliebige Dateien lenken (Review 2026-11-19, S1). Den Wunsch
+// „installieren“ übermittelt allein der Start der Aufgabe „HorizonNET Update“.
 internal sealed class StateFiles(UpdaterLayout layout)
 {
-    // request.json schreibt das Dienstkonto; mehr als ein paar Byte braucht sie nie.
-    private const int MaxRequestBytes = 4 * 1024;
-
     public UpdateRunStatus? ReadStatus() => Read(layout.StatusFile, UpdaterJson.Default.UpdateRunStatus);
 
     public void WriteStatus(UpdateRunStatus status) => Write(layout.StatusFile, status, UpdaterJson.Default.UpdateRunStatus);
@@ -22,39 +24,6 @@ internal sealed class StateFiles(UpdaterLayout layout)
     public void DeleteJournal()
     {
         if (File.Exists(layout.JournalFile)) File.Delete(layout.JournalFile);
-    }
-
-    // Liest und löscht die Anfrage der API. Die Datei kommt vom Dienstkonto, also von außen:
-    // Nur „mode“ zählt, alles andere wird ignoriert, ihr Inhalt landet nie im Log.
-    public UpdateRequest? TakeRequest(UpdateLog log)
-    {
-        var path = layout.RequestFile;
-        if (!File.Exists(path)) return null;
-
-        UpdateRequest? request = null;
-        try
-        {
-            var info = new FileInfo(path);
-            if (info.Length > MaxRequestBytes)
-                log.Warn("Anfrage ist zu groß und wird verworfen.");
-            else
-                request = JsonSerializer.Deserialize(File.ReadAllBytes(path), UpdaterJson.Default.UpdateRequest);
-        }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
-        {
-            log.Warn($"Anfrage nicht lesbar ({ex.GetType().Name}) und verworfen.");
-        }
-
-        try
-        {
-            File.Delete(path);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            log.Warn($"Anfrage ließ sich nicht löschen: {ex.Message}");
-        }
-
-        return request;
     }
 
     private static T? Read<T>(string path, JsonTypeInfo<T> type) where T : class

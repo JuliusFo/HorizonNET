@@ -16,6 +16,7 @@ internal sealed class UpdaterSandbox : IDisposable
         Root = Path.Combine(Path.GetTempPath(), "hn-updater-" + Guid.NewGuid().ToString("N"));
         Layout = new UpdaterLayout(Root);
         Layout.EnsureWorkDirectories();
+        Directory.CreateDirectory(Layout.Backups); // legt sonst server-install.ps1 an
         Directory.CreateDirectory(Layout.Data);
         Directory.CreateDirectory(Layout.Keys);
         Log = new UpdateLog(Layout.Logs, "test", TimeProvider.System);
@@ -76,9 +77,6 @@ internal sealed class UpdaterSandbox : IDisposable
         return source;
     }
 
-    public void RequestInstall() =>
-        File.WriteAllText(Layout.RequestFile, """{ "mode": "install", "requestedUtc": "2026-11-19T10:00:00Z" }""");
-
     public Installer CreateInstaller() =>
         new(Layout, State, Service, Service, Permissions, new VersionFileReader(), Timings, TimeProvider.System, Log);
 
@@ -111,27 +109,50 @@ internal sealed class UpdaterSandbox : IDisposable
 
     internal sealed class FakeService(UpdaterSandbox sandbox) : IServiceHost, IHealthProbe
     {
-        public bool Running { get; private set; } = true;
+        public bool Running { get; set; } = true;
         public bool FailStop { get; set; }
+        public ServiceStartType StartType { get; set; } = ServiceStartType.Automatic;
 
         // Diese Version „startet nicht“ (meldet sich nie unter /api/version).
         public string? BrokenVersion { get; set; }
         public List<string> Calls { get; } = [];
 
+        // Wie die Fehleraktion „neu starten“: Solange der Dienst nicht deaktiviert ist, startet Windows
+        // ihn nach dem Absturz wieder, und Stop scheitert (oder er läuft danach erneut).
+        public bool RestartsWhenEnabled { get; set; }
+
         public void Stop(TimeSpan timeout)
         {
             Calls.Add("stop");
             if (FailStop) throw new InvalidOperationException("Dienst hängt");
+            if (RestartsWhenEnabled && StartType != ServiceStartType.Disabled)
+                throw new InvalidOperationException("Dienst startet per Fehleraktion neu");
             Running = false;
         }
 
         public void Start(TimeSpan timeout)
         {
             Calls.Add("start");
+            // Wie der Dienststeuerungs-Manager: Ein deaktivierter Dienst startet nicht.
+            if (StartType == ServiceStartType.Disabled) throw new InvalidOperationException("Dienst ist deaktiviert");
             Running = true;
             var version = sandbox.InstalledVersion();
             // Wie eine Migration: Die neue Version verändert die DB beim Start.
             File.WriteAllText(sandbox.DbFile, $"db migrated by {version}");
+        }
+
+        public ServiceStartType GetStartType() => StartType;
+
+        // Das n-te Deaktivieren scheitert (wie sc.exe mit Zeitlimit oder Exit-Code ≠ 0).
+        public int FailDisableAt { get; set; } = int.MaxValue;
+        private int _disables;
+
+        public void SetStartType(ServiceStartType startType)
+        {
+            Calls.Add("starttype " + startType);
+            if (startType == ServiceStartType.Disabled && ++_disables >= FailDisableAt)
+                throw new InvalidOperationException("sc.exe meldet 1053");
+            StartType = startType;
         }
 
         public Uri GetLocalBaseUri() => new("http://localhost:5000/");
@@ -147,7 +168,11 @@ internal sealed class UpdaterSandbox : IDisposable
     internal sealed class FakePermissions : IPermissions
     {
         public List<string> Reset { get; } = [];
+        public List<(string Source, string Target)> Copied { get; } = [];
         public void ResetToInherited(string directory) => Reset.Add(Path.GetFileName(directory));
+
+        public void CopyAccess(string source, string target) =>
+            Copied.Add((Path.GetFileName(source), Path.GetFileName(target)));
     }
 
     internal sealed class FakeLauncher : IApplyLauncher

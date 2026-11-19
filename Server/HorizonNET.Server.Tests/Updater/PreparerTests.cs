@@ -5,14 +5,16 @@ namespace HorizonNET.Server.Tests.Updater;
 
 public class PreparerTests
 {
+    // run ist die Aufgabe „HorizonNET Recover“ beim Systemstart: Sie installiert nie, auch wenn ein
+    // neueres Paket bereitliegt.
     [Fact]
-    public async Task Run_WithoutRequest_DoesNothing()
+    public async Task Run_NeverInstalls()
     {
         using var box = new UpdaterSandbox();
         box.Install("1.3.0");
         var source = new LocalReleaseSource(box.CreatePackageZip("1.4.0"));
 
-        var exit = await box.CreatePreparer(source).RunAsync(installRequested: false, CancellationToken.None);
+        var exit = await box.CreatePreparer(source).RunAsync(install: false, CancellationToken.None);
 
         Assert.Equal(0, exit);
         Assert.Null(box.Launcher.Started);
@@ -20,17 +22,15 @@ public class PreparerTests
     }
 
     [Fact]
-    public async Task Run_WithInstallRequest_StagesVerifiedPackageAndStartsApply()
+    public async Task Install_StagesVerifiedPackageAndStartsApply()
     {
         using var box = new UpdaterSandbox();
         box.Install("1.3.0");
-        box.RequestInstall();
         var source = new LocalReleaseSource(box.CreatePackageZip("1.4.0"));
 
-        var exit = await box.CreatePreparer(source).RunAsync(installRequested: false, CancellationToken.None);
+        var exit = await box.CreatePreparer(source).RunAsync(install: true, CancellationToken.None);
 
         Assert.Equal(0, exit);
-        Assert.False(File.Exists(box.Layout.RequestFile));
         var started = Assert.NotNull(box.Launcher.Started);
         var staging = Path.Combine(box.Layout.Staging, "1.4.0");
         Assert.Equal(staging, started.Package);
@@ -51,7 +51,7 @@ public class PreparerTests
         box.CreatePackageZip("1.3.5");
         var source = new LocalReleaseSource(box.CreatePackageZip("1.4.0"));
 
-        await box.CreatePreparer(source).RunAsync(installRequested: true, CancellationToken.None);
+        await box.CreatePreparer(source).RunAsync(install: true, CancellationToken.None);
 
         Assert.EndsWith("1.4.0", box.Launcher.Started?.Package);
     }
@@ -63,7 +63,7 @@ public class PreparerTests
         box.Install("1.4.0");
         var source = new LocalReleaseSource(box.CreatePackageZip("1.4.0"));
 
-        var exit = await box.CreatePreparer(source).RunAsync(installRequested: true, CancellationToken.None);
+        var exit = await box.CreatePreparer(source).RunAsync(install: true, CancellationToken.None);
 
         Assert.Equal(0, exit);
         Assert.Null(box.Launcher.Started);
@@ -77,7 +77,7 @@ public class PreparerTests
         box.Install("1.3.0");
         var source = new LocalReleaseSource(box.CreatePackageZip("1.4.0", corruptChecksum: true));
 
-        var exit = await box.CreatePreparer(source).RunAsync(installRequested: true, CancellationToken.None);
+        var exit = await box.CreatePreparer(source).RunAsync(install: true, CancellationToken.None);
 
         Assert.Equal(1, exit);
         Assert.Null(box.Launcher.Started);
@@ -111,18 +111,21 @@ public class PreparerTests
         Assert.Equal(UpdatePhase.RolledBack, box.State.ReadStatus()?.Phase);
     }
 
+    // K2 (Review 2026-11-19): Ist das Zurückrollen gescheitert, wird auf dem halben Stand nichts
+    // installiert.
     [Fact]
-    public async Task Run_UnreadableRequest_IsDiscarded()
+    public async Task Install_AfterFailedRecovery_StopsWithExitCode2()
     {
         using var box = new UpdaterSandbox();
         box.Install("1.3.0");
-        File.WriteAllText(box.Layout.RequestFile, "kein json");
+        box.State.WriteJournal(new UpdateJournal { TargetVersion = "1.4.0", FromVersion = "1.3.0" });
+        box.Service.FailStop = true;
         var source = new LocalReleaseSource(box.CreatePackageZip("1.4.0"));
 
-        var exit = await box.CreatePreparer(source).RunAsync(false, CancellationToken.None);
+        var exit = await box.CreatePreparer(source).RunAsync(install: true, CancellationToken.None);
 
-        Assert.Equal(0, exit);
-        Assert.False(File.Exists(box.Layout.RequestFile));
+        Assert.Equal(2, exit);
         Assert.Null(box.Launcher.Started);
+        Assert.Equal(UpdatePhase.RollbackFailed, box.State.ReadStatus()?.Phase);
     }
 }

@@ -5,11 +5,13 @@ namespace HorizonNET.Api.Services.Update;
 
 // Abschnitt "Update" der Konfiguration (ADR 0007). Auf dem vServer setzt server-install.ps1
 // Update__Mode=Install, Update__Directory und Update__TaskName; docker-compose.yml Notify.
+// TaskName ist die Aufgabe, die das Dienstkonto starten darf (install). Die Aufgabe
+// „HorizonNET Recover“ beim Systemstart darf es nicht starten.
 public sealed class UpdateOptions
 {
     public UpdateMode Mode { get; set; } = UpdateMode.Off;
 
-    // <Root>\update: status.json (vom Updater), request\request.json (von hier).
+    // <Root>\update: Hier liest die API status.json (vom Updater); geschrieben wird dort nichts.
     public string? Directory { get; set; }
 
     public string TaskName { get; set; } = "HorizonNET Update";

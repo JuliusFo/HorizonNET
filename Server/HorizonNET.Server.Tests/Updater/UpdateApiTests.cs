@@ -19,7 +19,7 @@ public sealed class UpdateApiTests : IDisposable
 
     public UpdateApiTests()
     {
-        Directory.CreateDirectory(Path.Combine(_updateDir, "request"));
+        Directory.CreateDirectory(_updateDir);
         _options = new UpdateOptions { Mode = UpdateMode.Install, Directory = _updateDir };
     }
 
@@ -66,6 +66,38 @@ public sealed class UpdateApiTests : IDisposable
         Assert.Contains("begrenzt", result.Error);
     }
 
+    // M2 (Review 2026-11-19): Bricht die Verbindung beim Lesen des Bodys ab, kommt eine
+    // IOException (HttpIOException) statt HttpRequestException. Sie darf weder den manuellen Check
+    // (500) noch den Hintergrunddienst (beendet den Host) erreichen.
+    [Fact]
+    public async Task Check_ConnectionDropsWhileReadingBody_IsHintNotException()
+    {
+        _github.RespondWithBrokenBody();
+
+        var result = await Checker().CheckAsync(manual: false, CancellationToken.None);
+
+        Assert.Null(result.Available);
+        Assert.Contains("nicht erreichbar", result.Error);
+    }
+
+    [Fact]
+    public async Task CheckHost_SurvivesUnexpectedErrorsAndKeepsChecking()
+    {
+        _options.InitialDelay = TimeSpan.Zero;
+        _options.Interval = TimeSpan.FromMilliseconds(10);
+        _github.Throw = new InvalidOperationException("unerwartet");
+        using var host = new UpdateCheckHost(Checker(), Options.Create(_options), TimeProvider.System,
+            NullLogger<UpdateCheckHost>.Instance);
+
+        await host.StartAsync(CancellationToken.None);
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (_github.Calls < 2 && DateTime.UtcNow < deadline) await Task.Delay(10);
+        await host.StopAsync(CancellationToken.None);
+
+        Assert.True(_github.Calls >= 2);
+        Assert.False(host.ExecuteTask?.IsFaulted);
+    }
+
     [Fact]
     public async Task Check_ModeOff_DoesNotAskGitHub()
     {
@@ -99,7 +131,9 @@ public sealed class UpdateApiTests : IDisposable
         Assert.Equal(kept, UpdateCheckService.SafeReleaseUrl(url) is not null);
 
     [Fact]
-    public async Task Install_WithAvailableUpdate_WritesRequestAndStartsTask()
+    // S1 (Review 2026-11-19): Die API schreibt nichts, was der Updater (SYSTEM) liest; der Start
+    // der Aufgabe ist der ganze Auftrag.
+    public async Task Install_WithAvailableUpdate_OnlyStartsTask()
     {
         _github.Respond(HttpStatusCode.OK, ReleaseJson("v1.4.0"));
         var checker = Checker();
@@ -111,10 +145,7 @@ public sealed class UpdateApiTests : IDisposable
 
         Assert.True(result.Success);
         Assert.Equal("HorizonNET Update", _starter.Started);
-        using var request = JsonDocument.Parse(File.ReadAllText(Path.Combine(_updateDir, "request", "request.json")));
-        Assert.Equal("install", request.RootElement.GetProperty("mode").GetString());
-        // Nur der Wunsch, keine Version, keine Pfade.
-        Assert.Equal(2, request.RootElement.EnumerateObject().Count());
+        Assert.Empty(Directory.GetFileSystemEntries(_updateDir));
     }
 
     [Fact]
@@ -130,7 +161,6 @@ public sealed class UpdateApiTests : IDisposable
         Assert.False(result.Success);
         Assert.False(result.IsServerError);
         Assert.Null(_starter.Started);
-        Assert.False(File.Exists(Path.Combine(_updateDir, "request", "request.json")));
     }
 
     [Fact]
@@ -160,7 +190,7 @@ public sealed class UpdateApiTests : IDisposable
     }
 
     [Fact]
-    public async Task Install_TaskDoesNotStart_RemovesRequest()
+    public async Task Install_TaskDoesNotStart_IsServerError()
     {
         _github.Respond(HttpStatusCode.OK, ReleaseJson("v1.4.0"));
         var checker = Checker();
@@ -171,7 +201,7 @@ public sealed class UpdateApiTests : IDisposable
 
         Assert.False(result.Success);
         Assert.True(result.IsServerError);
-        Assert.False(File.Exists(Path.Combine(_updateDir, "request", "request.json")));
+        Assert.Contains("Zugriff verweigert", result.Message);
     }
 
     [Fact]
@@ -228,6 +258,9 @@ public sealed class UpdateApiTests : IDisposable
     {
         private HttpStatusCode _status = HttpStatusCode.NotFound;
         private string _body = "{}";
+        private bool _brokenBody;
+
+        public Exception? Throw { get; set; }
 
         public int Calls { get; private set; }
         public HttpRequestMessage? LastRequest { get; private set; }
@@ -238,15 +271,42 @@ public sealed class UpdateApiTests : IDisposable
             _body = body;
         }
 
+        public void RespondWithBrokenBody()
+        {
+            _status = HttpStatusCode.OK;
+            _brokenBody = true;
+        }
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             Calls++;
             LastRequest = request;
+            if (Throw is not null) throw Throw;
             return Task.FromResult(new HttpResponseMessage(_status)
             {
-                Content = new StringContent(_body, Encoding.UTF8, "application/json"),
+                Content = _brokenBody
+                    ? new StreamContent(new BrokenStream())
+                    : new StringContent(_body, Encoding.UTF8, "application/json"),
             });
         }
+    }
+
+    // Wie eine Verbindung, die nach den Headern abreißt.
+    private sealed class BrokenStream : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => 0; set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) =>
+            throw new HttpIOException(HttpRequestError.ResponseEnded, "Verbindung abgerissen");
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            throw new HttpIOException(HttpRequestError.ResponseEnded, "Verbindung abgerissen");
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     private sealed class FakeFactory(HttpMessageHandler handler) : IHttpClientFactory
