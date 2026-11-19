@@ -42,4 +42,4 @@ Ein Release von HorizonNET. Arbeitssprache Deutsch. Zwei Stellen brauchen das OK
 
 6. **Abschluss.** Link zum Release nennen und die Schritte auf dem vServer in Reihenfolge auflisten (siehe `docs/deployment-vserver.md`):
    1. DB und Schlüsselring sichern (`scripts/backup-database.ps1`) – Pflicht, wenn Migrationen dabei sind.
-   2. Paket vom Release laden (`gh release download vX.Y.Z --pattern 'HorizonNET-*'`, Prüfsumme gegen die `.sha256` vergleichen), auf den Server kopieren und einspielen (Dienst stoppen, Inhalt von `app\` und `tools\` ersetzen, Dienst starten). Die Runtime steckt im Paket. Ist der Updater eingerichtet (ADR 0007), statt dessen in den Einstellungen „Jetzt aktualisieren“.
+   2. Paket vom Release laden (`gh release download vX.Y.Z --pattern 'HorizonNET-*'`, Prüfsumme gegen die `.sha256` vergleichen), auf den Server kopieren, entpacken und dort `server-install.ps1 -SkipService` als Administrator ausführen (ersetzt `app\`, `tools\`, `updater\`, stoppt und startet den Dienst). Die Runtime steckt im Paket. Ist der Updater eingerichtet (ADR 0007), statt dessen in den Einstellungen „Über & Updates“ → „Jetzt aktualisieren“.

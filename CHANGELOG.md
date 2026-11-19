@@ -24,6 +24,7 @@ Abschnitte je Version in dieser Reihenfolge, leere weglassen: **Sicherheit**, **
 
 ### Deployment
 - Das Paket ist self-contained: Beim Einspielen den Inhalt von `app\` und `tools\` ersetzen statt darüberzukopieren. Danach braucht der vServer keine ASP.NET Core Runtime mehr; sie kann bleiben, bis das neue Paket einmal sauber gelaufen ist.
+- Umstieg auf das Auto-Update: nach dem Sichern `server-install.ps1 -SkipService` aus dem entpackten Paket als Administrator ausführen. Das ersetzt `app\`, `tools\` und `updater\`, setzt engere Ordnerrechte (das Dienstkonto schreibt nur noch in `data\`, `keys\` und `update\request\`), die Variablen `Update__Mode`, `Update__Directory`, `Update__TaskName` und legt die geplante Aufgabe „HorizonNET Update“ an. Danach ein Probe-Update mit dem nächsten Patch-Release.
 
 ## [1.3.0] - 2026-11-15
 
