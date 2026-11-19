@@ -88,6 +88,10 @@
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="settings">
                 <span class="bi bi-gear-nav-menu" aria-hidden="true"></span> Einstellungen
+                @if (Updates.HasUpdate)
+                {
+                    <span class="nav-update-dot" title="Update verfügbar" aria-label="Update verfügbar"></span>
+                }
             </NavLink>
         </div>
     </nav>
@@ -95,6 +99,7 @@
 
 @inject ProjectState ProjectState
 @inject WorkspaceState WorkspaceState
+@inject UpdateState Updates
 @implements IDisposable
 
 @code {
@@ -128,9 +133,11 @@
     {
         ProjectState.OnChange += HandleChanged;
         WorkspaceState.OnChange += HandleChanged;
+        Updates.OnChange += HandleChanged;
 
         await ProjectState.EnsureLoadedAsync();
         await WorkspaceState.EnsureLoadedAsync();
+        await Updates.EnsureLoadedAsync();
     }
 
     private void HandleChanged() => InvokeAsync(StateHasChanged);
@@ -144,5 +151,6 @@
     {
         ProjectState.OnChange -= HandleChanged;
         WorkspaceState.OnChange -= HandleChanged;
+        Updates.OnChange -= HandleChanged;
     }
 }

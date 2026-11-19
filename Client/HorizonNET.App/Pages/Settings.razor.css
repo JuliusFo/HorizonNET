@@ -1,3 +1,17 @@
 .settings-card {
     max-width: 640px;
 }
+
+/* Release-Notes (Markdown als Text): Zeilenumbrüche behalten, lange Zeilen umbrechen. */
+.update-notes {
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 16rem;
+    overflow-y: auto;
+    margin: 0.5rem 0 0;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    font-family: inherit;
+    background-color: var(--bs-tertiary-bg, #f8f9fa);
+    border-radius: 0.25rem;
+}

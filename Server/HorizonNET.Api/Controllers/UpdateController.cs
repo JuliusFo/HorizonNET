@@ -25,8 +25,8 @@ public class UpdateController(UpdateCheckService checker, UpdateCoordinator coor
     {
         var result = await coordinator.RequestInstallAsync(ct);
         if (result.Success) return Accepted(coordinator.GetInfo());
-        return result.IsServerError
-            ? Problem(result.Message, statusCode: StatusCodes.Status500InternalServerError)
-            : Conflict(result.Message);
+        // ProblemDetails in beiden Fällen: Der Client zeigt "detail" als Meldung.
+        return Problem(result.Message,
+            statusCode: result.IsServerError ? StatusCodes.Status500InternalServerError : StatusCodes.Status409Conflict);
     }
 }

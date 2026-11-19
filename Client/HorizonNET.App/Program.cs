@@ -69,6 +69,9 @@ builder.Services.AddScoped<SoundService>();
 // Client-/API-Version (Anzeige + Versatz-Erkennung beim Start)
 builder.Services.AddScoped<VersionState>();
 
+// Auto-Update: Stand für „Über & Updates“ und den Hinweis in der Navigation (ADR 0007)
+builder.Services.AddScoped<UpdateState>();
+
 // Lokalisierung registrieren
 builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
 

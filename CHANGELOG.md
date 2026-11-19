@@ -7,6 +7,9 @@ Abschnitte je Version in dieser Reihenfolge, leere weglassen: **Sicherheit**, **
 
 ## [Unreleased]
 
+### Neu
+- Auto-Update (ADR 0007): Die Einstellungen-Karte heißt jetzt „Über & Updates“. Sie zeigt, wann zuletzt nach neuen Versionen gesehen wurde („Jetzt prüfen“), eine verfügbare Version mit ihren Release-Notes und das Ergebnis des letzten Updates. Auf dem vServer installiert „Jetzt aktualisieren“ die neue Version nach einer Rückfrage; die App meldet sich danach mit „Neu laden“. Im Docker-Betrieb steht dort der Befehl zum Aktualisieren. Ein Punkt am Menüeintrag „Einstellungen“ zeigt ein verfügbares Update an.
+
 ### Behoben
 - Schlüsselring-Umzug (`HorizonNET.KeyMigration`): Der Azure-DevOps-PAT wird jetzt mit umgeschlüsselt. Bisher fehlte er in der Spaltenliste und wäre nach einem Umzug (etwa in einen Docker-Container) unlesbar gewesen; die Verbindung hätte neu eingerichtet werden müssen. Ein Test vergleicht die Liste jetzt mit dem Datenmodell.
 
