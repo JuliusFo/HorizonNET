@@ -16,7 +16,7 @@ Ein Release von HorizonNET. Arbeitssprache Deutsch. Zwei Stellen brauchen das OK
    - Mit dem Abschnitt `[Unreleased]` in `CHANGELOG.md` abgleichen. Fehlt ein sichtbarer Commit dort, einen Eintrag vorschlagen.
    - Hinweise fürs Deployment ermitteln:
      - Neue Migrationen: `git diff --name-only --diff-filter=A <tag>..HEAD -- Server/HorizonNET.Data/Migrations` (nur die `*_Name.cs`, nicht `.Designer.cs`). Jede neue Migration heißt: vorher DB sichern.
-     - Microsoft-Pakete auf neuem Patch (`Directory.Packages.props`): Runtime auf dem vServer heben, und `ASPNET_VERSION` im `Dockerfile` muss dazu passen.
+     - Microsoft-Pakete auf neuem Patch (`Directory.Packages.props`): `ASPNET_VERSION` im `Dockerfile` muss dazu passen. Der vServer bekommt die Runtime mit dem self-contained Paket.
      - Neue Einstellungen oder Umgebungsvariablen (`appsettings.json`, `.env.example`).
    - SemVer: nur **Intern** → kein Release nötig, dem Nutzer das sagen; **Behoben**/**Sicherheit** → Patch; **Neu** oder sichtbar **Geändert** → Minor; Bruch für bestehende Installationen → Major.
    - Zusammenfassung (Commits, geplante CHANGELOG-Abschnitte, Deployment-Hinweise) und die vorgeschlagene Nummer zeigen. **Auf das OK warten.**
@@ -31,7 +31,7 @@ Ein Release von HorizonNET. Arbeitssprache Deutsch. Zwei Stellen brauchen das OK
 4. **Bauen und testen.**
    - Vorher Bescheid geben: Der Build macht einen laufenden Client aus Visual Studio kaputt (Neustart nötig).
    - `dotnet build HorizonNET.slnx` (warnungsfrei, Warnungen sind Fehler) und `dotnet test HorizonNET.slnx --no-build`.
-   - Release-Publish wie im Deployment-Skript, in einen Ordner im Scratchpad: `dotnet publish Server/HorizonNET.Api -c Release -o <scratch>`. Prüfen, dass weder `appsettings.Secrets.json` noch `appsettings.Development.json` darin liegt. Ordner danach löschen.
+   - Deployment-Paket probeweise bauen: `scripts/deploy-package.ps1 -OutputDirectory <scratch>`. Das Skript prüft selbst, dass keine Entwicklungs-Konfiguration im Paket liegt und die Runtime zum Patch der Microsoft-Pakete passt. Ordner danach löschen.
 
 5. **Veröffentlichen – erst nach OK.** Diff und Release-Notes (der neue CHANGELOG-Abschnitt) zeigen und fragen, ob veröffentlicht werden soll. Dann:
    - Commit `Chore: Release X.Y.Z` mit `Directory.Build.props` und `CHANGELOG.md`, Push auf `master`.
@@ -41,5 +41,4 @@ Ein Release von HorizonNET. Arbeitssprache Deutsch. Zwei Stellen brauchen das OK
 
 6. **Abschluss.** Link zum Release nennen und die Schritte auf dem vServer in Reihenfolge auflisten (siehe `docs/deployment-vserver.md`):
    1. DB und Schlüsselring sichern (`scripts/backup-database.ps1`) – Pflicht, wenn Migrationen dabei sind.
-   2. Runtime heben, falls die Microsoft-Pakete einen neuen Patch haben.
-   3. Paket bauen mit `scripts/deploy-package.ps1`, auf den Server kopieren und einspielen.
+   2. Paket bauen mit `scripts/deploy-package.ps1`, auf den Server kopieren und einspielen (Dienst stoppen, Inhalt von `app\` und `tools\` ersetzen, Dienst starten). Die Runtime steckt im Paket.

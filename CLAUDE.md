@@ -10,7 +10,7 @@ Diese Datei lädt in jede Session und enthält nur, was immer gilt. Die Fallen e
 | `docs/decisions/` – ADRs (Hosting, Datenhaltung, Verschlüsselung, Kalender, Betrieb, Versionierung) | vor Stack- oder Architekturänderungen; eine neue Entscheidung bekommt eine ADR |
 | `.claude/skills/` – `/release`, `/branch-code-review` (mit `checklist.md`) | beim Release bzw. Code-Review |
 | `docs/deployment-vserver.md` | vor jedem Deployment und vor Änderungen an `scripts/` |
-| `docs/konzept-*.md` (Journal, DPAPI-Umzug, Versionierung, Sport, Zeichnungen, Detail/Notizen/Daily) | bevor der jeweilige Bereich angefasst wird |
+| `docs/konzept-*.md` (Journal, DPAPI-Umzug, Versionierung, Sport, Zeichnungen, Detail/Notizen/Daily, Auto-Update) | bevor der jeweilige Bereich angefasst wird |
 | `README.md` | Docker-Betrieb, Kalender-Sync, Backup |
 
 ## 1. Ziel und Betrieb
@@ -23,7 +23,7 @@ Der Nutzer ist erfahrener .NET-Entwickler (Visual Studio, Blazor). Erklärungen 
 
 | Bereich | Entscheidung | Hinweise |
 |---|---|---|
-| Runtime | **.NET 10**, SDK per `global.json` (`rollForward: latestFeature`) | Deployment framework-abhängig: Auf dem vServer muss die ASP.NET Core Runtime zum Patch der Microsoft-Pakete passen. |
+| Runtime | **.NET 10**, SDK per `global.json` (`rollForward: latestFeature`) | Deployment-Paket (`scripts/deploy-package.ps1`) **self-contained** `win-x64`, Runtime = Patch der Microsoft-Pakete (ADR 0005, Nachtrag). Docker und lokale Builds bleiben framework-abhängig. |
 | Solution | **`HorizonNET.slnx`** (eine Root-Solution), Central Package Management (`Directory.Packages.props`) | Gemeinsame Compiler-Einstellungen in `Directory.Build.props`, inkl. `TreatWarningsAsErrors`. Repo-lokales `nuget.config` (nur nuget.org, Source Mapping). |
 | Hosting | ASP.NET-API liefert den **Blazor-WASM-Client** mit aus (Same-Origin) | Kein CORS, Cookie-Auth ohne Sonderbehandlung. Betrieb als Windows-Dienst (`UseWindowsService`) oder Container. |
 | UI | **Radzen.Blazor**, Bootstrap | Texte über `Microsoft.Extensions.Localization`. |
@@ -60,5 +60,5 @@ scripts/                             Migrationen, Deployment-Paket, Server-Insta
 - **Migrationen:** über `scripts/add-migration.ps1 <Name>` (setzt Projekt- und Startprojekt). Sie laufen beim nächsten Start auch auf dem vServer – vor dem Deployment die DB sichern. `Down` sauber spiegeln.
 - **PowerShell-Skripte (`.ps1`) als UTF-8 mit BOM speichern.** Windows PowerShell 5.1 auf dem vServer liest sie sonst als ANSI, und ein „–“ zerreißt Strings. Nach dem Schreiben umkodieren und mit `[System.Management.Automation.Language.Parser]::ParseFile` auf 0 Fehler prüfen.
 - **Secrets:** `appsettings.Secrets.json` und `appsettings.Development.json` gelangen nie ins Publish (`CopyToPublishDirectory="Never"`) und nie ins Image. Produktion bekommt Secrets über Umgebungsvariablen.
-- **Paket-Updates:** Versionen nur in `Directory.Packages.props`. Die Microsoft-Pakete gemeinsam auf denselben Patch heben und im `Dockerfile` (`ASPNET_VERSION`) sowie auf dem vServer die Runtime nachziehen. Neue Dateien, die der Restore braucht, auch im `Dockerfile` vor `dotnet restore` kopieren.
+- **Paket-Updates:** Versionen nur in `Directory.Packages.props`. Die Microsoft-Pakete gemeinsam auf denselben Patch heben und im `Dockerfile` `ASPNET_VERSION` nachziehen; der vServer bekommt die Runtime mit dem nächsten Paket. Neue Dateien, die der Restore braucht, auch im `Dockerfile` vor `dotnet restore` kopieren.
 - **Login:** Die App liegt hinter einem Login, Passwörter tippt Claude nicht. Reine Layout-Checks über einen statischen Mock in `Client/HorizonNET.App/wwwroot/` (danach bauen und den Dev-Server neu starten, damit er im Static-Web-Assets-Manifest steht; Datei anschließend wieder löschen). Für Logik hinter dem Login den Nutzer bitten, sich im Browser-Pane anzumelden.
